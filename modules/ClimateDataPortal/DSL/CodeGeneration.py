@@ -241,7 +241,8 @@ def init_R_interpreter(R, database_settings):
 
     from rpy2.rinterface import RRuntimeError
     try:
-        R("library(RPostgreSQL, quietly=TRUE)")
+        R("library(DBI)")
+        R("library(RPostgreSQL)")
     except RRuntimeError, R_runtime_error:
         message = """%s
 R package RPostgreSQL might not be installed.
@@ -259,7 +260,7 @@ You may need to select a mirror.
         raise ImportError(message)
 
     try:
-        R("library(multicore, quietly=TRUE)")
+        R("library(multicore)")
     except RRuntimeError, R_runtime_error:
         if "no package called" in R_runtime_error.args[0]:
             raise ImportError(
