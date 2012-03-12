@@ -162,7 +162,7 @@ def import_climate_readings(
             lat_variable = variables["lat"]
         except KeyError:
             lat_variable = variables["latitude"]
-        lat = to_list(lat_variable)
+        lat = map((0.11).__add__, to_list(lat_variable))
         
         try:
             lon_variable = variables["lon"]
@@ -187,7 +187,8 @@ def import_climate_readings(
             # create grid of places
             place_ids = {}
             
-            lon = to_list(lon_variable)
+            lon = map((0.11).__add__, to_list(lon_variable))
+            
             if skip_places:
                 for place in db(climate_place.id > 0).select(
                     climate_place.latitude,
@@ -195,8 +196,8 @@ def import_climate_readings(
                     climate_place.id
                 ):
                     place_ids[(
-                        round(place.latitude, 6),
-                        round(place.longitude, 6)
+                        str(round(place.latitude, 6)),
+                        str(round(place.longitude, 6))
                     )] = place.id
             else:
                 for latitude in lat:
@@ -209,8 +210,8 @@ def import_climate_readings(
                             )
                         )
                         place_ids[(
-                            round(latitude, 6), 
-                            round(longitude, 6)
+                            str(round(latitude, 6)), 
+                            str(round(longitude, 6))
                         )] = record
                         #print longitude, latitude, record
 
@@ -243,7 +244,10 @@ def import_climate_readings(
                     for longitude_index, longitude in iter_pairs(lon):
                         value = values_by_latitude[longitude_index]
                         if not is_undefined(value):
-                            place_id = place_ids[(round(latitude, 6), round(longitude, 6))]
+                            place_id = place_ids[(
+                                str(round(latitude, 6)),
+                                str(round(longitude, 6))
+                            )]
                             converted_value = converter(value)
                             add_reading(
                                 time_period = month_number,
