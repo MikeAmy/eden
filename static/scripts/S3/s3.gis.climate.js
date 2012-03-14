@@ -897,7 +897,7 @@ Place.prototype = {
             }
         }
         info.push('</div>')
-        OpenLayers.Popup.COLOR = "none"
+        OpenLayers.Popup.COLOR = ''
         var popup = new OpenLayers.Popup(
             null,
             feature.geometry.getBounds().getCenterLonLat(),
