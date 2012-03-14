@@ -550,7 +550,7 @@ var QueryBox = OpenLayers.Class(OpenLayers.Control, {
 });
 
 
-colour_map = [
+/*colour_map = [
     [240, 10, 135],
 	[255, 62, 62],
     [240, 130, 40],
@@ -561,7 +561,8 @@ colour_map = [
     [30, 60, 255],
     [130, 0, 220],
     [160, 0, 200]
-]
+]*/
+colour_map = []
 function compute_colour_map() {
     var i;
     with (Math) {
@@ -579,7 +580,7 @@ function compute_colour_map() {
             ])
         }
         */
-        for (i = -500; i < 900; i++) {
+        for (i = -400; i < 800; i++) {
             var x = i/1000 * PI
             var red = floor(sin(x) * 255)
             var green = floor(sin(x + (PI/3)) *255)
@@ -592,7 +593,7 @@ function compute_colour_map() {
         }
     }
 }
-//compute_colour_map()
+compute_colour_map()
 
 var FilterBox = OpenLayers.Class(OpenLayers.Control, {
     CLASS_NAME: 'FilterBox',
@@ -1872,7 +1873,7 @@ ClimateDataMapPlugin = function (config) {
                         normalised_value * (colour_map.length-1)
                     )]
                     function hexFF(value) {
-                        return (256+value).toString(16).substr(-2)
+                        return (256+value).toString(16).substr(1)
                     }
                     var colour_string = (
                         '#'+
@@ -1880,7 +1881,6 @@ ClimateDataMapPlugin = function (config) {
                         hexFF(colour_value[1]) + 
                         hexFF(colour_value[2])
                     )
-                    
                     var data = place.data
                     var lat = data.latitude
                     var lon = data.longitude
