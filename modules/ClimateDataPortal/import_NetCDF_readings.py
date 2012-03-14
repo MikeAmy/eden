@@ -187,7 +187,7 @@ def import_climate_readings(
             # create grid of places
             place_ids = {}
             
-            lon = map((0.11).__add__, to_list(lon_variable))
+            lon = to_list(lon_variable)
             
             if skip_places:
                 for place in db(climate_place.id > 0).select(
