@@ -51,13 +51,13 @@ def index():
     if request.vars.get("zoom", None) is not None:
         zoom = int(request.vars["zoom"])
     else:
-        zoom = 7
+        zoom = 2
         
     if request.vars.get("coords", None) is not None:
         lon, lat = map(float, request.vars["coords"].split(","))
     else:
-        lon = 84.1
-        lat = 28.5
+        lon = 0
+        lat = 0
 
     gis_map = gis.show_map(
         lon = lon,
