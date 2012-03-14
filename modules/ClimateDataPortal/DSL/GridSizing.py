@@ -8,6 +8,8 @@
 # Observed data is not on a grid but at points.
 # Each node has a set of possible grid sizes.
 
+# Actually, grids are a special case of Place Sets
+# e.g. model data might be defined for countries rather than, or as well as grids.
 
 from . import Method
 grid_sizes = Method("grid_sizes")
