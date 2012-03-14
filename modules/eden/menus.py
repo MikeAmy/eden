@@ -310,10 +310,9 @@ class S3MainMenu:
             c="climate",
             **attr
         )(
-            MM("Station Parameters", f="station_parameter"),
+            MM("Data time ranges", f="station_parameter"),
+            MM("User guide", f="user_guide"),
             #MM("Saved Queries", f="save_query"),
-            MM("Purchase Data", f="purchase"),
-            MM("DataSet Prices", f="prices", restrict=[ADMIN]),
         )
         return menu_climate
 
