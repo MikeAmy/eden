@@ -29,7 +29,9 @@ units_in_out = {
         "out": lambda hectopascals: hectopascals * 100.0
     },
 
-    "mm": standard_unit,
+    "Precipitation mm": standard_unit,
+
+    #"mm": standard_unit,
     "kg m-2 s-1": {
         "in": lambda precipitation_rate: precipitation_rate * 2592000.0,
         "out": lambda mm: mm / 2592000.0
@@ -52,10 +54,26 @@ start_date = date(start_year, start_month_0_indexed+1, 11)
 start_day_number = start_date.toordinal()
 
 class DateMapping(object):
-    def __init__(date_mapper, from_year_month_day, from_date, to_date):
+    def __init__(
+        date_mapper,
+        from_year_month_day,
+        to_date, 
+        from_date = None
+    ):
         date_mapper.year_month_day_to_time_period = from_year_month_day
-        date_mapper.date_to_time_period = from_date
         date_mapper.to_date= to_date
+        if from_date is None:
+            date_mapper.date_to_time_period = (
+                lambda date:
+                    from_year_month_day(
+                        date.year,
+                        date.month, 
+                        date.day
+                    )
+            )
+        else:
+            date_mapper.date_to_time_period = from_date
+        
 
 def date_to_month_number(date):
     """This function converts a date to a month number.
@@ -120,26 +138,19 @@ def floored_twelfth_of_a_360_day_year(date):
 
 #import logging
 #logging.warn("NetCDF imports using unusual date semantics might not work")
-monthly = DateMapping(
-    from_year_month_day = year_month_to_month_number,
-    from_date = date_to_month_number, # Different for different data sets!
-    to_date = month_number_to_date
-)
 
-def date_to_day_number(date):
-    return date.toordinal() - start_day_number
+#twelfths_of_360_day_year = DateMapping(    
+#)
 
-def year_month_day_to_day_number(year, month, day):
-    return date_to_day_number(date(year, month, day))
+# twenty_years_by_month date mapping should show charts without years,
+# only months?
+def twenty_years_by_month_to_date(time_period):
+    month = (time_period % 12) + 1
+    year = (((time_period - month) / 12) * 20) + 1900
+    return date()
 
-def day_number_to_date(day_number):
-    return start_date + timedelta(days=day_number)
 
-daily = DateMapping(
-    from_year_month_day = year_month_day_to_day_number,
-    from_date = date_to_day_number,
-    to_date = day_number_to_date
-)
+
 
 class Observed(object):
     code = "O"
@@ -185,8 +196,30 @@ class SampleTable(object):
     # May be better to cluster places by region.
         
     __date_mapper = {
-        "daily": daily,
-        "monthly": monthly
+        "daily": DateMapping(
+            from_year_month_day = (
+                lambda year, month, day:
+                    date(year, month, day).toordinal() - start_day_number
+            ),
+            to_date = (
+                lambda time_period:
+                    start_date + timedelta(days=day_number)
+            )
+        ),
+        "monthly": DateMapping(
+            from_year_month_day = year_month_to_month_number,
+            from_date = date_to_month_number, # Different for different data sets!
+            to_date = month_number_to_date
+        ),
+        "twenty_years_by_month": DateMapping(
+            # month refers to a a discontiguous slice through the twenty year
+            # period, for that month
+            from_year_month_day = (
+                lambda year, month, day: 
+                    (((year - 1900) / 20) * 12) + (month - 1)
+            ),
+            to_date = twenty_years_by_month_to_date
+        ),
     }
     __objects = {}
     __names = OrderedDict()
@@ -230,8 +263,7 @@ class SampleTable(object):
 
         parameter_names = []
         for name, sample_table in SampleTable.__names.iteritems():
-            if sample_table.date_mapping_name == "monthly":
-                parameter_names.append(name)
+            parameter_names.append(name)
         config_dict.update(
             data_type_option_names = data_type_option_names,
             parameter_names = parameter_names
@@ -518,3 +550,5 @@ def init_SampleTable():
 init_SampleTable()
 
 from MapPlugin import MapPlugin
+
+__all__ = ["SampleTable", "MapPlugin", "Observed", "Gridded", "Projected"]

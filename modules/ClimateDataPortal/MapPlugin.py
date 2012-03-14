@@ -347,6 +347,7 @@ class MapPlugin(object):
                 is_yearly_values = "Months(" in query_expression
                 yearly.append(is_yearly_values)
                 if is_yearly_values:
+                    # Date Mapping - currently months hard-coded, no comparison of expression sides
                     if "Prev" in query_expression:
                         # PreviousDecember handling:
                         grouping_key = "(time_period - ((time_period + 1000008 + %i +1) %% 12))" % start_month_0_indexed
@@ -400,7 +401,8 @@ class MapPlugin(object):
                     for key, value in zip(keys, values):
                         #print key, value
                         add(key, value)
-                    # assume monthly values and monthly time_period
+                    # Date Mapping
+                    # currently assumes monthly values and monthly time_period
                     start_month_number = min(data.iterkeys())
                     starts.append(start_month_number)
                     start_year, start_month = month_number_to_year_month(
@@ -801,7 +803,7 @@ function (
                 Attribute(
                     "station_name",
                     lambda place: place.climate_place_station_name.name, 
-                    lambda name: '"%s"' % name.replace("'", '"'),
+                    lambda name: '"%s"' % name.replace('"', '\\"'),
                     no_compression
                 )
             ]
@@ -809,11 +811,7 @@ function (
             places_by_attribute_groups = {}
 
             for place_row in db(
-                # only show Nepal
-                (db.climate_place.longitude > 79.5) & 
-                (db.climate_place.longitude < 88.5) & 
-                (db.climate_place.latitude > 26.0) & 
-                (db.climate_place.latitude < 30.7)
+                db.climate_place.id > 0
             ).select(
                 db.climate_place.id,
                 db.climate_place.longitude,
@@ -831,7 +829,8 @@ function (
                     db.climate_place_station_name.on(
                         db.climate_place.id == db.climate_place_station_name.id
                     )
-                )
+                ),
+                orderby = db.climate_place.id
             ):
                 place_data = {}
                 for attribute in attributes:

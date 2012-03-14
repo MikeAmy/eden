@@ -114,6 +114,32 @@ if deployment_settings.has_module("climate"):
         )
     )
 
+    climate_place_country_iso_number = place_attribute_table(
+        "country_iso_number",
+        (
+            Field(
+                "country_iso_number",
+                "string",
+                length = 3,
+                notnull=True,
+                required=True,
+            ),
+        )
+    )
+
+    climate_station_iso3_code = place_attribute_table(
+        "iso3_code",
+        (
+            Field(
+                "iso3_code",
+                "string",
+                length = 3,
+                notnull=True,
+                required=True,
+            ),
+        )
+    )
+
     def station_represent(id):
         row_id = db(climate_station_id.id == id).select(
             climate_station_id.station_id,
