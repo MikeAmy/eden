@@ -327,6 +327,7 @@ def DSLAggregationNode_SQL(aggregation, key, out, extra_filter):
     sample_table = aggregation.sample_table
     out("SELECT ", key)
 
+    # Date Mapping
     from_date = aggregation.from_date
     if from_date is not None:
         from_time_period = sample_table.date_mapper.date_to_time_period(from_date)
@@ -342,6 +343,7 @@ def DSLAggregationNode_SQL(aggregation, key, out, extra_filter):
     if extra_filter:
         filter_strings.append(extra_filter)
     add_filter = filter_strings.append
+    # Date Mapping
     month_numbers = aggregation.month_numbers
     if month_numbers is not None and -1 in month_numbers:
         # PreviousDecember handling:
@@ -351,6 +353,8 @@ def DSLAggregationNode_SQL(aggregation, key, out, extra_filter):
         month_numbers = map((1).__add__, month_numbers)
     else:
         time_period = "time_period"
+    
+    # Date Mapping
     if from_time_period is not None:
         add_filter(
             "%(time_period)s >= %(from_date_number)i" % dict(
@@ -366,6 +370,7 @@ def DSLAggregationNode_SQL(aggregation, key, out, extra_filter):
                 to_date_number = sample_table.date_mapper.date_to_time_period(to_date)
             )
         )
+    # Date Mapping
     if month_numbers is not None and month_numbers != list(range(0,12)):
         if month_numbers == []:
             add_filter("FALSE")

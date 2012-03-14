@@ -45,6 +45,11 @@ AggregationNode.set_months = set_months
 def set_to_date(aggregation, to_date):
     if aggregation.to_date is not None:
         raise DSLSyntaxError("To was specified twice.")
+    # Date Mapping
+    # aggregation.sample_table.date_mapping.check_date(to_date)
+    # ...
+    # if to_date.month is not 1 or to_date.day is not 0 or to_date.year not in (1900, 1920 ... 2080):
+    #    raise DSLSyntaxError("For twenty year data, To() should only be a year from 1900 to 2080")
     aggregation.to_date = to_date
 AggregationNode.set_to_date = set_to_date
 
