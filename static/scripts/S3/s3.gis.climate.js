@@ -1601,13 +1601,18 @@ ClimateDataMapPlugin = function (config) {
                 hover: false,
                 box: true,
                 onSelect: function (feature) {
-                    feature.style.strokeColor = 'black'
-                    feature.style.strokeDashstyle = 'dash'
+                    var style = feature.style
+                    style.strokeColor = 'white'
+                    style.strokeDashstyle = 'dash'
+                    style.strokeWidth = 3
                     overlay_layer.drawFeature(feature)
                     plugin.show_chart_button.enable()
                 },
                 onUnselect: function (feature) {
-                    feature.style.strokeColor = 'none'
+                    var style = feature.style
+                    style.strokeColor = 'black'
+                    style.strokeDashstyle = 'solid'
+                    style.strokeWidth = 1
                     overlay_layer.drawFeature(feature)
                     if (plugin.overlay_layer.selectedFeatures.length == 0) {
                         plugin.show_chart_button.disable()
@@ -2740,5 +2745,7 @@ ClimateDataMapPlugin = function (config) {
                 
         plugin.query_box.activate()
         
+        // with a lot of data, things can get slow, animations make it worse
+        map.panDuration = 0
     }
 }
