@@ -1819,7 +1819,8 @@ ClimateDataMapPlugin = function (config) {
     }
     var display_units_conversions = {
         'Kelvin': '&#176;C',
-        'Δ Kelvin': 'Δ &#176;C'
+        // Delta
+        '\u0394 Kelvin': '&#916; &#176;C'
     }
     
     plugin.render_map_layer = function(min_value, max_value) {
