@@ -89,30 +89,22 @@
     {{include "layout_iframe.html"}}
     {{include}}
 {{else:}}
+
+<link href="static/styles/climate/climate.css" rel="stylesheet" type="text/css" />
+
 </head>
 
 <body>
-    <div id='menu_modules'>
+    <div id='menu_modules' style="position:absolute; top:0px; left:0px; right:0px; width:100%;">
         {{=current.menu.main}}
     </div>
 
-    <div class='colmask fullpage'>
-	        <div class='col1'>
-	                {{if response.error:}}<div class='error'>{{=response.error}}</div>{{pass}}
-	                {{if response.warning:}}<div class='warning'>{{=response.warning}}</div>{{pass}}
-	                {{if response.information:}}<div class='information'>{{=response.information}}</div>{{pass}}
-	                {{if response.confirmation:}}<div class='confirmation'>{{=response.confirmation}}</div>{{pass}}
-	                {{if response.flash:}}<div class='confirmation'>{{=response.flash}}</div>{{pass}}
-	            <div class='clearfix'>
-                    {{=map}}
-	            </div>
-	        </div>
-				</div>
+    <div class='fullpage' style="position:absolute; top:37px; left:0px; right:0px; bottom:0px; padding:0px; margin:0px;">
+        <div class='clearfix' style="height: 100%;">
+            {{=map}}
+        </div>
     </div>
 
-    <div id='footer'>
-        {{include "footer.html"}}
-    </div>
 {{pass}}
 
 <!--[if lt IE 7 ]>

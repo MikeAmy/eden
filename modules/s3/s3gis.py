@@ -3301,7 +3301,7 @@ class GIS(object):
         mtable = s3db.gis_marker
         markers = {}
 
-        html = DIV(_id="map_wrapper")
+        html = DIV(_id="map_wrapper", _style="height: 100%;")
 
         #####
         # CSS
@@ -3312,7 +3312,7 @@ class GIS(object):
         # HTML
         ######
         # Map (Embedded not Window)
-        html.append(DIV(_id="map_panel"))
+        html.append(DIV(_id="map_panel", _style="height: 100%;"))
 
         # Status Reports
         html.append(TABLE(TR(

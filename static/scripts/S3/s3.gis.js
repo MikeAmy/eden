@@ -64,62 +64,6 @@ function registerPlugin(plugin) {
 // Main Ext function
 Ext.onReady(function() {
     // Build the OpenLayers map
-    addMap();
-
-    // Set some common options
-    if ( undefined == S3.gis.west_collapsed ) {
-        S3.gis.west_collapsed = false;
-    }
-
-    // Which Elements do we want in our mapWindow?
-    // @ToDo: Move all these to Plugins
-    items = [S3.gis.layerTree];
-    if (S3.gis.wmsBrowser) {
-        items.push(S3.gis.wmsBrowser);
-    }
-    if (S3.gis.searchCombo) {
-        items.push(S3.gis.searchCombo);
-    }
-    if (S3.gis.printFormPanel) {
-        items.push(S3.gis.printFormPanel);
-    }
-    if (S3.gis.legendPanel) {
-        items.push(S3.gis.legendPanel);
-    }
-    
-    for ( var i = 0; i < S3.gis.plugins.length; ++i ) {
-        S3.gis.plugins[i].addToMapWindow(items);
-    }
-
-    // Instantiate the main Map window
-    if (S3.gis.window) {
-        addMapWindow(items);
-    } else {
-        // Embedded Map
-        addMapPanel(items);
-    }
-
-    // If we were instantiated with bounds, use these now
-    if ( S3.gis.bounds ) {
-        map.zoomToExtent(S3.gis.bounds);
-    }
-
-    // Ensure that mapPanel knows about whether our WMS layers are queryable
-    if (S3.gis.layers_wms) {
-        for (i = 0; i < map.layers.length; i++) {
-            if (map.layers[i].queryable) {
-                S3.gis.mapPanel.layers.data.items[i].data.queryable = 1;
-            }
-        }
-    }
-    
-    // Toolbar Tooltips
-    Ext.QuickTips.init();
-});
-
-
-// Add Map
-function addMap() {
     map = new OpenLayers.Map('center', S3.gis.options);
 
     // Layers
@@ -133,8 +77,6 @@ function addMap() {
     // GeoExt UI
     S3.gis.mapPanel = new GeoExt.MapPanel({
         region: 'center',
-        height: S3.gis.map_height,
-        width: S3.gis.map_width,
         id: 'mappanel',
         xtype: 'gx_mappanel',
         map: map,
@@ -150,7 +92,6 @@ function addMap() {
     // We need to put the mapPanel inside a 'card' container for the Google Earth Panel
     S3.gis.mapPanelContainer = new Ext.Panel({
         layout: 'card',
-        region: 'center',
         id: 'mappnlcntr',
         defaults: {
             // applied to each contained panel
@@ -238,80 +179,94 @@ function addMap() {
     for ( var i = 0; i < S3.gis.plugins.length; ++i ) {
         S3.gis.plugins[i].setup(map);
     }
-}
 
-// Create an embedded Map Panel
-function addMapPanel(items) {
+
+
+
+    // Set some common options
+    if ( undefined == S3.gis.west_collapsed ) {
+        S3.gis.west_collapsed = false;
+    }
+
+    // Which Elements do we want in our mapWindow?
+    // @ToDo: Move all these to Plugins
+    var tools = [S3.gis.layerTree];
+    if (S3.gis.wmsBrowser) {
+        tools.push(S3.gis.wmsBrowser);
+    }
+    if (S3.gis.searchCombo) {
+        tools.push(S3.gis.searchCombo);
+    }
+    if (S3.gis.printFormPanel) {
+        tools.push(S3.gis.printFormPanel);
+    }
+    if (S3.gis.legendPanel) {
+        tools.push(S3.gis.legendPanel);
+    }
+    
+    for ( var i = 0; i < S3.gis.plugins.length; ++i ) {
+        S3.gis.plugins[i].addToMapWindow(tools);
+    }
+
+    // Instantiate the main Map window
+    // Embedded Map
     S3.gis.mapWin = new Ext.Panel({
         id: 'gis-map-panel',
         renderTo: 'map_panel',
-        autoScroll: true,
+        height: 600,
         maximizable: true,
         titleCollapse: true,
-        height: S3.gis.map_height,
-        width: S3.gis.map_width,
-        layout: 'border',
-        items: [{
-                region: 'west',
-                id: 'tools',
-                //title: 'Tools',
-                header: false,
-                border: true,
-                width: 250,
-                autoScroll: true,
-                collapsible: true,
-                collapseMode: 'mini',
-                collapsed: S3.gis.west_collapsed,
-                split: true,
-                items: items
+        monitorResize: true,
+        layout: 'anchor',
+        items: new Ext.Panel({
+            anchor: "100%, 100%",
+            layout: 'border',
+            items: [
+                {
+                    region: 'west',
+                    id: 'tools',
+                    //title: 'Tools',
+                    header: false,
+                    border: false,
+                    width: 250,
+                    autoScroll: true,
+                    collapsible: true,
+                    collapseMode: 'mini',
+                    collapsed: S3.gis.west_collapsed,
+                    split: true,
+                    items: tools
                 },
-                S3.gis.mapPanelContainer
-                ]
-    });
-}
-
-// Create a floating Map Window
-function addMapWindow(items) {
-    S3.gis.mapWin = new Ext.Window({
-        id: 'gis-map-window',
-        collapsible: false,
-        constrain: true,
-        closable: !S3.gis.windowNotClosable,
-        closeAction: 'hide',
-        autoScroll: true,
-        maximizable: S3.gis.maximizable,
-        titleCollapse: false,
-        height: S3.gis.map_height,
-        width: S3.gis.map_width,
-        layout: 'border',
-        items: [{
-                region: 'west',
-                id: 'tools',
-                //title: 'Tools',
-                header: false,
-                border: true,
-                width: 250,
-                autoScroll: true,
-                collapsible: true,
-                collapseMode: 'mini',
-                collapsed: S3.gis.west_collapsed,
-                split: true,
-                items: items
-                },
-                S3.gis.mapPanelContainer
-                ]
+                {
+                    region: 'center',
+                    margins: '0 0 0 0',
+                    cmargins: '0 0 0 0',
+                    layout: 'fit',
+                    items: [
+                        S3.gis.mapPanelContainer
+                    ]
+                }
+            ]
+        })
     });
 
-    // Shortcut
-    var mapWin = S3.gis.mapWin;
-
-    // Set Options
-    if (!S3.gis.windowHide) {
-        // If the window is meant to be displayed immediately then display it now that it is ready
-        mapWin.show();
-        mapWin.maximize();
+    // If we were instantiated with bounds, use these now
+    if ( S3.gis.bounds ) {
+        map.zoomToExtent(S3.gis.bounds);
     }
-}
+
+    // Ensure that mapPanel knows about whether our WMS layers are queryable
+    if (S3.gis.layers_wms) {
+        for (i = 0; i < map.layers.length; i++) {
+            if (map.layers[i].queryable) {
+                S3.gis.mapPanel.layers.data.items[i].data.queryable = 1;
+            }
+        }
+    }
+    
+    // Toolbar Tooltips
+    Ext.QuickTips.init();
+});
+
 
 // Add LayerTree (to be called after the layers are added)
 function addLayerTree() {

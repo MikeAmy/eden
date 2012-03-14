@@ -1,0 +1,33 @@
+
+div.sahana_button {
+    position:absolute;
+    left: 5px;
+    bottom:60px;
+    background: url("static/img/black_glossy_horiz_bulge.png"); 
+    color:white;
+}
+
+/* fancy borders */
+div.sahana_button,
+div.olPopupContent {
+    border: solid 1px; 
+    border-color:#EEE #EEE #AAA #AAA; 
+    border-radius:6px; 
+    -moz-border-radius:6px; 
+    -webkit-border-radius:6px; 
+}
+
+div.olPopupContent {
+    color: white;
+    background-color: black;
+}
+
+a.plain:hover {
+    background: none;
+    color: #CCF;
+}
+
+a.plain {
+    text-decoration: none; 
+    color:white;
+}
