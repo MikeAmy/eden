@@ -801,6 +801,12 @@ function (
                     similar_numbers
                 ),
                 Attribute(
+                    "ISO_code",
+                    lambda place: place.climate_place_iso3_code.iso3_code, 
+                    '"%s"'.__mod__,
+                    no_compression
+                ),
+                Attribute(
                     "station_name",
                     lambda place: place.climate_place_station_name.name, 
                     lambda name: '"%s"' % name.replace('"', '\\"'),
@@ -818,6 +824,7 @@ function (
                 db.climate_place.latitude,
                 db.climate_place_elevation.elevation_metres,
                 db.climate_place_station_id.station_id,
+                db.climate_place_iso3_code.iso3_code,
                 db.climate_place_station_name.name,
                 left = (
                     db.climate_place_elevation.on(
@@ -825,6 +832,9 @@ function (
                     ),
                     db.climate_place_station_id.on(
                         db.climate_place.id == db.climate_place_station_id.id
+                    ),
+                    db.climate_place_iso3_code.on(
+                        db.climate_place.id == db.climate_place_iso3_code.id
                     ),
                     db.climate_place_station_name.on(
                         db.climate_place.id == db.climate_place_station_name.id

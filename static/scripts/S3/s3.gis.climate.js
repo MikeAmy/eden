@@ -1800,13 +1800,85 @@ ClimateDataMapPlugin = function (config) {
         // make room by closing the layer tree
         setTimeout(
             function () {
-                /*load_layer_and_locate_places_in_spaces = function (
-                    'countries',
-                    'static/data/countries.kml',
-                    format,
-                    label_colour,
-                    label_size
-                )*/
+                // load a file containing world map info
+                $.ajax({
+                    url: 'static/data/countries_compressible.json',
+                    format: 'json',
+                    success: function (delta_polygon_feature_collection) {
+                        var format = new OpenLayers.Format.GeoJSON({
+                            ignoreExtraDims: true
+                        })
+                        
+                        function decompressiblize_GeometryCollection(geometry_collection) {
+                            each(
+                                geometry_collection["geometries"],
+                                function (geometry) {
+                                    decompressiblize[geometry["type"]](geometry)
+                                }
+                            )
+                        }
+                            
+                        function decompressiblize_Polygon(polygon) {
+                            var new_linear_rings = []
+                            each(
+                                polygon["coordinates"],
+                                function(linear_ring) {
+                                    var longitude_deltas = linear_ring[0]
+                                    var latitude_deltas = linear_ring[1]
+                                    var new_linear_ring = []
+                                    var previous_longitude = 0, previous_latitude = 0
+                                    for (
+                                        var i = 0, 
+                                            len = longitude_deltas.length; 
+                                        i < len;
+                                        i++
+                                    ) {
+                                        var longitude_delta = longitude_deltas[i]
+                                        var latitude_delta = latitude_deltas[i]
+                                        new_linear_ring.push(
+                                            [
+                                                (previous_longitude + longitude_delta)*1000,
+                                                (previous_latitude + latitude_delta)*1000,
+                                            ]
+                                        )
+                                        previous_longitude = previous_longitude + longitude_delta
+                                        previous_latitude = previous_latitude + latitude_delta
+                                    }
+                                    new_linear_rings.push(new_linear_ring)
+                                }
+                            )
+                            polygon["coordinates"] = new_linear_rings
+                        }
+
+                        var decompressiblize = {
+                            GeometryCollection: decompressiblize_GeometryCollection,
+                            Polygon: decompressiblize_Polygon,
+                            Point: function () {}
+                        }
+                        
+                        window.delta_polygon_feature_collection = delta_polygon_feature_collection
+                        plugin.countries = {}
+                        each(
+                            delta_polygon_feature_collection.features,
+                            function (delta_polygon_feature) {
+                                var geometry = delta_polygon_feature.geometry
+                                decompressiblize[geometry["type"]](geometry)
+                                // feature is no longer in delta format
+                                var feature_json = delta_polygon_feature
+                                delete delta_polygon_feature
+                                var feature = format.parseFeature(feature_json)
+                                if (!!feature.data.ISO3) {
+                                    plugin.countries[feature.data.ISO3] = feature
+                                }
+                            }
+                        )
+                    },
+                    failure: function () {
+                        plugin.set_status(
+                            'Could not load world map!'
+                        )
+                    }
+                })
                 init_tooltips()
             },
             1000 // what is this waiting for?
@@ -1886,20 +1958,32 @@ ClimateDataMapPlugin = function (config) {
                     var lon = data.longitude
                     
                     if (grid_size == 0) {
-                        features.push(
-                            Vector(
-                                Point(lon, lat),
-                                {
-                                    value: converted_value.toPrecision(6)+' '+display_units,
-                                    id: id,
-                                    place_id: place_id
-                                },
-                                {
-                                    fillColor: colour_string,
-                                    pointRadius: 6
-                                }
+                        var feature = plugin.countries[data.ISO_code]
+                        if (!!feature) {
+                            feature = feature.clone()
+                            features.push(feature)
+                            feature.style = {
+                                fillColor: colour_string,
+                                pointRadius: 6,
+                                strokeWidth: 1
+                            }
+                        }
+                        else {
+                            features.push(
+                                Vector(
+                                    Point(lon, lat),
+                                    {
+                                        value: converted_value.toPrecision(6)+' '+display_units,
+                                        id: id,
+                                        place_id: place_id
+                                    },
+                                    {
+                                        fillColor: colour_string,
+                                        pointRadius: 6
+                                    }
+                                )
                             )
-                        )
+                        }
                     }
                     else {
                         var border = grid_size / 220
