@@ -603,8 +603,7 @@ var FilterBox = OpenLayers.Class(OpenLayers.Control, {
         'Enter filter expressions here to filter the map overlay. '+
         '"unfiltered" means the map overlay is not being filtered. '+
         'You can use any attribute that is shown in the overlay '+
-        'popup box, and logical operators "and", "not" and "or". \n'+
-        'within("Region name") and within_Nepal() filter by region.'
+        'popup box, and logical operators "and", "not" and "or".'
     ),
     destroy: function() {
         var filter_box = this
@@ -808,9 +807,6 @@ Place.prototype = {
             }
         }
         return false
-    },
-    within_Nepal: function () {
-        return this.spaces.length > 0
     },
     generate_marker: function (use_marker) {
         // only for stations
@@ -1380,7 +1376,7 @@ var Logo = OpenLayers.Class(OpenLayers.Control, {
         return (
             DIV({
                     'id': 'sahana-button',
-                    style:'position:absolute; left: 5px; top:150px; background: url(static/img/black_glossy_horiz_bulge.png); color:white; border: solid 1px; border-color:#EEE #EEE #AAA #AAA; padding:5px; border-radius:5px; text-align:center;'
+                    style:'position:absolute; right: 5px; bottom:120px; background: url(static/img/black_glossy_horiz_bulge.png); color:white; border: solid 1px; border-color:#EEE #EEE #AAA #AAA; padding:5px; border-radius:5px; text-align:center;'
                 },
                 SPAN({style:'font-size: smaller; '}, "Powered By:<br />"),
                 IMG({
@@ -2209,7 +2205,7 @@ ClimateDataMapPlugin = function (config) {
             'Dataset',
             'parameter',
             {
-                width: 250,
+                width: 330,
                 heigth: 25
             }
         )
@@ -2412,7 +2408,7 @@ ClimateDataMapPlugin = function (config) {
             collapsible: true,
             collapseMode: 'mini',
             collapsed: collapsed,
-            labelWidth: 60,
+            labelWidth: 42,
             items: [{
                 region: 'center',
                 items: [
@@ -2554,7 +2550,7 @@ ClimateDataMapPlugin = function (config) {
         comparison_panel.addButton(update_map_layer_comparison_button)
         items.push(comparison_panel)
         
-        
+        /*
         var quick_filter_data_store = plugin.quick_filter_data_store = new Ext.data.SimpleStore({
             fields: ['name', 'option']
         })
@@ -2587,7 +2583,7 @@ ClimateDataMapPlugin = function (config) {
             }
         )
         items.push(quick_filter_panel)
-        
+        */
         
         
         var show_chart_button = new Ext.Button({

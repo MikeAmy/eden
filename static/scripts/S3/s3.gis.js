@@ -228,7 +228,7 @@ Ext.onReady(function() {
                     //title: 'Tools',
                     header: false,
                     border: false,
-                    width: 350,
+                    width: 400,
                     autoScroll: true,
                     collapsible: true,
                     collapseMode: 'mini',
