@@ -855,17 +855,21 @@ function (
             generate_places
         )
     
-    def printable_map_image_file(plugin, command, url_prefix, query_string, width, height):
+    def printable_map_image_file(plugin, command, url_prefix, expression, filter, width, height):
         def generate_printable_map_image(file_path):
             import urllib
-            url = url_prefix+"?"+query_string+"&display_mode=print"
-                        
+            url = url_prefix+(
+                "?expression=%(expression)s"
+                "&filter=%(filter)s"
+                "&display_mode=print"
+            ) % dict(
+                expression = expression,
+                filter = filter
+            )
+            
             # PyQT4 signals don't like not being run in the main thread
             # run in a subprocess to give it it's own thread
             subprocess_args = (
-                #"xvfb-run",
-                #'--server-args=-screen 0, 640x480x24',
-                #'--auto-servernum',
                 url,
                 str(width),
                 str(height),
@@ -873,11 +877,10 @@ function (
             )
 
             os.system(
-                command+" "+(
-                    " ".join(
-                        map("'%s'".__mod__, subprocess_args)
-                    )
-                )
+                "xvfb-run "+
+                '"--server-args=-screen 0, 640x480x24" '+
+                '--auto-servernum '+
+                command+" "+(" ".join(map("'%s'".__mod__, subprocess_args)))
             )
 
         import md5
@@ -885,7 +888,7 @@ function (
         return get_cached_or_generated_file(
             md5.md5(
                 JSON.dumps(
-                    [query_string, width, height],
+                    [expression, filter, width, height],
                     sort_keys=True,
                 )
             ).hexdigest()+".png",
