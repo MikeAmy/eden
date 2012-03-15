@@ -19,8 +19,8 @@ DSL = local_import("ClimateDataPortal.DSL")
 def _map_plugin(**client_config):
     return ClimateDataPortal.MapPlugin(
         env = Storage(globals()),
+        year_min = 1900,
         year_max = 2100,
-        year_min = 1940,
         place_table = climate_place,
         client_config = client_config
     )

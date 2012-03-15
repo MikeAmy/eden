@@ -69,8 +69,8 @@ def From_check(from_date):
         error("Year should be a whole number")
     if not isinstance(day, int):
         error("Day should be a whole number")
-    if not (1900 < year < 2500):
-        error("Year should be in range 1900 to 2500")
+    if not (1900 <= year < 2100):
+        error("Year should be in range 1900 to 2100")
     try:
         from_date.date = datetime.date(year, month_number, day)
     except:
