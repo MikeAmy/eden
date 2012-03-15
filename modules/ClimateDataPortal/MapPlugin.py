@@ -939,7 +939,7 @@ function (
     def get_available_years(map_plugin, sample_table_name):
         def generate_years_json(file_path):
             file = open(file_path, "w")
-            years = SampleTable.with_name(sample_table_name).get_available_years()
+            years = list(SampleTable.with_name(sample_table_name).get_available_years())
             years.sort()
             file.write(str(years))
             file.close()

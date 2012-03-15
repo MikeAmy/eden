@@ -148,7 +148,7 @@ def floored_twelfth_of_a_360_day_year(date):
 def twenty_years_by_month_to_date(time_period):
     month = (time_period % 12) + 1
     year = (((time_period - month) / 12) * 20) + 1900
-    return date()
+    return date(year, month, 1)
 
 
 
@@ -512,19 +512,13 @@ class SampleTable(object):
     def get_available_years(
         sample_table
     ):
-        years = []
-        for (year,) in db.executesql(
-            "SELECT sub.year FROM ("
-                "SELECT (((time_period + %(start_month_0_indexed)i) / 12) + %(start_year)i)"
-                " AS year "
-                "FROM climate_sample_table_%(sample_table_id)i "
-            ") as sub GROUP BY sub.year;" % dict(
-                start_year = start_year,
-                start_month_0_indexed = start_month_0_indexed,
+        years = set()
+        for (time_period,) in db.executesql(
+            "SELECT DISTINCT time_period FROM climate_sample_table_%(sample_table_id)i;" % dict(
                 sample_table_id = sample_table.id
             )
         ):
-            years.append(year)
+            years.add(sample_table.date_mapper.to_date(time_period).year)
         return years
 
 def init_SampleTable():
