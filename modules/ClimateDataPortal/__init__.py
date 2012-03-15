@@ -64,7 +64,7 @@ class DateMapping(object):
         date_mapper.year_month_day_to_time_period = from_year_month_day
         date_mapper.to_date= to_date
         if from_date is None:
-            date_mapper.date_to_time_period = (
+            from_date = date_mapper.date_to_time_period = (
                 lambda date:
                     from_year_month_day(
                         date.year,
@@ -74,6 +74,11 @@ class DateMapping(object):
             )
         else:
             date_mapper.date_to_time_period = from_date
+        assert from_date(to_date(0)) == 0,  from_date(to_date(0))
+        assert from_date(to_date(-1)) == -1
+        assert from_date(to_date(1)) == 1
+        assert from_date(to_date(-1000)) == -1000
+        assert from_date(to_date(1000)) == 1000
         
 
 def date_to_month_number(date):
@@ -146,9 +151,9 @@ def floored_twelfth_of_a_360_day_year(date):
 # twenty_years_by_month date mapping should show charts without years,
 # only months?
 def twenty_years_by_month_to_date(time_period):
-    month = (time_period % 12) + 1
+    month = time_period % 12
     year = (((time_period - month) / 12) * 20) + 1900
-    return date(year, month, 1)
+    return date(year, month+1, 1)
 
 
 
@@ -197,16 +202,16 @@ class SampleTable(object):
     # May be better to cluster places by region.
         
     __date_mapper = {
-        "daily": DateMapping(
-            from_year_month_day = (
-                lambda year, month, day:
-                    date(year, month, day).toordinal() - start_day_number
-            ),
-            to_date = (
-                lambda time_period:
-                    start_date + timedelta(days=day_number)
-            )
-        ),
+        #"daily": DateMapping(
+        #    from_year_month_day = (
+        #        lambda year, month, day:
+        #            date(year, month, day).toordinal() - start_day_number
+        #    ),
+        #    to_date = (
+        #        lambda time_period:
+        #            start_date + timedelta(days = time_period)
+        #    )
+        #),
         "monthly": DateMapping(
             from_year_month_day = year_month_to_month_number,
             from_date = date_to_month_number, # Different for different data sets!

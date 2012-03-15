@@ -8,6 +8,7 @@ import gluon.contrib.simplejson as JSON
 from . import (
     SampleTable,
     month_number_to_year_month,
+    twenty_years_by_month_to_date,
     units_in_out,
     start_month_0_indexed
 )
@@ -326,8 +327,8 @@ class MapPlugin(object):
             R = map_plugin.R
             c = R("c")
             spec_names = []
-            starts = []
-            ends = []
+            start_time_periods = []
+            end_time_periods = []
             yearly = []
             for label, spec in specs:
                 query_expression = spec["query_expression"]
@@ -344,15 +345,16 @@ class MapPlugin(object):
                     raise MeaninglessUnitsException(
                         "\n".join(analysis_strings)
                     )
-                is_yearly_values = "Months(" in query_expression
+                is_yearly_values = True #"Months(" in query_expression
                 yearly.append(is_yearly_values)
                 if is_yearly_values:
                     # Date Mapping - currently months hard-coded, no comparison of expression sides
-                    if "Prev" in query_expression:
+                    #if "Prev" in query_expression:
                         # PreviousDecember handling:
-                        grouping_key = "(time_period - ((time_period + 1000008 + %i +1) %% 12))" % start_month_0_indexed
-                    else:
-                        grouping_key = "(time_period - ((time_period + 1000008 + %i) %% 12))" % start_month_0_indexed
+                    #    grouping_key = "(time_period - ((time_period + 1000008 + %i +1) %% 12))" % start_month_0_indexed
+                    #else:
+                    #    grouping_key = "(time_period - ((time_period + 1000008 + %i) %% 12))" % start_month_0_indexed
+                    grouping_key = "(time_period - ((time_period + 1000008) % 12))"
                 else:
                     grouping_key = "time_period"
                 code = DSL.R_Code_for_values(
@@ -387,11 +389,14 @@ class MapPlugin(object):
                     
                     previous_december_month_offset = [0,1][is_yearly_values and "Prev" in query_expression]
                 
-                    def month_number_to_float_year(month_number):
-                        year, month = month_number_to_year_month(month_number+previous_december_month_offset)
-                        return year + (float(month-1) / 12)
+                    #def month_number_to_float_year(month_number):
+                    #    year, month = month_number_to_year_month(month_number+previous_december_month_offset)
+                    #    return year + (float(month-1) / 12)
+                    
+                    def time_period_to_year(time_period):
+                        return twenty_years_by_month_to_date(time_period).year
                         
-                    converted_keys = map(month_number_to_float_year, keys)
+                    converted_keys = map(time_period_to_year, keys)
                     converted_values = map(converter, values) 
                     regression_lines.append(
                         stats.linregress(converted_keys, converted_values)
@@ -399,40 +404,52 @@ class MapPlugin(object):
                     
                     add = data.__setitem__
                     for key, value in zip(keys, values):
-                        #print key, value
+                        #print key, time_period_to_year(key), value
                         add(key, value)
                     # Date Mapping
                     # currently assumes monthly values and monthly time_period
-                    start_month_number = min(data.iterkeys())
-                    starts.append(start_month_number)
-                    start_year, start_month = month_number_to_year_month(
-                        start_month_number + previous_december_month_offset
-                    )
-
-                    end_month_number = max(data.iterkeys())
-                    ends.append(end_month_number)
-                    end_year, end_month = month_number_to_year_month(
-                        end_month_number + previous_december_month_offset
-                    )
+                    start_time_period = min(data.iterkeys())
+                    start_time_periods.append(start_time_period)
                     
+                    #start_year, start_month = month_number_to_year_month(
+                    #    start_time_period + previous_december_month_offset
+                    #)
+                    start_year = time_period_to_year(start_time_period)
+
+                    end_time_period = max(data.iterkeys())
+                    end_time_periods.append(end_time_period)
+                    #end_year, end_month = month_number_to_year_month(
+                    #    end_time_period + previous_december_month_offset
+                    #)
+                    end_year = time_period_to_year(end_time_period)
+
+
                     values = []
-                    for month_number in range(
-                        start_month_number,
-                        end_month_number+1,
+                    for time_period in range(
+                        start_time_period,
+                        end_time_period+1,
                         [1,12][is_yearly_values]
                     ):
-                        if not data.has_key(month_number):
+                        if not data.has_key(time_period):
                             values.append(None)
                         else:
-                            values.append(converter(data[month_number]))
+                            values.append(converter(data[time_period]))
                     
                     if is_yearly_values:
+                        #time_serieses.append(
+                        #    R("ts")(
+                        #        map_plugin.robjects.FloatVector(values),
+                        #        start = c(start_year),
+                        #        end = c(end_year),
+                        #        frequency = 1
+                        #    )
+                        #)
                         time_serieses.append(
                             R("ts")(
                                 map_plugin.robjects.FloatVector(values),
                                 start = c(start_year),
                                 end = c(end_year),
-                                frequency = 1
+                                deltat = 20
                             )
                         )
                     else:
@@ -444,13 +461,13 @@ class MapPlugin(object):
                                 frequency = 12
                             )
                         )
-            min_start = min(starts)
-            max_end = max(ends)
+            min_start_time_period = min(start_time_periods)
+            max_end_time_period = max(end_time_periods)
             show_months = any(not is_yearly for is_yearly in yearly)
             if show_months:
                 # label_step spaces out the x-axis marks sensibly based on
                 # width by not marking all of them.
-                ticks = (max_end - min_start) + 1
+                ticks = (max_end_time_period - min_start_time_period) + 1
                 # ticks should be made at 1,2,3,4,6,12 month intervals 
                 # or 1, 2, 5, 10, 20, 50 year intervals
                 # depending on the usable width and the number of ticks
@@ -468,7 +485,7 @@ class MapPlugin(object):
                     "Jan Feb Mar Apr May Jun "
                     "Jul Aug Sep Oct Nov Dec"
                 ).split(" ")
-                for month_number in range(min_start, max_end+1, step):
+                for month_number in range(min_start_time_period, max_end_time_period+1, step):
                     year, month = month_number_to_year_month(month_number)
                     month -= 1
                     axis_points.append(
@@ -481,12 +498,17 @@ class MapPlugin(object):
                 # show only years
                 axis_points = []
                 axis_labels = []
-                start_year, start_month = month_number_to_year_month(min_start)
-                end_year, end_month = month_number_to_year_month(max_end)
-                for year in range(start_year, end_year+1):
+                #start_year, start_month = month_number_to_year_month(min_start_time_period)
+                #end_year, end_month = month_number_to_year_month(max_end_time_period)
+                #for year in range(start_year, end_year+1):
+                #    axis_points.append(year)
+                #    axis_labels.append(year)
+                start_year = time_period_to_year(min_start_time_period)
+                end_year = time_period_to_year(max_end_time_period)
+                for year in range(start_year, end_year+1, 20):
                     axis_points.append(year)
-                    axis_labels.append(year)
-            
+                    axis_labels.append("%i - %i" % (year, year+19))
+
             display_units = display_units.replace("Celsius", "\xc2\xb0Celsius")
 
             R.png(
@@ -627,73 +649,6 @@ function (
                         col = colour_number+1
                     )
             R("dev.off()")
-            
-            import Image, ImageEnhance
-
-            RGBA = "RGBA"
-            def reduce_opacity(image, opacity):
-                """Returns an image with reduced opacity."""
-                assert opacity >= 0 and opacity <= 1
-                if image.mode != RGBA:
-                    image = image.convert(RGBA)
-                else:
-                    image = image.copy()
-                alpha = image.split()[3]
-                alpha = ImageEnhance.Brightness(alpha).enhance(opacity)
-                image.putalpha(alpha)
-                return image
-                
-            def scale_preserving_aspect_ratio(image, ratio):
-                return image.resize(
-                    map(int, map(ratio.__mul__, image.size))
-                )
-
-            def watermark(image, mark, position, opacity=1):
-                """Adds a watermark to an image."""
-                if opacity < 1:
-                    mark = reduce_opacity(mark, opacity)
-                if image.mode != RGBA:
-                    image = image.convert(RGBA)
-                # create a transparent layer the size of the 
-                # image and draw the watermark in that layer.
-                layer = Image.new(RGBA, image.size, (0,0,0,0))
-                if position == 'tile':
-                    for y in range(0, image.size[1], mark.size[1]):
-                        for x in range(0, image.size[0], mark.size[0]):
-                            layer.paste(mark, (x, y))
-                elif position == 'scale':
-                    # scale, but preserve the aspect ratio
-                    ratio = min(
-                        float(image.size[0]) / mark.size[0],
-                        float(image.size[1]) / mark.size[1]
-                    )
-                    w = int(mark.size[0] * ratio)
-                    h = int(mark.size[1] * ratio)
-                    mark = mark.resize((w, h))
-                    layer.paste(
-                        mark,
-                        (
-                            (image.size[0] - w) / 2,
-                            (image.size[1] - h) / 2
-                        )
-                    )
-                else:
-                    layer.paste(mark, position)
-                # composite the watermark with the layer
-                return Image.composite(layer, image, layer)
-
-            image = Image.open(file_path)
-            watermark_image_path = os.path.join(
-                os.path.realpath("."),
-                "applications",
-                map_plugin.env.request.application, 
-                "static", "img", 
-                "Nepal-Government-Logo.png"
-            )
-            watermark_image = Image.open(watermark_image_path)
-            #watermark_image = scale_preserving_aspect_ratio(watermark_image, 0.5)
-            watermark(image, watermark_image, 'scale', 0.05).save(file_path)
-
 
         import md5
         import gluon.contrib.simplejson as JSON
