@@ -24,12 +24,13 @@ units_in_out = {
     },
     "Kelvin": standard_unit,
     "hPa": standard_unit,
+    "people": standard_unit,
     "Pa": {
         "in": lambda pascals: pascals / 100.0,
         "out": lambda hectopascals: hectopascals * 100.0
     },
 
-    "precipitation_mm": standard_unit,
+    "mm": standard_unit,
 
     #"mm": standard_unit,
     "kg m-2 s-1": {

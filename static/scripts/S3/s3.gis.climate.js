@@ -883,7 +883,7 @@ Place.prototype = {
         var info = [
             // popup is styled with div.olPopup
             '<div class="place_info_popup">',
-            'value: ', value, '<br />'
+            '<div style="text-align:center; font-size:1.5em;">', value, '</div><br />'
         ]
         var data = place.data
         for (var p in data) {
