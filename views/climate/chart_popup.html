@@ -42,14 +42,16 @@ function ChartManager(view_URL) {
             var src = view_URL+spec
             chart_manager.waiting_for_new_image = true
             chart.attr('src', src)
-            download_link.attr('href', view_URL+'_download'+spec)
-            download_link.html('Download')
+            download_button.click(
+                function () { window.location.href = view_URL+'_download'+spec }
+            )
+            download_button.val('Download this chart')
         }
     }
 
     var chart = $('#chart')
     var container = $('#container')
-    var download_link = $('#download_link')
+    var download_button = $('#download_button')
     var fixed_size = $('#fixed_size')
     function use_container_size() {
         chart_manager.chart_width = container.width()
@@ -150,27 +152,41 @@ function ChartManager(view_URL) {
 -->
         </script>
     </head>
-    <body>
+    <body style="font-family: tahoma, arial, helvetica, sans-serif; font-size: 12px;">
         <div id="container" 
-            style="padding:0px; margin:0px; position:absolute; top:0px; bottom:130px; left:0px; right:0px;"
+            style="padding:0px; margin:0px; position:absolute; top:0px; bottom:230px; left:0px; right:0px;"
         >
             <img id="chart" width="100%" height="100%" />
         </div>
                   
         <div id="controls"
-            style="text-align:center; position:absolute; height:130px; bottom:0px; left:0px; right:0px;"
+            style="position:absolute; bottom:0px; left:0px; right:0px; height:230px; min-height:80px; background: #DDD;border-top: 1px solid gray;"
         >
-            <table id="chart_spec_table"></table>
-            <a id="download_link"></a>
-            
-            <div>
-            <label for="fixed_size">Use fixed image size</label>
-            <input type="checkbox" id="fixed_size"/><br />
-            <label for="width">Width</label>
-            <input id="width_input"  size=4/>
-            <label for="height">Height</label>
-            <input id="height_input" size=4/>
-            <button id="refresh">Refresh</button>
+            <div style="text-align:center;" >
+                <input type="button" id="download_button">
+                <button id="refresh">Reload chart</button>
+            </div>
+            <form>
+                <fieldset>
+                    <legend>Chart dimensions: </legend>
+                    You can also simply resize the window to resize the chart.<br />
+                    <input type="checkbox" id="fixed_size"/>
+                    <label for="fixed_size">Fixed size: </label>
+                    <label for="width">Width:</label>
+                    <input id="width_input"  size=4/>
+                    <label for="height">Height:</label>
+                    <input id="height_input" size=4/>
+                    (click "Reload chart" if chart does not update)
+                </fieldset>
+                <fieldset>
+                    <legend>Time series labels:</legend>
+                    These are editable (the underlying query will be unchanged).<br />
+                    You can add more time series at the main window.
+                    <div style="overflow:auto; max-height: 80px; border:1px solid gray;">
+                        <table id="chart_spec_table"></table>
+                    </div>
+                </fieldset>
+            </form>
             </div>
         </div>
     </body>
