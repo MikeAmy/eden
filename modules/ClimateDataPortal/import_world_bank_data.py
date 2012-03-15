@@ -61,7 +61,7 @@ if __name__ == "__main__":
 
     variables = {}
     for k, v in {
-        "pr": ("Precip.", "Precipitation mm", "Precipitation mm"),
+        "pr": ("Precip.", "precipitation_mm", "precipitation_mm"),
         "tas": ("Temp.",  "Celsius", "Kelvin"),
     }.iteritems():
         if k == variable_arg:

@@ -29,7 +29,7 @@ units_in_out = {
         "out": lambda hectopascals: hectopascals * 100.0
     },
 
-    "Precipitation mm": standard_unit,
+    "precipitation_mm": standard_unit,
 
     #"mm": standard_unit,
     "kg m-2 s-1": {
