@@ -320,7 +320,7 @@ def purchase():
             # see models/climate.py for more details
             return A(
                 "Download this data", 
-                _href='/eden/climate/download_purchased_data?purchase_id=%(record_id)s'% {
+                _href='/'+request.application+'/climate/download_purchased_data?purchase_id=%(record_id)s'% {
                     "record_id": record.id,
                     "station_id": record.station_id,
                     "parameter_id": record.parameter_id,
@@ -378,11 +378,11 @@ def request_image():
         open(
             _map_plugin().printable_map_image_file(
                 command = (
-                    request.env.applications_parent+"/applications/"+
-                    "eden/modules/webkit_url2png.py"
+                    request.env.applications_parent+"/applications/"+request.application+
+                    "/modules/webkit_url2png.py"
                 ),
                 url_prefix = (
-                    "http://%(http_host)s/eden/%(controller)s"
+                    "http://%(http_host)s/"+request.application+"/%(controller)s"
                 ) % dict(
                     controller = request.controller,
                     #application_name = request.application,

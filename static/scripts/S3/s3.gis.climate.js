@@ -2,6 +2,7 @@
 // Workaround: see http://stackoverflow.com/questions/4728852/forcing-an-openlayers-markers-layer-to-draw-on-top-and-having-selectable-layers
 // This fixes a problem whereby the marker layer doesn't 
 // respond to click events
+
 OpenLayers.Handler.Feature.prototype.activate = function() {
     var activated = false;
     if (OpenLayers.Handler.prototype.activate.apply(this, arguments)) {
@@ -1412,6 +1413,8 @@ ClimateDataMapPlugin = function (config) {
     
     plugin.chart_popup_URL = config.chart_popup_URL
     plugin.request_image_URL = config.request_image_URL
+    plugin.world_map_URL = config.world_map_URL
+    
     var display_mode = config.display_mode
     plugin.set_status = function (html_message) {
         $('#error_div').html(html_message)
@@ -1577,6 +1580,7 @@ ClimateDataMapPlugin = function (config) {
         map.addControl(hoverControl)
         hoverControl.activate()
         
+//        console.log(plugin.places_URL)
         $.ajax({
             url: plugin.places_URL,
             dataType: 'json',
@@ -1683,7 +1687,7 @@ ClimateDataMapPlugin = function (config) {
                 map.addControl(plugin.logo)
             },
             error: function (jqXHR, textStatus, errorThrown) {
-                console.log(textStatus, errorThrown)
+//                console.log(textStatus, errorThrown)
                 window.jqXHR = jqXHR
                 plugin.set_status(
                     '<a target= "_blank" href="climate/places">Could not load place data!</a>'
@@ -1727,9 +1731,10 @@ ClimateDataMapPlugin = function (config) {
         setTimeout(
                 function () {
                     // load a file containing world map info
-                    if (!Ext.isIE || Ext.isIE9) {
+                    if (!Ext.isIE || Ext.isIE9 || display_mode == 'print') { 
+//                        console.log(plugin.world_map_URL)
                         $.ajax({
-                        url: 'static/data/countries_compressible.json',
+                        url: plugin.world_map_URL,
                         format: 'json',
                         success: function (delta_polygon_feature_collection) {
                             var format = new OpenLayers.Format.GeoJSON({
@@ -1864,9 +1869,9 @@ ClimateDataMapPlugin = function (config) {
             }
             var value = values[i]
             if (place == undefined) {
-                console.log(i)
-                console.log(place)
-                console.log(place_id)
+//                console.log(i)
+//                console.log(place)
+//                console.log(place_id)
             }
             var converted_value = converter(value)
             if (
@@ -1973,8 +1978,8 @@ ClimateDataMapPlugin = function (config) {
                 plugin.request_image_URL,
                 '?expression=', plugin.last_query_expression ,
                 '&filter=', plugin.filter_box.$text_area.val() ,
-                '&width=', $('html').width(),
-                '&height=', $('html').height(),
+                '&width=', $(window).width() || 1024, 
+                '&height=', $(window).height() || 768,
                 '&zoom=', map.zoom,
                 '&coords=', coords.lon, ',', coords.lat
             ].join(''))
@@ -2014,7 +2019,7 @@ ClimateDataMapPlugin = function (config) {
                     var images_waiting = []
                     function print_if_no_more_images() {
                         if (images_waiting.length == 0) {
-                            console.log('All images loaded, now printing.')
+//                            console.log('All images loaded, now printing.')
                             setTimeout(function () {
                                 window.print()
                             }, 0)
@@ -2043,7 +2048,7 @@ ClimateDataMapPlugin = function (config) {
                     // 10 sec max wait
                     setTimeout(
                         function () { 
-                            console.log('Could not load all images in time.')
+//                            console.log('Could not load all images in time.')
                             window.print()
                         },
                         20000
@@ -2067,6 +2072,7 @@ ClimateDataMapPlugin = function (config) {
         plugin.set_status('Updating...')
         plugin.query_box.update(query_expression)
         plugin.show_chart_button.disable()
+//        console.log(plugin.overlay_data_URL)
         $.ajax({
             url: plugin.overlay_data_URL,
             dataType: 'json',
@@ -2111,6 +2117,7 @@ ClimateDataMapPlugin = function (config) {
                     0,
                     responseText.indexOf('<!--')
                 )
+//                console.log(error_message)
                 var error = $.parseJSON(error_message)
                 if (error.error == 'SyntaxError') {
                     // don't update the last expression if it's invalid
@@ -2260,6 +2267,7 @@ ClimateDataMapPlugin = function (config) {
         variable_combo_box.years = []
         // when a dataset is selected, request the years.
         function update_years(dataset_name) {
+//            console.log(plugin.years_URL+'?dataset_name='+dataset_name)
             $.ajax({
                 url: plugin.years_URL+'?dataset_name='+dataset_name,
                 dataType: 'json',

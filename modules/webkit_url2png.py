@@ -44,7 +44,7 @@ def save_webpage_screenshot(url, width, height, file_name = None):
         lineNumber,
         sourceID
     ):
-        print "\n%(sourceID)s line %(lineNumber)i: \n  %(message)s" % locals()
+        print  "\n%(sourceID)s line %(lineNumber)i: \n  %(message)s" % locals()
     webpage.javaScriptConsoleMessage = print_error
     
     if file_name is None:
@@ -52,11 +52,11 @@ def save_webpage_screenshot(url, width, height, file_name = None):
         
     # register print request handler
     def onPrintRequested(virtual_browser_window):
-        #print "onPrintRequested"
+        print "onPrintRequested"
 
         # Paint this frame into an image
         image = QImage(
-            webpage.viewportSize(),
+            QSize(int(width), int(height)), #webpage.viewportSize(),
             QImage.Format_ARGB32
         )
         painter = QPainter(image)
@@ -82,7 +82,11 @@ def save_webpage_screenshot(url, width, height, file_name = None):
     webpage.printRequested.connect(onPrintRequested)
     
     # load the page and wait for a print request
-    webpage.mainFrame().load(QUrl(url))
+    main_frame= webpage.mainFrame()
+    size = main_frame.contentsSize()
+    size.setWidth(int(width))
+    size.setHeight(int(height))
+    main_frame.load(QUrl(url))
 
     app.exec_()
     if file_name is None:

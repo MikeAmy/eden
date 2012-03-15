@@ -104,6 +104,7 @@ class MapPlugin(object):
             data_URL = climate_URL("data"),
             years_URL = climate_URL("get_years"),
             station_parameters_URL = climate_URL("station_parameter"),
+            world_map_URL = climate_URL("../static/data/countries_compressible.json"),
             data_type_label = str(T("Data Type")),
             projected_option_type_label = str(
                 T("Projection Type")
