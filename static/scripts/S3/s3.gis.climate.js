@@ -1664,9 +1664,9 @@ ClimateDataMapPlugin = function (config) {
             dataType: 'json',
             success: function (rearranged_places_data) {
                 // add marker layer for places
-                var station_markers_layer = new OpenLayers.Layer.Markers(
-                    "Observation stations"
-                )
+                //var station_markers_layer = new OpenLayers.Layer.Markers(
+                //    "Observation stations"
+                //)
                 places_data = {}
                 each(
                     rearranged_places_data,
@@ -1727,11 +1727,12 @@ ClimateDataMapPlugin = function (config) {
                         new_places.push(place)
                         plugin.places[place_id] = place
                         // add marker
+                        /* markers
                         place.generate_marker(
                             function (marker) { 
                                 station_markers_layer.addMarker(marker) 
                             }
-                        )
+                        ) */
                     }
                 }
                 each(
@@ -1740,9 +1741,10 @@ ClimateDataMapPlugin = function (config) {
                         places_function(new_places)
                     }
                 )
-                station_markers_layer.setVisibility(false)
-                map.addLayer(station_markers_layer)
-                plugin.station_markers_layer = station_markers_layer
+                // markers
+                //station_markers_layer.setVisibility(false)
+                //map.addLayer(station_markers_layer)
+                //plugin.station_markers_layer = station_markers_layer
 
                 plugin.update_map_layer(initial_query_expression)
                 plugin.filter_box = new FilterBox({
