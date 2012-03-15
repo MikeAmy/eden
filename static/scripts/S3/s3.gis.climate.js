@@ -1380,7 +1380,7 @@ var Logo = OpenLayers.Class(OpenLayers.Control, {
         return (
             DIV({
                     'id': 'sahana-button',
-                    style:'position:absolute; left: 5px; bottom:60px; background: url(static/img/black_glossy_horiz_bulge.png); color:white; border: solid 1px; border-color:#EEE #EEE #AAA #AAA; padding:5px; border-radius:5px; text-align:center;'
+                    style:'position:absolute; left: 5px; top:150px; background: url(static/img/black_glossy_horiz_bulge.png); color:white; border: solid 1px; border-color:#EEE #EEE #AAA #AAA; padding:5px; border-radius:5px; text-align:center;'
                 },
                 SPAN({style:'font-size: smaller; '}, "Powered By:<br />"),
                 IMG({
@@ -1505,13 +1505,14 @@ ClimateDataMapPlugin = function (config) {
         //Ext.QuickTips.init(); // done by gis
     }
 
+    plugin.overlay_layer = new OpenLayers.Layer.Vector(
+        'Query result values',
+        {
+            isBaseLayer:false                                
+        }
+    )
     plugin.setup = function () {
-        var overlay_layer = plugin.overlay_layer = new OpenLayers.Layer.Vector(
-            'Query result values',
-            {
-                isBaseLayer:false                                
-            }
-        );
+        var overlay_layer = plugin.overlay_layer
         map.addLayer(overlay_layer)
         // hovering over a square pops up a box showing details
         var hover_timeout = null,
@@ -1579,85 +1580,6 @@ ClimateDataMapPlugin = function (config) {
         )
         map.addControl(hoverControl)
         hoverControl.activate()
-
-        var SelectDragHandler = OpenLayers.Class(OpenLayers.Handler.Drag, {
-            // Ensure that we propagate clicks (so we can still use other controls)
-            down: function() {
-                OpenLayers.Handler.Drag.prototype.down.apply(arguments)
-                //OpenLayers.Event.stop(evt);
-                return true;
-            },
-            CLASS_NAME: 'SelectHandler'
-        });
-        // selection of overlay squares
-        OpenLayers.Feature.Vector.style['default']['strokeWidth'] = '2'
-        var selectCtrl = new OpenLayers.Control.SelectFeature(
-            overlay_layer,
-            {
-                clickout: true,
-                toggle: false,
-                toggleKey: 'altKey',
-                multiple: false,
-                multipleKey: 'shiftKey',
-                hover: false,
-                box: true,
-                onSelect: function (feature) {
-                    var style = feature.style
-                    style.strokeColor = 'white'
-                    style.strokeDashstyle = 'dash'
-                    style.strokeWidth = 3
-                    overlay_layer.drawFeature(feature)
-                    plugin.show_chart_button.enable()
-                },
-                onUnselect: function (feature) {
-                    var style = feature.style
-                    style.strokeColor = 'black'
-                    style.strokeDashstyle = 'solid'
-                    style.strokeWidth = 1
-                    overlay_layer.drawFeature(feature)
-                    if (plugin.overlay_layer.selectedFeatures.length == 0) {
-                        plugin.show_chart_button.disable()
-                    }
-                }
-            }
-        )
-        // workaround: is this a bug in OpenLayers?
-        selectCtrl.handlers.box.dragHandler.dragstart = function (evt) {
-            var propagate = true;
-            this.dragging = false;
-            if (this.checkModifiers(evt) &&
-                   (OpenLayers.Event.isLeftClick(evt) ||
-                    OpenLayers.Event.isSingleTouch(evt))) {
-                this.started = true;
-                this.start = evt.xy;
-                this.last = evt.xy;
-                OpenLayers.Element.addClass(
-                    this.map.viewPortDiv, "olDragDown"
-                );
-                this.down(evt);
-                this.callback("down", [evt.xy]);
-
-                //OpenLayers.Event.stop(evt);
-
-                if(!this.oldOnselectstart) {
-                    this.oldOnselectstart = document.onselectstart ?
-                        document.onselectstart : OpenLayers.Function.True;
-                }
-                document.onselectstart = OpenLayers.Function.False;
-
-                propagate = !this.stopDown;
-            } else {
-                this.started = false;
-                this.start = null;
-                this.last = null;
-            }
-            return true;
-        }
-        map.controls[0].deactivate()
-        
-        map.addControl(selectCtrl)
-
-        selectCtrl.activate()
         
         $.ajax({
             url: plugin.places_URL,
@@ -2284,10 +2206,10 @@ ClimateDataMapPlugin = function (config) {
 
         var variable_combo_box = make_combo_box(
             plugin.parameter_names,
-            'Parameter',
+            'Dataset',
             'parameter',
             {
-                width: 160,
+                width: 250,
                 heigth: 25
             }
         )
@@ -2337,16 +2259,20 @@ ClimateDataMapPlugin = function (config) {
             'to_year',
             {width:60, height:25}
         )
-        to_year_combo_box.setValue(2011)
+        to_year_combo_box.setValue(plugin.year_max)
         
-        variable_combo_box.year_ranges = []
+        variable_combo_box.years = []
         // when a dataset is selected, request the years.
         function update_years(dataset_name) {
             $.ajax({
                 url: plugin.years_URL+'?dataset_name='+dataset_name,
                 dataType: 'json',
-                success: function (year_ranges) {
-                    variable_combo_box.year_ranges = year_ranges
+                success: function (years) {
+                    variable_combo_box.years = years
+                    if (years.length) {
+                        from_year_combo_box.setValue(years[0])
+                        to_year_combo_box.setValue(years[years.length-1])
+                    }
                 }
             })
         }
@@ -2370,13 +2296,13 @@ ClimateDataMapPlugin = function (config) {
                         ).each(
                             function (i, option_div) {
                                 $option_div = $(option_div)
-                                $option_div.css('color', '')
+                                $option_div.css('display', 'block')
                                 if (
-                                    variable_combo_box.year_ranges.indexOf(
+                                    variable_combo_box.years.indexOf(
                                         parseInt($option_div.text())
                                     ) == -1
                                 ) {
-                                    $option_div.css('color', '#DDD')
+                                    $option_div.css('display', 'none')
                                 }
                             }
                         )
@@ -2589,7 +2515,7 @@ ClimateDataMapPlugin = function (config) {
         // create the panels
         var climate_data_panel = SpecPanel(
             'climate_data_panel',
-            'Select data: (A)',
+            '(A) Select data:',
             false
         )
        
@@ -2610,19 +2536,18 @@ ClimateDataMapPlugin = function (config) {
         
         var comparison_panel = SpecPanel(
             'comparison_panel',
-            'Compare with data (B)',
+            '(B) Compare with data:',
             true
         )
         // This button does the comparison overlay
         plugin.update_map_layer_from_comparison = function () {
             plugin.update_map_layer(
-                
-                form_query_expression(comparison_panel.getForm()) + ' - ' +
-                form_query_expression(climate_data_panel.getForm())
+                form_query_expression(climate_data_panel.getForm()) + ' - ' + 
+                form_query_expression(comparison_panel.getForm())
             )
         }
         var update_map_layer_comparison_button = new Ext.Button({
-            text: 'Compare on map (B - A)',
+            text: 'Compare on map (A - B)',
             disabled: false,
             handler: plugin.update_map_layer_from_comparison
         });
@@ -2776,5 +2701,95 @@ ClimateDataMapPlugin = function (config) {
         
         // with a lot of data, things can get slow, animations make it worse
         map.panDuration = 0
+    }
+    
+    plugin.setupToolbar = function (toolbar) {
+        var SelectDragHandler = OpenLayers.Class(OpenLayers.Handler.Drag, {
+            // Ensure that we propagate clicks (so we can still use other controls)
+            down: function() {
+                OpenLayers.Handler.Drag.prototype.down.apply(arguments)
+                //OpenLayers.Event.stop(evt);
+                return true;
+            },
+            CLASS_NAME: 'SelectHandler'
+        });
+        // selection of overlay squares
+        OpenLayers.Feature.Vector.style['default']['strokeWidth'] = '2'
+        var selectCtrl = new OpenLayers.Control.SelectFeature(
+            plugin.overlay_layer,
+            {
+                clickout: true,
+                toggle: false,
+                toggleKey: 'altKey',
+                multiple: false,
+                multipleKey: 'shiftKey',
+                hover: false,
+                box: true,
+                onSelect: function (feature) {
+                    var style = feature.style
+                    style.strokeColor = 'white'
+                    style.strokeDashstyle = 'dash'
+                    style.strokeWidth = 3
+                    plugin.overlay_layer.drawFeature(feature)
+                    plugin.show_chart_button.enable()
+                },
+                onUnselect: function (feature) {
+                    var style = feature.style
+                    style.strokeColor = 'black'
+                    style.strokeDashstyle = 'solid'
+                    style.strokeWidth = 1
+                    plugin.overlay_layer.drawFeature(feature)
+                    if (plugin.overlay_layer.selectedFeatures.length == 0) {
+                        plugin.show_chart_button.disable()
+                    }
+                }
+            }
+        )
+        // workaround: is this a bug in OpenLayers?
+        selectCtrl.handlers.box.dragHandler.dragstart = function (evt) {
+            var propagate = true;
+            this.dragging = false;
+            if (this.checkModifiers(evt) &&
+                   (OpenLayers.Event.isLeftClick(evt) ||
+                    OpenLayers.Event.isSingleTouch(evt))) {
+                this.started = true;
+                this.start = evt.xy;
+                this.last = evt.xy;
+                OpenLayers.Element.addClass(
+                    this.map.viewPortDiv, "olDragDown"
+                );
+                this.down(evt);
+                this.callback("down", [evt.xy]);
+
+                //OpenLayers.Event.stop(evt);
+
+                if(!this.oldOnselectstart) {
+                    this.oldOnselectstart = document.onselectstart ?
+                        document.onselectstart : OpenLayers.Function.True;
+                }
+                document.onselectstart = OpenLayers.Function.False;
+
+                propagate = !this.stopDown;
+            } else {
+                this.started = false;
+                this.start = null;
+                this.last = null;
+            }
+            return true;
+        }
+
+        toolbar.add(
+            new GeoExt.Action({
+                control: selectCtrl,
+                map: map,
+                iconCls: 'select_places',
+                // button options
+                tooltip: 'Select places by dragging a box',
+                toggleGroup: 'controls',
+                allowDepress: true,
+                pressed: false
+            })
+        )
+        map.controls[0].deactivate()
     }
 }

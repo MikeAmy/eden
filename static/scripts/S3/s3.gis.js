@@ -228,7 +228,7 @@ Ext.onReady(function() {
                     //title: 'Tools',
                     header: false,
                     border: false,
-                    width: 250,
+                    width: 350,
                     autoScroll: true,
                     collapsible: true,
                     collapseMode: 'mini',
@@ -615,4 +615,8 @@ function addToolbar() {
             google & addGoogleEarthControl(toolbar);
         }
     } catch(err) {};
+    
+    for ( var i = 0; i < S3.gis.plugins.length; ++i ) {
+        S3.gis.plugins[i].setupToolbar(toolbar);
+    }
 }

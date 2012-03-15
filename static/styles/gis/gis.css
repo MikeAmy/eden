@@ -81,6 +81,12 @@
     height: 20px !important;
     width: 20px !important;
 }
+#mappnlcntr .select_places {
+    background-image: url(../../img/gis/mapfish/icon_select.png) !important;
+    height: 20px !important;
+    width: 20px !important;
+}
+
 #mappnlcntr .save {
     background-image: url(../../img/ext/save.gif) !important;
     height: 20px !important;
