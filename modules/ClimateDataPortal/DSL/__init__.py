@@ -338,14 +338,7 @@ def parse(expression_string):
     scanner_spec = (
         (r"\#[^\n]*(?:\n|$)", comment),
         (
-            r'"(%(sample_table_names)s)"' % dict(
-                sample_table_names = "|".join(
-                    map(
-                        re.escape,
-                        SampleTable._SampleTable__names.keys()
-                    )
-                )
-            ),
+            r'"([^"]+)"',
             write_table_name
         ),
         (r"(%s)(?=\W)" % "|".join(allowed_names.keys()), allowed_identifier),

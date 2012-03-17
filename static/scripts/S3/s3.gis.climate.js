@@ -249,12 +249,15 @@ var ColourKey = OpenLayers.Class(OpenLayers.Control, {
             || previous_units != new_units
         ) {
             // sensible range
-            var significant_digits = 2
+            var significant_digits = 1
             function scaling_factor(value) {
-                return 10.0^(
-                    Math.floor(
-                        Math.log(Math.abs(value)) / Math.LN10
-                    ) - (significant_digits - 1)
+                return Math.pow(
+                    10,
+                    (
+                        Math.floor(
+                            Math.log(Math.abs(value)) / Math.LN10
+                        ) - (significant_digits - 1)
+                    )
                 )
             }
             function sensible(value, round) {
@@ -270,10 +273,23 @@ var ColourKey = OpenLayers.Class(OpenLayers.Control, {
                 sensible(max_value, Math.ceil) - 
                 sensible(min_value, Math.floor)
             )
+            function to_significant_digits(number, sd){
+                return parseFloat(number.toPrecision(sd))
+            }
                 
             // function set_scale(min_value, max_value) {
             min_value = Math.floor(min_value/range_mag) * range_mag
-            max_value = Math.ceil(max_value/range_mag) * range_mag
+            // if min is near zero (relative to max), just use 0
+            if (min_value > 0 && (min_value / max_value) < 0.5) {
+                min_value = 0.0
+            }
+            else {
+                min_value = to_significant_digits(min_value, 1)
+            }
+            max_value = to_significant_digits(
+                Math.ceil(max_value/range_mag) * range_mag,
+                1
+            )
             
             colour_key.$lower_limit.attr('value', min_value)
             colour_key.$upper_limit.attr('value', max_value)
@@ -880,7 +896,9 @@ Place.prototype = {
         var info = [
             // popup is styled with div.olPopup
             '<div class="place_info_popup">',
-            '<div style="text-align:center; font-size:1.5em;">', value, '</div><br />'
+            '<div style="text-align:center; font-size:1.5em;">',
+                value,
+            '</div><br />'
         ]
         var data = place.data
         for (var p in data) {
@@ -1860,6 +1878,7 @@ ClimateDataMapPlugin = function (config) {
         var range = max_value - min_value
         var features = []
         var filter = plugin.filter || function () { return true }
+        var exponent_pattern = new RegExp('e(-?\\d+)')
         for (
             var i = 0;
             i < place_ids.length;
@@ -1961,9 +1980,14 @@ ClimateDataMapPlugin = function (config) {
                         10, 
                         7-Math.floor(Math.log(converted_value) / Math.LN10)
                     )
-                    attributes.value = (Math.round(
-                        converted_value * pre_rounding_factor
-                    ) / pre_rounding_factor)+' '+display_units
+                    attributes.value = (
+                        Math.round(
+                            converted_value * pre_rounding_factor
+                        ) / pre_rounding_factor
+                    ).toString().replace(
+                        exponent_pattern,
+                        '\u00d710<sup>$1</sup>'
+                    )+' '+display_units
                     attributes.id = id
                     attributes.place_id = place_id
                 }                        

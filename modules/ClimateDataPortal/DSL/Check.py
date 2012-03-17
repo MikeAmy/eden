@@ -165,8 +165,9 @@ def Units_check_number(units, value, error):
     if units._positive and value < 0:
         error(
             "Can't guess whether negative numbers without 'delta' are deltas. "
-            "Specify the number as a delta e.g. '%s delta mm' "
-            "or make it positive." % value
+            "Specify the number as a delta e.g. '%s delta mm', "
+            "make it positive, or rearrange the expression "
+            "(e.g. to multiply by -1, subtract from 0)." % value
         )
 Units.check_number = WhateverUnitsAreNeeded.check_number = Units_check_number
 
@@ -220,7 +221,7 @@ def aggregation_check_analysis(aggregation, out):
     out(type(aggregation).__name__, "(")
     def indent(*strings):
         out("    ", *strings)
-    indent(str(aggregation.sample_table), ",")
+    indent('"%s"' % aggregation.dataset_name, ",")
     
     for specification in aggregation.specification:
         check_analysis(specification, indent)

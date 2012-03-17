@@ -31,7 +31,11 @@ def To__str__(to_date):
 To.__str__ = To__str__
 
 def Number__str__(number):
-    return "%s %s" % (number.value, number.units)
+    units_name = str(number.units)
+    if units_name:
+        return "%s %s" % (number.value, number.units)
+    else:
+        return str(number.value)
 Number.__str__ = Number__str__
 
 def AggregationNode__str__(aggregation):

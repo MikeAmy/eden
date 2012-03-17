@@ -246,7 +246,7 @@ class SampleTable(object):
             return True
         else:
             error(
-                "Available data sets are: %s" % SampleTable.__names.keys()
+                "Can't find dataset \"%s\"" % name
             )
             return False
 
