@@ -1906,7 +1906,7 @@ ClimateDataMapPlugin = function (config) {
                     var data = place.data
                     var lat = data.latitude
                     var lon = data.longitude
-                    
+                    var attributes
                     if (grid_size == 0) {
                         var feature = plugin.countries[data.ISO_code]
                         if (!!feature) {
@@ -1918,19 +1918,12 @@ ClimateDataMapPlugin = function (config) {
                                 strokeWidth: 1
                             }
                             attributes = feature.attributes
-                            attributes.value = converted_value.toPrecision(6)+' '+display_units
-                            attributes.id = id
-                            attributes.place_id = place_id
                         }
                         else {
                             features.push(
                                 Vector(
                                     Point(lon, lat),
-                                    {
-                                        value: converted_value.toPrecision(6)+' '+display_units,
-                                        id: id,
-                                        place_id: place_id
-                                    },
+                                    attributes,
                                     {
                                         fillColor: colour_string,
                                         pointRadius: 6
@@ -1946,7 +1939,7 @@ ClimateDataMapPlugin = function (config) {
                         south = lat - border
                         east = lon + border
                         west = lon - border
-
+                        attributes = {}
                         features.push(
                             Vector(
                                 Polygon([
@@ -1957,17 +1950,22 @@ ClimateDataMapPlugin = function (config) {
                                         Point(west, south)
                                     ])
                                 ]),
-                                {
-                                    value: converted_value.toPrecision(6)+' '+display_units,
-                                    id: id,
-                                    place_id: place_id
-                                },
+                                attributes,
                                 {
                                     fillColor: colour_string
                                 }
                             )
                         )
                     }
+                    var pre_rounding_factor = Math.pow(
+                        10, 
+                        7-Math.floor(Math.log(converted_value) / Math.LN10)
+                    )
+                    attributes.value = (Math.round(
+                        converted_value * pre_rounding_factor
+                    ) / pre_rounding_factor)+' '+display_units
+                    attributes.id = id
+                    attributes.place_id = place_id
                 }                        
             }
         }
