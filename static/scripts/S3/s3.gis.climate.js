@@ -1513,7 +1513,9 @@ ClimateDataMapPlugin = function (config) {
     plugin.setup = function () {
         var overlay_layer = plugin.overlay_layer
         map.addLayer(overlay_layer)
-        // hovering over a square pops up a box showing details
+        // hovering over a feature pops up a box showing details
+        // subsequently moving to another feature pops up another box instantly
+        // not hovering for a while resets the hover delay
         var hover_timeout = null,
             hover_delay = 1000,
             hover_delay_clear_timeout = null
@@ -1534,10 +1536,9 @@ ClimateDataMapPlugin = function (config) {
                                 function (popup) {
                                     feature.popup = popup
                                     map.addPopup(popup)
-                                    setTimeout(
+                                    feature.unselect_timeout = setTimeout(
                                         function () {
                                             onFeatureUnselect(feature)
-                                            hover_delay = 1000
                                         },
                                         10000
                                     )
@@ -1560,14 +1561,16 @@ ClimateDataMapPlugin = function (config) {
                 feature.popup.destroy()
                 feature.popup = null
             }
-            if (hover_delay_clear_timeout == null) {
-                hover_delay_clear_timeout = setTimeout(
-                    function () {
-                        hover_delay = 1000
-                    },
-                    3000
-                )
+            if (feature.unselect_timeout) {
+                clearTimeout(feature.unselect_timeout)
             }
+            clearTimeout(hover_delay_clear_timeout)
+            hover_delay_clear_timeout = setTimeout(
+                function () {
+                    hover_delay = 1000
+                },
+                1000
+            )
         }
         var hover_control = new OpenLayers.Control.SelectFeature(
             overlay_layer,
