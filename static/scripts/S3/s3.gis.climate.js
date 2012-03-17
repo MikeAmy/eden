@@ -875,7 +875,7 @@ Place.prototype = {
     add_space: function(space) {
         this.spaces.push(space.name)
     },
-    popup: function(feature, value, use_popup) {
+    popup: function(feature, value, use_popup, event) {
         var place = this
         var info = [
             // popup is styled with div.olPopup
@@ -898,7 +898,7 @@ Place.prototype = {
         OpenLayers.Popup.COLOR = ''
         var popup = new OpenLayers.Popup(
             null,
-            feature.geometry.getBounds().getCenterLonLat(),
+            map.getLonLatFromPixel({x:event.layerX, y:event.layerY}),
             new OpenLayers.Size(170, 125),
             info.join(''),
             false
@@ -1541,7 +1541,8 @@ ClimateDataMapPlugin = function (config) {
                                         },
                                         10000
                                     )
-                                }
+                                },
+                                hover_control.handlers.feature.evt
                             )
                         }
                     },
@@ -1568,7 +1569,7 @@ ClimateDataMapPlugin = function (config) {
                 )
             }
         }
-        var hoverControl = new OpenLayers.Control.SelectFeature(
+        var hover_control = new OpenLayers.Control.SelectFeature(
             overlay_layer,
             {
                 title: 'Show detail by hovering over a square',
@@ -1577,8 +1578,8 @@ ClimateDataMapPlugin = function (config) {
                 onUnselect: onFeatureUnselect
             }
         )
-        map.addControl(hoverControl)
-        hoverControl.activate()
+        map.addControl(hover_control)
+        hover_control.activate()
         
 //        console.log(plugin.places_URL)
         $.ajax({
