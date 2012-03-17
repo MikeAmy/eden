@@ -2751,8 +2751,10 @@ ClimateDataMapPlugin = function (config) {
                 }
             }
         )
+        
         // workaround: is this a bug in OpenLayers?
-        selectCtrl.handlers.box.dragHandler.dragstart = function (evt) {
+        //selectCtrl.handlers.box.dragHandler.dragstart
+        OpenLayers.Handler.Drag.prototype.dragstart = function (evt) {
             var propagate = true;
             this.dragging = false;
             if (this.checkModifiers(evt) &&
@@ -2769,7 +2771,7 @@ ClimateDataMapPlugin = function (config) {
 
                 //OpenLayers.Event.stop(evt);
 
-                if(!this.oldOnselectstart) {
+                if (!this.oldOnselectstart) {
                     this.oldOnselectstart = document.onselectstart ?
                         document.onselectstart : OpenLayers.Function.True;
                 }
@@ -2783,6 +2785,8 @@ ClimateDataMapPlugin = function (config) {
             }
             return true;
         }
+        
+        
 
         toolbar.add(
             new GeoExt.Action({
