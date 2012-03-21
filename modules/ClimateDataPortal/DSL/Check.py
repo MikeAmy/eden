@@ -6,16 +6,19 @@ check = Method("check")
 # checks arguments are correct type and in range only.
 
 def month_number_from_arg(month, error):
-    try:
-        month_number = Months.options[month]
-    except KeyError:
-        error(
-            "Months should be e.g. Jan/January or numbers "
-            "in range 1 (January) to 12 (Dec), not %s" % month
-        )
-        return 1
+    if not isinstance(month, int):     
+        error("Month should be a whole number")
     else:
-        return month_number
+        try:
+            month_number = Months.options[month]
+        except KeyError:
+            error(
+                "Months should be e.g. Jan/January or numbers "
+                "in range 1 (January) to 12 (Dec), not %s" % month
+            )
+            return 1
+        else:
+            return month_number
 
 def month_filter_number_from_arg(month, error):
     try:
@@ -29,18 +32,24 @@ def month_filter_number_from_arg(month, error):
     else:
         return month_number
 
-@check.implementation(Months)
-def Months_check(month_filter):
-    month_filter.errors = []
-    error = month_filter.errors.append
+check_months = Method("check_months")
+
+from ..DateMapping import Yearly, Monthly, MultipleYearsByMonth, Daily
+
+@check_months.implementation(Yearly)
+def Yearly_check_months(yearly, add_error):
+    add_error("Yearly data sets cannot have Months specified, so remove the Months(...).")
+
+@check_months.implementation(Monthly)
+def Monthly_check_months(yearly, error, months, month_numbers):
     month_filter.month_numbers = month_numbers = list()
-    for month in month_filter.months:                
+    for month in months:                
         month_number = month_number_from_arg(month, error) - 1
-        if month_number in month_filter.month_numbers:
+        if month_number in month_numbers:
             error(
                 "%s was added more than once" % month_sequence[month_number]
             )
-        month_filter.month_numbers.append(month_number)
+        month_numbers.append(month_number)
     if (
         Months.options["PreviousDecember"] - 1 in month_numbers and 
         Months.options["December"] - 1 in month_numbers
@@ -49,63 +58,139 @@ def Months_check(month_filter):
             "It doesn't make sense to aggregate with both PreviousDecember and "
             "December. Please choose one or the other."
         )
+
+@check_months.implementation(MultipleYearsByMonth)
+def MultipleYearsByMonth_check_months(date_mapper, error, months, month_numbers):
+    month_filter.month_numbers = month_numbers = list()
+    for month in months:                
+        month_number = month_number_from_arg(month, error) - 1
+        if month_number in month_numbers:
+            error(
+                "%s was added more than once" % month_sequence[month_number]
+            )
+        month_numbers.append(month_number)
+    if (
+        Months.options["PreviousDecember"] - 1 in month_numbers
+    ):
+        error(
+            "PreviousDecember doesn't mean anything with this dataset's "
+            "concept of dates. Please choose December instead."
+        )
+
+@check.implementation(Months)
+def Months_check(month_filter, date_mapper):
+    month_filter.errors = []
+    check_months(
+        date_mapper,
+        error = month_filter.errors.append,
+        months = month_filter.months,
+        month_numbers = month_filter.month_numbers
+    )
     return month_filter.errors
 
-@check.implementation(From)
-def From_check(from_date):
-    from_date.errors = []
-    error = from_date.errors.append
-    year = from_date.year
+
+
+check_from = Method("check_from")   
+check_to = Method("check_to")
+
+def checked_year(year, error):
+    if not isinstance(year, int):
+        error("Year should be a whole number")
+    if not (1900 <= year <= 2100):
+        error("Year should be in range 1900 to 2100, not %i" % year)
+    return (year,)
+
+def checked_year_month(year, month, error):
+    return checked_year(year, error) + (month_number_from_arg(month, error),)
+
+def checked_year_month_day(year, month, day, error):
+    if not isinstance(day, int):
+        error("Day should be a whole number")    
+    year, month_number = checked_year_month(year, month, error)
+    if day is -1:
+        # use last day of month
+        _, day = calendar.monthrange(year, month_number)
+    try:
+        datetime.date(year, month_number, day)
+    except:
+        error("Invalid date: datetime.date(%i, %i, %i)" % (year, month_number, day))
+    return (year, month_number, day)
+
+@check_from.implementation(Monthly)
+def Monthly_check_from(yearly, error, year, month, day):
     if from_date.month is None:
         month = 1
     else:
         month = from_date.month
-    if from_date.day is None:
-        day = 1
+    if day is not None:
+        error("Monthly datasets cannot use days in time ranges")
+    return checked_year_month(year, month, day, error)
+
+@check_to.implementation(Monthly)
+def Monthly_check_to(yearly, error, year, month, day):
+    if from_date.month is None:
+        month = 12
     else:
-        day = from_date.day
-    month_number = month_number_from_arg(month, error)
+        month = from_date.month
+    if day is not None:
+        error("Monthly datasets cannot use days in time ranges")
+    return checked_year_month(year, month, day, error)
+
+@check_to.implementation(MultipleYearsByMonth, Yearly)
+@check_from.implementation(MultipleYearsByMonth, Yearly)
+def Yearly_check_from_to(date_mapper, error, year, month, day):
+    if month is not None:
+        error("Yearly datasets cannot use months in time ranges")
+    if day is not None:
+        error("Yearly datasets cannot use days in time ranges")
     if not isinstance(year, int):
         error("Year should be a whole number")
-    if not isinstance(day, int):
-        error("Day should be a whole number")
-    if not (1900 <= year < 2100):
-        error("Year should be in range 1900 to 2100")
-    try:
-        from_date.date = datetime.date(year, month_number, day)
-    except:
-        error("Invalid date: datetime.date(%i, %i, %i)" % (year, month_number, day))
+    return checked_year(year, error)
+
+@check_from.implementation(Daily)
+def Daily_check_from(date_mapper, error, year, month, day):
+    if month is None:
+        month = 1
+    if day is None:
+        day = 1
+    return checked_year_month_day(year, month, day, error)
+
+@check_to.implementation(Daily)
+def Daily_check_to(date_mapper, error, year, month, day):
+    if month is None:
+        month = 12
+    if day is None:
+        day = -1
+    return checked_year_month_day(year, month, day, error)
+
+@check.implementation(From)
+def From_check(from_date, date_mapper):
+    from_date.errors = []
+    error = from_date.errors.append
+    year = from_date.year
+    from_date.date = check_from(
+        date_mapper,
+        error, 
+        from_date.year,
+        from_date.month,
+        from_date.day
+    )
     return from_date.errors
 
 import calendar
 
 @check.implementation(To)
-def To_check(to_date):
+def To_check(to_date, date_mapper):
     to_date.errors = []
     error = to_date.errors.append
     year = to_date.year
-    if to_date.month is None:
-        month = 12
-    else:
-        month = to_date.month
-    if to_date.day is None:
-        day = -1
-    else:
-        day = to_date.day
-    if not isinstance(year, int):
-        error("Year should be a whole number")
-    if not isinstance(day, int):
-        error("Day should be a whole number")
-    if not (1900 < year < 2500):
-        error("Year should be in range 1900 to 2500")
-    month_number = month_number_from_arg(month, error)
-    if day is -1:
-        # use last day of month
-        _, day = calendar.monthrange(year, month_number)
-    try:
-        to_date.date = datetime.date(year, month_number, day)
-    except ValueError:
-        error("Invalid date: datetime.date(%i, %i, %i)" % (year, month_number, day))
+    to_date.date = check_from(
+        date_mapper,
+        error, 
+        to_date.year,
+        to_date.month,
+        to_date.day
+    )
     return to_date.errors
 
 @check.implementation(Addition, Subtraction, Multiplication, Division)
@@ -129,35 +214,38 @@ def Aggregation_check(aggregation):
     aggregation.errors = []
     def error(message):
         aggregation.errors.append(message)
-    allowed_specifications = (To, From, Months)
-    specification_errors = False
     if not isinstance(aggregation.dataset_name, str):
         error("First argument should be the name of a data set enclosed in "
                 "parentheses. ")
     else:
         if SampleTable.name_exists(aggregation.dataset_name, error):
             aggregation.sample_table = SampleTable.with_name(aggregation.dataset_name)
-    for specification in aggregation.specification:
-        if not isinstance(specification, allowed_specifications):
-            error(
-                "%(specification)s cannot be used inside "
-                "%(aggregation_name)s(...).\n"
-                "Required arguments are table name: %(table_names)s.\n"
-                "Optional arguments are %(possibilities)s." % dict(
-                    specification = specification,
-                    aggregation_name = aggregation.__class__.__name__,
-                    table_names = ", ".join(
-                        map(
-                            '"%s %s"'.__mod__,
-                            climate_sample_tables
+            allowed_specifications = (To, From, Months)
+            specification_errors = False
+            date_mapper = aggregation.sample_table.date_mapper
+            for specification in aggregation.specification:
+                if not isinstance(specification, allowed_specifications):
+                    error(
+                        "%(specification)s cannot be used inside "
+                        "%(aggregation_name)s(...).\n"
+                        "Required arguments are table name: %(table_names)s.\n"
+                        "Optional arguments are %(possibilities)s." % dict(
+                            specification = specification,
+                            aggregation_name = aggregation.__class__.__name__,
+                            table_names = ", ".join(
+                                map(
+                                    '"%s %s"'.__mod__,
+                                    climate_sample_tables
+                                )
+                            ),
+                            possibilities = ", ".join(
+                                Class.__name__+"(...)" for Class in allowed_specifications
+                            )
                         )
-                    ),
-                    possibilities = ", ".join(
-                        Class.__name__+"(...)" for Class in allowed_specifications
                     )
+                specification_errors |= bool(
+                    check(specification, date_mapper)
                 )
-            )
-        specification_errors |= bool(check(specification))
     return aggregation.errors or specification_errors
 
 

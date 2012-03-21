@@ -50,32 +50,7 @@ Meaningless expressions are allowed in the DSL but then
 detected during the dimensional analysis phase. Some types can be inferred.
 """
 
-# This should be moved somewhere else
-class Method(object):
-    """Allows better functional cohesion in the source.
-    Removes possibility of method name conflicts.
-    """
-    def __init__(method, name):
-        method.implementations = {}
-        method.name = name
-    
-    def implementation(method, *classes):
-        def accept_implementation(impl):
-            for Class in classes:
-                method.implementations[Class] = impl
-            return impl
-        return accept_implementation
-    
-    def __call__(method, target, *args, **kwargs):
-        try:
-            return method.implementations[type(target)](target, *args, **kwargs)
-        except KeyError:
-            raise TypeError(
-                "No %s implementation for %s" % (method.name, type(target))
-            )
-
-    def implemented_by(method, target):
-        return type(target) in method.implementations
+from .. import Method
 
 def normalised(value):
     if isinstance(value, (int, float)):
@@ -240,7 +215,7 @@ class Maximum(AggregationNode):
 class Count(AggregationNode):
     pass
 
-aggregations = (Maximum, Minimum, Average, StandardDeviation, Sum, Count)
+aggregations = (Average, Maximum, Minimum, StandardDeviation, Sum, Count)
 
 from .. import SampleTable, units_in_out
 from Units import Dimensionless
@@ -428,4 +403,5 @@ from CodeGeneration import (
     init_R_interpreter
 )
 from GridSizing import grid_sizes
+from DateMapping import date_mapping
 import Stringification

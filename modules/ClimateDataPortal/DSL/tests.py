@@ -259,7 +259,7 @@ def check_data(
     assert values_by_time_period_data_frame.ncol == 1, "No data"
     keys = values_by_time_period_data_frame.rx2("key")
     values = values_by_time_period_data_frame.rx2("value")
-    assert ClimateDataPortal.month_number_to_year_month(keys[0]) == (1956, 12)
+    assert ClimateDataPortal.Monthly().to_date_tuple(keys[0]) == (1956, 12)
     # December 1956 values for station 101, (place #1)
     assert values[0] == (2.5 + 15.2 + 3.8)
 
@@ -295,7 +295,7 @@ def test_december_data():
     assert values_by_time_period_data_frame.ncol == 1, "No data"
     keys = values_by_time_period_data_frame.rx2("key")
     values = values_by_time_period_data_frame.rx2("value")
-    assert ClimateDataPortal.month_number_to_year_month(keys[0]) == (1956, 12)
+    assert ClimateDataPortal.Monthly().to_date_tuple(keys[0]) == (1956, 12)
     # December 1956 values for station 101, (place #1)
     assert values[0] == (2.5 + 15.2 + 3.8)
 

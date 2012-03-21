@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 
 import re
-counted_dimension_pattern = re.compile(r"(?:\w[^\^\/ ]*)(?:\^[0-9])?")
+counted_dimension_pattern = re.compile(
+    r"(?:\w[^\^\/ ]*)(?:\^[0-9])?"
+)
 
 class MeaninglessUnitsException(Exception):
     pass
@@ -76,7 +78,7 @@ class Units(object):
             positive_dimensions = []
             for dimension, count in units._dimensions.iteritems():
                 if count < 0:
-                    negative_dimensions.append((dimension, count))
+                    negative_dimensions.append((dimension, -count))
                 else:
                     positive_dimensions.append((dimension, count))
             
@@ -286,20 +288,15 @@ def raise_units_to_power(operation):
 
 @units.implementation(Average, Sum, Minimum, Maximum)
 def aggregation_units(aggregation):
-    aggregation.units = Units(
-        {
-            aggregation.sample_table.units_name:1
-        },
-        True # affine
+    aggregation.units = Units.parsed_from(
+        aggregation.sample_table.units_name
     )
     return aggregation.units
     
 @units.implementation(StandardDeviation)
 def stddev_determine_units(aggregation):
-    aggregation.units = Units(
-        {
-            aggregation.sample_table.units_name:1
-        },
+    aggregation.units = Units.parsed_from(
+        aggregation.sample_table.units_name,
         False # displacement
     )
     return aggregation.units

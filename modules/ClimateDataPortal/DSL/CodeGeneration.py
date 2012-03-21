@@ -319,22 +319,47 @@ def DSLAggregationNode_R(aggregation, parent_node_id, key, pre, out, post, extra
     
     out("query_results[[toString(processID(", node_id, "))]]")
 
-from .. import start_month_0_indexed
+from . import Method
+from ..DateMapping import Monthly, Yearly, MultipleYearsByMonth
+
+time_period_and_month_numbers = Method("time_period_and_month_numbers")
+@time_period_and_month_numbers.implementation(Monthly)
+def Monthly_time_period_and_month_numbers(date_mapper, month_numbers):
+    if month_numbers is not None and -1 in month_numbers:
+        # PreviousDecember handling:
+        # shift the month numbers forward by one month and compare against 
+        # month filter numbers also shifted forward one month.
+        time_period = "(time_period + 1)"
+        month_numbers = map((1).__add__, month_numbers)
+    else:
+        time_period = "time_period"
+    return time_period, month_numbers
+
+@time_period_and_month_numbers.implementation(MultipleYearsByMonth, Yearly)
+def Monthly_time_period_and_month_numbers(date_mapper, month_numbers):
+    return "time_period", month_numbers    
+
+
+add_months_filter = Method("add_months_filter")
+
+@add_months_filter.implementation(Monthly)
+def add_months_filter(date_mapper, month_numbers, time_period, add_filter):
+    add_filter(
+        "((%(time_period)s + 65532 + %(month_offset)i) %% 12) IN (%(month_list)s)" % dict(
+            time_period = time_period,
+            month_offset = date_mapper.start_month_0_indexed,
+            month_list = ",".join(map(str, month_numbers))
+        )
+    )
+
 @SQL.implementation(*aggregations)
 def DSLAggregationNode_SQL(aggregation, key, out, extra_filter):
     """From this we are going to get back a result set with key and value.
     """
     sample_table = aggregation.sample_table
     out("SELECT ", key)
+    date_mapper = aggregation.sample_table.date_mapper
 
-    # Date Mapping
-    from_date = aggregation.from_date
-    if from_date is not None:
-        from_time_period = sample_table.date_mapper.date_to_time_period(from_date)
-        #if key == "time_period" and from_time_period:
-            #out("- %i" % from_time_period)
-    else:
-        from_time_period = None
     out(" as key, ",
         aggregation.SQL_function, "(value) as value ",
         'FROM \\"', sample_table.table_name, '\\"'
@@ -344,22 +369,25 @@ def DSLAggregationNode_SQL(aggregation, key, out, extra_filter):
         filter_strings.append(extra_filter)
     add_filter = filter_strings.append
     # Date Mapping
-    month_numbers = aggregation.month_numbers
-    if month_numbers is not None and -1 in month_numbers:
-        # PreviousDecember handling:
-        # shift the month numbers forward by one month and compare against 
-        # month filter numbers also shifted forward one month.
-        time_period = "(time_period + 1)"
-        month_numbers = map((1).__add__, month_numbers)
-    else:
-        time_period = "time_period"
+    time_period, month_numbers = time_period_and_month_numbers(
+        date_mapper,
+        aggregation.month_numbers
+    )
     
-    # Date Mapping
-    if from_time_period is not None:
+    '''
+    if from_date is not None:
+        from_time_period = 
+        #if key == "time_period" and from_time_period:
+            #out("- %i" % from_time_period)
+    else:
+        from_time_period = None
+    '''
+    from_date = aggregation.from_date
+    if from_date is not None:
         add_filter(
-            "%(time_period)s >= %(from_date_number)i" % dict(
+            "%(time_period)s >= %(from_time_period)i" % dict(
                 time_period = time_period,
-                from_date_number = sample_table.date_mapper.date_to_time_period(from_date)
+                from_time_period = date_mapper.to_time_period(*from_date)
             )
         )
     to_date = aggregation.to_date
@@ -367,7 +395,7 @@ def DSLAggregationNode_SQL(aggregation, key, out, extra_filter):
         add_filter(
             "%(time_period)s <= %(to_date_number)i" % dict(
                 time_period = time_period,
-                to_date_number = sample_table.date_mapper.date_to_time_period(to_date)
+                to_date_number = date_mapper.to_time_period(*to_date)
             )
         )
     # Date Mapping
@@ -375,13 +403,7 @@ def DSLAggregationNode_SQL(aggregation, key, out, extra_filter):
         if month_numbers == []:
             add_filter("FALSE")
         else:
-            add_filter(
-                "((%(time_period)s + 65532 + %(month_offset)i) %% 12) IN (%(month_list)s)" % dict(
-                    time_period = time_period,
-                    month_offset = start_month_0_indexed,
-                    month_list = ",".join(map(str, month_numbers))
-                )
-            )
+            add_months_filter(date_mapper, month_numbers, time_period, add_filter)
     if filter_strings:
         out(
             " WHERE ", 

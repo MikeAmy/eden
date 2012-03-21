@@ -5,13 +5,8 @@ from gluon.dal import Expression
 
 from Cache import *
 import gluon.contrib.simplejson as JSON
-from . import (
-    SampleTable,
-    month_number_to_year_month,
-    twenty_years_by_month_to_date,
-    units_in_out,
-    start_month_0_indexed
-)
+from . import SampleTable, units_in_out
+from known_units import units_in_out
 from DSL.Units import MeaninglessUnitsException
 from DSL import aggregations, grid_sizes
 
@@ -51,33 +46,39 @@ class MapPlugin(object):
         """client_config (optional) passes configuration dict 
         through to the client-side map plugin.
         """
-        try:
-            import rpy2
-            import rpy2.robjects as robjects
-        except ImportError:
-            import logging
-            logging.getLogger().error(
-        """R is required by the climate data portal to generate charts
-
-        To install R: refer to:
-        http://cran.r-project.org/doc/manuals/R-admin.html
-
-
-        rpy2 is required to interact with python.
-
-        To install rpy2, refer to:
-        http://rpy.sourceforge.net/rpy2/doc-dev/html/overview.html
-        """)
-            raise
-
         map_plugin.env = env
         map_plugin.year_min = year_min 
         map_plugin.year_max = year_max
         map_plugin.place_table = place_table
-        map_plugin.robjects = robjects
-        R = map_plugin.R = robjects.r
-        env.DSL.init_R_interpreter(R, env.deployment_settings.database)
         map_plugin.client_config = client_config
+
+    def get_R(map_plugin):
+        try:
+            R = map_plugin.R
+        except AttributeError:
+            try:
+                import rpy2
+                import rpy2.robjects as robjects
+            except ImportError:
+                import logging
+                logging.getLogger().error(
+            """R is required by the climate data portal to generate charts
+
+            To install R: refer to:
+            http://cran.r-project.org/doc/manuals/R-admin.html
+
+
+            rpy2 is required to interact with python.
+
+            To install rpy2, refer to:
+            http://rpy.sourceforge.net/rpy2/doc-dev/html/overview.html
+            """)
+                raise
+            map_plugin.robjects = robjects
+            R = map_plugin.R = robjects.r
+            env = map_plugin.env
+            env.DSL.init_R_interpreter(R, env.deployment_settings.database)
+        return R
 
     def extend_gis_map(map_plugin, add_javascript, add_configuration):
         add_javascript("scripts/S3/s3.gis.climate.js")
@@ -149,7 +150,7 @@ class MapPlugin(object):
             )                
         
         def generate_map_overlay_data(file_path):
-            R = map_plugin.R
+            R = map_plugin.get_R()
             code = DSL.R_Code_for_values(expression, "place_id")
             values_by_place_data_frame = R(code)()
             # R willfully removes empty data frame columns 
@@ -228,7 +229,7 @@ class MapPlugin(object):
             )                
         
         def generate_map_csv_data(file_path):
-            R = map_plugin.R
+            R = map_plugin.get_R()
             code = DSL.R_Code_for_values(expression, "place_id")
             values_by_place_data_frame = R(code)()
             # R willfully removes empty data frame columns 
@@ -310,378 +311,6 @@ class MapPlugin(object):
             generate_map_csv_data
         )
     
-    def render_plots(
-        map_plugin,
-        specs,
-        width,
-        height
-    ):
-        env = map_plugin.env
-        DSL = env.DSL
-        
-        def generate_chart(file_path):
-            time_serieses = []
-            
-            from scipy import stats
-            regression_lines = []
-            
-            R = map_plugin.R
-            c = R("c")
-            spec_names = []
-            start_time_periods = []
-            end_time_periods = []
-            yearly = []
-            for label, spec in specs:
-                query_expression = spec["query_expression"]
-                expression = DSL.parse(query_expression)
-                understood_expression_string = str(expression)
-                spec_names.append(label)
-                units = DSL.units(expression)
-                unit_string = str(units)
-                if units is None:
-                    analysis_strings = []
-                    def analysis_out(*things):
-                        analysis_strings.append("".join(map(str, things)))
-                    DSL.analysis(expression, analysis_out)
-                    raise MeaninglessUnitsException(
-                        "\n".join(analysis_strings)
-                    )
-                is_yearly_values = True #"Months(" in query_expression
-                yearly.append(is_yearly_values)
-                if is_yearly_values:
-                    # Date Mapping - currently months hard-coded, no comparison of expression sides
-                    #if "Prev" in query_expression:
-                        # PreviousDecember handling:
-                    #    grouping_key = "(time_period - ((time_period + 1000008 + %i +1) %% 12))" % start_month_0_indexed
-                    #else:
-                    #    grouping_key = "(time_period - ((time_period + 1000008 + %i) %% 12))" % start_month_0_indexed
-                    grouping_key = "(time_period - ((time_period + 1000008) % 12))"
-                else:
-                    grouping_key = "time_period"
-                code = DSL.R_Code_for_values(
-                    expression, 
-                    grouping_key,
-                    "place_id IN (%s)" % ",".join(map(str, spec["place_ids"]))
-                )
-                #print code
-                values_by_time_period_data_frame = R(code)()
-                data = {}
-                if isinstance(
-                    values_by_time_period_data_frame,
-                    map_plugin.robjects.vectors.StrVector
-                ):
-                    raise Exception(str(values_by_time_period_data_frame))
-                elif values_by_time_period_data_frame.ncol == 0:
-                    pass
-                else:
-                    keys = values_by_time_period_data_frame.rx2("key")
-                    values = values_by_time_period_data_frame.rx2("value")
-                    try:
-                        display_units = {
-                            "Kelvin": "Celsius",
-                        }[unit_string]
-                    except KeyError:
-                        converter = lambda x:x
-                        display_units = unit_string
-                    else:
-                        converter = units_in_out[display_units]["out"]
-                                        
-                    linear_regression = R("{}")
-                    
-                    previous_december_month_offset = [0,1][is_yearly_values and "Prev" in query_expression]
-                
-                    #def month_number_to_float_year(month_number):
-                    #    year, month = month_number_to_year_month(month_number+previous_december_month_offset)
-                    #    return year + (float(month-1) / 12)
-                    
-                    def time_period_to_year(time_period):
-                        return twenty_years_by_month_to_date(time_period).year
-                        
-                    converted_keys = map(time_period_to_year, keys)
-                    converted_values = map(converter, values) 
-                    regression_lines.append(
-                        stats.linregress(converted_keys, converted_values)
-                    )
-                    
-                    add = data.__setitem__
-                    for key, value in zip(keys, values):
-                        #print key, time_period_to_year(key), value
-                        add(key, value)
-                    # Date Mapping
-                    # currently assumes monthly values and monthly time_period
-                    start_time_period = min(data.iterkeys())
-                    start_time_periods.append(start_time_period)
-                    
-                    #start_year, start_month = month_number_to_year_month(
-                    #    start_time_period + previous_december_month_offset
-                    #)
-                    start_year = time_period_to_year(start_time_period)
-
-                    end_time_period = max(data.iterkeys())
-                    end_time_periods.append(end_time_period)
-                    #end_year, end_month = month_number_to_year_month(
-                    #    end_time_period + previous_december_month_offset
-                    #)
-                    end_year = time_period_to_year(end_time_period)
-
-
-                    values = []
-                    for time_period in range(
-                        start_time_period,
-                        end_time_period+1,
-                        [1,12][is_yearly_values]
-                    ):
-                        if not data.has_key(time_period):
-                            values.append(None)
-                        else:
-                            values.append(converter(data[time_period]))
-                    
-                    if is_yearly_values:
-                        #time_serieses.append(
-                        #    R("ts")(
-                        #        map_plugin.robjects.FloatVector(values),
-                        #        start = c(start_year),
-                        #        end = c(end_year),
-                        #        frequency = 1
-                        #    )
-                        #)
-                        time_serieses.append(
-                            R("ts")(
-                                map_plugin.robjects.FloatVector(values),
-                                start = c(start_year),
-                                end = c(end_year),
-                                deltat = 20
-                            )
-                        )
-                    else:
-                        time_serieses.append(
-                            R("ts")(
-                                map_plugin.robjects.FloatVector(values),
-                                start = c(start_year, start_month),
-                                end = c(end_year, end_month),
-                                frequency = 12
-                            )
-                        )
-            min_start_time_period = min(start_time_periods)
-            max_end_time_period = max(end_time_periods)
-            show_months = any(not is_yearly for is_yearly in yearly)
-            if show_months:
-                # label_step spaces out the x-axis marks sensibly based on
-                # width by not marking all of them.
-                ticks = (max_end_time_period - min_start_time_period) + 1
-                # ticks should be made at 1,2,3,4,6,12 month intervals 
-                # or 1, 2, 5, 10, 20, 50 year intervals
-                # depending on the usable width and the number of ticks
-                # ticks should be at least 15 pixels apart
-                usable_width = width - 100
-                max_ticks = usable_width / 15.0
-                Y = 12
-                for step in [1,2,3,4,6,12,2*Y, 5*Y, 10*Y, 20*Y, 50*Y]:
-                    if ticks/step <= max_ticks:
-                        break
-
-                axis_points = []
-                axis_labels = []
-                month_names = (
-                    "Jan Feb Mar Apr May Jun "
-                    "Jul Aug Sep Oct Nov Dec"
-                ).split(" ")
-                for month_number in range(min_start_time_period, max_end_time_period+1, step):
-                    year, month = month_number_to_year_month(month_number)
-                    month -= 1
-                    axis_points.append(
-                        year + (month / 12.0)
-                    )
-                    axis_labels.append(
-                        "%s %i" % (month_names[month], year)
-                    )
-            else:
-                # show only years
-                axis_points = []
-                axis_labels = []
-                #start_year, start_month = month_number_to_year_month(min_start_time_period)
-                #end_year, end_month = month_number_to_year_month(max_end_time_period)
-                #for year in range(start_year, end_year+1):
-                #    axis_points.append(year)
-                #    axis_labels.append(year)
-                start_year = time_period_to_year(min_start_time_period)
-                end_year = time_period_to_year(max_end_time_period)
-                for year in range(start_year, end_year+1, 20):
-                    axis_points.append(year)
-                    axis_labels.append("%i - %i" % (year, year+19))
-
-            display_units = display_units.replace("Celsius", "\xc2\xb0Celsius")
-
-            R.png(
-                filename = file_path,
-                width = width,
-                height = height
-            )
-            
-            plot_chart = R("""
-function (
-    xlab, ylab, n, names, axis_points, 
-    axis_labels, axis_orientation, 
-    plot_type,
-    width, height, 
-    total_margin_height,
-    line_interspacing,
-    ...
-) {
-    split_names <- lapply(
-        names,
-        strwrap, width=(width - 100)/5
-    )
-    wrapped_names <- lapply(
-        split_names,
-        paste, collapse='\n'
-    )
-    legend_line_count = sum(sapply(split_names, length))
-    legend_height_inches <- grconvertY(
-        -(
-            (legend_line_count * 11) + 
-            (length(wrapped_names) * 6) + 30
-        ),
-        "device",
-        "inches"
-    ) - grconvertY(0, "device", "inches")
-    par(
-        xpd = T,
-        mai = (par()$mai + c(legend_height_inches , 0, 0, 0))
-    )
-    ts.plot(...,
-        gpars = list(
-            xlab = xlab,
-            ylab = ylab,
-            col = c(1:n),
-            pch = c(21:25),
-            type = plot_type,
-            xaxt = 'n'
-        )
-    )
-    axis(
-        1, 
-        at = axis_points,
-        labels = axis_labels,
-        las = axis_orientation
-    )
-    legend(
-        par()$usr[1],
-        par()$usr[3] - (
-            grconvertY(0, "device", "user") -
-            grconvertY(70, "device", "user")
-        ),
-        wrapped_names,
-        cex = 0.8,
-        pt.bg = c(1:n),
-        pch = c(21:25),
-        bty = 'n',
-        y.intersp = line_interspacing,
-        text.width = 3
-    )
-}""" )
-            from math import log10, floor, isnan
-            for regression_line, i in zip(
-                regression_lines,
-                range(len(time_serieses))
-            ):
-                slope, intercept, r, p, stderr = regression_line
-                if isnan(slope) or isnan(intercept):
-                    spec_names[i] += "   {cannot calculate linear regression}"
-                else:
-                    if isnan(p):
-                        p_str = "NaN"
-                    else:
-                        p_str = str(round_to_4_sd(p))
-                    if isnan(stderr):
-                        stderr_str = "NaN"
-                    else:
-                        stderr_str = str(round_to_4_sd(p))
-                        
-                    slope_str, intercept_str, r_str = map(
-                        str,
-                        map(round_to_4_sd, (slope, intercept, r))
-                    )
-                
-                    spec_names[i] += (
-                        u"   {"
-                            "y=%(slope_str)s x year %(add)s%(intercept_str)s, "
-                            "r= %(r_str)s, "
-                            "p= %(p_str)s, "
-                            "S.E.= %(stderr_str)s"
-                        "}"
-                    ) % dict(
-                        locals(),
-                        add = [u"+ ",u""][intercept_str.startswith("-")]
-                    )
-                    
-            plot_chart(
-                xlab = "",
-                ylab = display_units,
-                n = len(time_serieses),
-                names = spec_names,
-                axis_points = axis_points,
-                axis_labels = axis_labels,
-                axis_orientation = [0,2][show_months], 
-                plot_type= "lo"[is_yearly_values],               
-                width = width,
-                height = height,
-                # R uses Normalised Display coordinates.
-                # these have been found by recursive improvement 
-                # they place the legend legibly. tested up to 8 lines
-                total_margin_height = 150,
-                line_interspacing = 1.8,
-                *time_serieses
-            )
-            
-            for regression_line, colour_number in zip(
-                regression_lines,
-                range(len(time_serieses))
-            ):
-                slope = regression_line[0]
-                intercept = regression_line[1]
-                if isnan(slope) or isnan(intercept):
-                    pass
-                else:
-                    R.par(xpd = False)
-                    R.abline(
-                        intercept,
-                        slope,
-                        col = colour_number+1
-                    )
-            R("dev.off()")
-
-        import md5
-        import gluon.contrib.simplejson as JSON
-
-        import datetime
-        def serialiseDate(obj):
-            if isinstance(
-                obj,
-                (
-                    datetime.date, 
-                    datetime.datetime, 
-                    datetime.time
-                )
-            ): 
-                return obj.isoformat()[:19].replace("T"," ")
-            else:
-                raise TypeError("%r is not JSON serializable" % (obj,)) 
-        
-        return get_cached_or_generated_file(
-            "".join((
-                md5.md5(
-                    JSON.dumps(
-                        [specs, width, height],
-                        sort_keys=True,
-                        default=serialiseDate,
-                    )
-                ).hexdigest(),
-                ".png"
-            )),
-            generate_chart
-        )
-
     def place_data(map_plugin):
         def generate_places(file_path):
             "return all place data in JSON format"
@@ -855,18 +484,11 @@ function (
             generate_places
         )
     
-    def printable_map_image_file(plugin, command, url_prefix, expression, filter, width, height):
+    def printable_map_image_file(plugin, command, url_prefix, query_string, width, height):
         def generate_printable_map_image(file_path):
             import urllib
-            url = url_prefix+(
-                "?expression=%(expression)s"
-                "&filter=%(filter)s"
-                "&display_mode=print"
-            ) % dict(
-                expression = expression,
-                filter = filter
-            )
-            
+            url = url_prefix+"?"+query_string+"&display_mode=print"
+                        
             # PyQT4 signals don't like not being run in the main thread
             # run in a subprocess to give it it's own thread
             subprocess_args = (
@@ -888,7 +510,7 @@ function (
         return get_cached_or_generated_file(
             md5.md5(
                 JSON.dumps(
-                    [expression, filter, width, height],
+                    [query_string, width, height],
                     sort_keys=True,
                 )
             ).hexdigest()+".png",
@@ -909,3 +531,496 @@ function (
             md5.md5(sample_table_name+" years").hexdigest()+".json",
             generate_years_json
         )
+        
+from . import Method
+from DateMapping import Monthly, Yearly, MultipleYearsByMonth
+time_period_to_float_year = Method("time_period_to_float_year")
+
+@time_period_to_float_year.implementation(Monthly)
+def Monthly_time_period_to_float_year(date_mapper, month_number):
+    year, month = date_mapper.to_date_tuple(month_number+previous_december_month_offset)
+    return year + (float(month-1) / 12)
+
+@time_period_to_float_year.implementation(Yearly)
+def Yearly_time_period_to_float_year(date_mapper, year_number):
+    return float(year_number + date_mapper.start_year)
+
+@time_period_to_float_year.implementation(MultipleYearsByMonth)
+def MultipleYearsByMonth_time_period_to_year(date_mapper, time_period):
+    return float(date_mapper.to_date(time_period).year)
+
+
+
+time_series_args = Method("time_series_args")
+@time_series_args.implementation(Monthly)
+def Monthly_time_series(date_mapper, is_yearly_values, use_kwargs):
+    if is_yearly_values:
+        use_kwargs(frequency = 1)
+    else:
+        use_kwargs(frequency = 12)
+
+@time_series_args.implementation(Yearly)
+def Monthly_time_series(date_mapper, is_yearly_values, use_kwargs):
+    use_kwargs(frequency = 1)
+
+@time_series_args.implementation(MultipleYearsByMonth)
+def MultipleYearsByMonth_time_series_args(date_mapper, is_yearly_values, use_kwargs):
+    use_kwargs(deltat = 20)
+                
+
+get_grouping_key = Method("get_grouping_key")
+
+@get_grouping_key.implementation(Monthly)
+def Monthly_grouping_key(date_mapper, is_yearly_values):
+    if is_yearly_values:
+        if "Prev" in query_expression:
+            # PreviousDecember handling:
+            return "(time_period - ((time_period + 1000008 + %i +1) %% 12))" % date_mapper.start_month_0_indexed
+        else:
+            return "(time_period - ((time_period + 1000008 + %i) %% 12))" % date_mapper.start_month_0_indexed
+    else:
+        return "time_period"
+
+@get_grouping_key.implementation(Yearly)
+def Yearly_grouping_key(date_mapper, is_yearly_values):
+    return "time_period"
+
+@get_grouping_key.implementation(MultipleYearsByMonth)
+def MultipleYearsByMonth_grouping_key(date_mapper, is_yearly_values):
+    return "(time_period - ((time_period + 1000008) % 12))"
+
+
+get_axis_labels = Method("get_axis_labels")
+@get_axis_labels.implementation(Monthly)
+def Monthly_get_axis_labels(
+    date_mapper,
+    min_start_time_period,
+    max_end_time_period,
+    axis_points,
+    axis_labels,
+    show_months
+):
+    if show_months:
+        # label_step spaces out the x-axis marks sensibly based on
+        # width by not marking all of them.
+        ticks = (max_end_time_period - min_start_time_period) + 1
+        # ticks should be made at 1,2,3,4,6,12 month intervals 
+        # or 1, 2, 5, 10, 20, 50 year intervals
+        # depending on the usable width and the number of ticks
+        # ticks should be at least 15 pixels apart
+        usable_width = width - 100
+        max_ticks = usable_width / 15.0
+        Y = 12
+        for step in [1,2,3,4,6,12,2*Y, 5*Y, 10*Y, 20*Y, 50*Y]:
+            if ticks/step <= max_ticks:
+                break
+        month_names = (
+            "Jan Feb Mar Apr May Jun "
+            "Jul Aug Sep Oct Nov Dec"
+        ).split(" ")
+        for month_number in range(
+            min_start_time_period,
+            max_end_time_period+1,
+            step
+        ):
+            year, month = date_mapper.to_date_tuple(month_number)
+            month -= 1
+            axis_points.append(
+                year + (month / 12.0)
+            )
+            axis_labels.append(
+                "%s %i" % (month_names[month], year)
+            )
+    else:
+        start_year, start_month = date_mapper.to_date_tuple(min_start_time_period)
+        end_year, end_month = date_mapper.to_date_tuple(max_end_time_period)
+        for year in range(start_year, end_year+1):
+            axis_points.append(year)
+            axis_labels.append(year)
+
+@get_axis_labels.implementation(Yearly)
+def Monthly_get_axis_labels(
+    date_mapper,
+    min_start_time_period,
+    max_end_time_period,
+    axis_points,
+    axis_labels,
+    show_months
+):
+    start_year, = date_mapper.to_date_tuple(min_start_time_period)
+    end_year, = date_mapper.to_date_tuple(max_end_time_period)
+    for year in range(start_year, end_year+1):
+        axis_points.append(year)
+        axis_labels.append(year)
+
+@get_axis_labels.implementation(MultipleYearsByMonth)
+def MultipleYearsByMonth_axis_labels(
+    date_mapper,
+    min_start_time_period,
+    max_end_time_period, 
+    axis_points,
+    axis_labels,
+    show_months
+):
+    start_year = date_mapper.to_date_tuple(min_start_time_period)[0]
+    end_year = date_mapper.to_date_tuple(max_end_time_period)[0]
+    for year in range(start_year, end_year+1, 20):
+        axis_points.append(year)
+        axis_labels.append("%i - %i" % (year, year+19))
+
+get_chart_values = Method("get_chart_values")
+
+@get_chart_values.implementation(MultipleYearsByMonth)
+@get_chart_values.implementation(Monthly)
+def get_NonYearly_chart_values(
+    date_mapper,
+    start_time_period,
+    end_time_period,
+    is_yearly_values,
+    use
+):
+    for time_period in range(
+        start_time_period,
+        end_time_period+1,
+        [1,12][is_yearly_values]
+    ):
+        use(time_period)
+
+@get_chart_values.implementation(Yearly)
+def get_Yearly_chart_values(
+    date_mapper,
+    start_time_period,
+    end_time_period,
+    is_yearly_values,
+    use
+):
+    for time_period in range(
+        start_time_period,
+        end_time_period+1
+    ):
+        use(time_period)
+
+def render_plots(
+    map_plugin,
+    specs,
+    width,
+    height
+):
+    env = map_plugin.env
+    DSL = env.DSL
+    
+    def generate_chart(file_path):
+        time_serieses = []
+        
+        from scipy import stats
+        regression_lines = []
+        
+        R = map_plugin.get_R()
+        c = R("c")
+        spec_names = []
+        start_time_periods = []
+        end_time_periods = []
+        yearly = []
+        for label, spec in specs:
+            query_expression = spec["query_expression"]
+            expression = DSL.parse(query_expression)
+            understood_expression_string = str(expression)
+            spec_names.append(label)
+            
+            units = DSL.units(expression)
+            unit_string = str(units)
+            if units is None:
+                analysis_strings = []
+                def analysis_out(*things):
+                    analysis_strings.append("".join(map(str, things)))
+                DSL.analysis(expression, analysis_out)
+                raise MeaninglessUnitsException(
+                    "\n".join(analysis_strings)
+                )
+            
+            date_mapper = DSL.date_mapping(expression)
+            
+            is_yearly_values = True #"Months(" in query_expression
+            yearly.append(is_yearly_values)
+            grouping_key = get_grouping_key(date_mapper, is_yearly_values)
+            code = DSL.R_Code_for_values(
+                expression, 
+                grouping_key,
+                "place_id IN (%s)" % ",".join(map(str, spec["place_ids"]))
+            )
+            #print code
+            values_by_time_period_data_frame = R(code)()
+            data = {}
+            if isinstance(
+                values_by_time_period_data_frame,
+                map_plugin.robjects.vectors.StrVector
+            ):
+                raise Exception(str(values_by_time_period_data_frame))
+            elif values_by_time_period_data_frame.ncol == 0:
+                pass
+            else:
+                keys = values_by_time_period_data_frame.rx2("key")
+                values = values_by_time_period_data_frame.rx2("value")
+                try:
+                    display_units = {
+                        "Kelvin": "Celsius",
+                    }[unit_string]
+                except KeyError:
+                    converter = lambda x:x
+                    display_units = unit_string
+                else:
+                    converter = units_in_out[display_units]["out"]
+                                    
+                linear_regression = R("{}")
+                
+                previous_december_month_offset = [0,1][
+                    is_yearly_values and "Prev" in query_expression
+                ]
+            
+                converted_keys = map(
+                    (
+                        lambda time_period: 
+                            time_period_to_float_year(date_mapper, time_period)
+                    ),
+                    keys
+                )
+                converted_values = map(converter, values) 
+                regression_lines.append(
+                    stats.linregress(converted_keys, converted_values)
+                )
+                
+                add = data.__setitem__
+                for key, value in zip(keys, values):
+                    add(key, value)
+                # Date Mapping
+                # currently assumes monthly values and monthly time_period
+                start_time_period = min(data.iterkeys())
+                start_time_periods.append(start_time_period)
+                start = date_mapper.to_date_tuple(
+                    start_time_period + previous_december_month_offset
+                )
+
+                end_time_period = max(data.iterkeys())
+                end_time_periods.append(end_time_period)
+                end = date_mapper.to_date_tuple(
+                    end_time_period + previous_december_month_offset
+                )
+
+                values = []
+                add_value = values.append
+                def use_time_period(time_period):
+                    if not data.has_key(time_period):
+                        add_value(None)
+                    else:
+                        add_value(converter(data[time_period]))
+
+                get_chart_values(
+                    date_mapper,
+                    start_time_period,
+                    end_time_period,
+                    is_yearly_values,
+                    use_time_period
+                )
+                
+                def append_time_series(**kwargs):
+                    time_serieses.append(
+                        R("ts")(
+                            map_plugin.robjects.FloatVector(values),
+                            start = c(*start),
+                            end = c(*end),
+                            **kwargs
+                        )
+                    )
+                time_series_args(date_mapper, is_yearly_values, append_time_series)
+
+        min_start_time_period = min(start_time_periods)
+        max_end_time_period = max(end_time_periods)
+        
+        show_months = any(not is_yearly for is_yearly in yearly)
+
+        # show only years
+        axis_points = []
+        axis_labels = []
+        
+        get_axis_labels(
+            date_mapper,
+            min_start_time_period,
+            max_end_time_period,
+            axis_points,
+            axis_labels,
+            show_months
+        )
+
+        display_units = display_units.replace("Celsius", "\xc2\xb0Celsius")
+
+        R.png(
+            filename = file_path,
+            width = width,
+            height = height
+        )
+        
+        plot_chart = R("""
+function (
+xlab, ylab, n, names, axis_points, 
+axis_labels, axis_orientation, 
+plot_type,
+width, height, 
+total_margin_height,
+line_interspacing,
+...
+) {
+split_names <- lapply(
+    names,
+    strwrap, width=(width - 100)/5
+)
+wrapped_names <- lapply(
+    split_names,
+    paste, collapse='\n'
+)
+legend_line_count = sum(sapply(split_names, length))
+legend_height_inches <- grconvertY(
+    -(
+        (legend_line_count * 11) + 
+        (length(wrapped_names) * 6) + 30
+    ),
+    "device",
+    "inches"
+) - grconvertY(0, "device", "inches")
+par(
+    xpd = T,
+    mai = (par()$mai + c(legend_height_inches , 0, 0, 0))
+)
+ts.plot(...,
+    gpars = list(
+        xlab = xlab,
+        ylab = ylab,
+        col = c(1:n),
+        pch = c(21:25),
+        type = plot_type,
+        xaxt = 'n'
+    )
+)
+axis(
+    1, 
+    at = axis_points,
+    labels = axis_labels,
+    las = axis_orientation
+)
+legend(
+    par()$usr[1],
+    par()$usr[3] - (
+        grconvertY(0, "device", "user") -
+        grconvertY(70, "device", "user")
+    ),
+    wrapped_names,
+    cex = 0.8,
+    pt.bg = c(1:n),
+    pch = c(21:25),
+    bty = 'n',
+    y.intersp = line_interspacing,
+    text.width = 3
+)
+}""" )
+        from math import log10, floor, isnan
+        for regression_line, i in zip(
+            regression_lines,
+            range(len(time_serieses))
+        ):
+            slope, intercept, r, p, stderr = regression_line
+            if isnan(slope) or isnan(intercept):
+                spec_names[i] += "   {cannot calculate linear regression}"
+            else:
+                if isnan(p):
+                    p_str = "NaN"
+                else:
+                    p_str = str(round_to_4_sd(p))
+                if isnan(stderr):
+                    stderr_str = "NaN"
+                else:
+                    stderr_str = str(round_to_4_sd(p))
+                    
+                slope_str, intercept_str, r_str = map(
+                    str,
+                    map(round_to_4_sd, (slope, intercept, r))
+                )
+            
+                spec_names[i] += (
+                    u"   {"
+                        "y=%(slope_str)s x year %(add)s%(intercept_str)s, "
+                        "r= %(r_str)s, "
+                        "p= %(p_str)s, "
+                        "S.E.= %(stderr_str)s"
+                    "}"
+                ) % dict(
+                    locals(),
+                    add = [u"+ ",u""][intercept_str.startswith("-")]
+                )
+                
+        plot_chart(
+            xlab = "",
+            ylab = display_units,
+            n = len(time_serieses),
+            names = spec_names,
+            axis_points = axis_points,
+            axis_labels = axis_labels,
+            axis_orientation = [0,2][show_months], 
+            plot_type= "lo"[is_yearly_values],               
+            width = width,
+            height = height,
+            # R uses Normalised Display coordinates.
+            # these have been found by recursive improvement 
+            # they place the legend legibly. tested up to 8 lines
+            total_margin_height = 150,
+            line_interspacing = 1.8,
+            *time_serieses
+        )
+        
+        for regression_line, colour_number in zip(
+            regression_lines,
+            range(len(time_serieses))
+        ):
+            slope = regression_line[0]
+            intercept = regression_line[1]
+            if isnan(slope) or isnan(intercept):
+                pass
+            else:
+                R.par(xpd = False)
+                R.abline(
+                    intercept,
+                    slope,
+                    col = colour_number+1
+                )
+        R("dev.off()")
+
+    import md5
+    import gluon.contrib.simplejson as JSON
+
+    import datetime
+    def serialiseDate(obj):
+        if isinstance(
+            obj,
+            (
+                datetime.date, 
+                datetime.datetime, 
+                datetime.time
+            )
+        ): 
+            return obj.isoformat()[:19].replace("T"," ")
+        else:
+            raise TypeError("%r is not JSON serializable" % (obj,)) 
+    
+    return get_cached_or_generated_file(
+        "".join((
+            md5.md5(
+                JSON.dumps(
+                    [specs, width, height],
+                    sort_keys=True,
+                    default=serialiseDate,
+                )
+            ).hexdigest(),
+            ".png"
+        )),
+        generate_chart
+    )
+
+MapPlugin.render_plots = render_plots

@@ -388,8 +388,7 @@ def request_image():
                     #application_name = request.application,
                     http_host = request.env.http_host, # includes port
                 ),
-                expression = vars["expression"],
-                filter = vars["filter"],
+                query_string = request.env.query_string,
                 width = int(vars["width"]),
                 height = int(vars["height"])
             ),

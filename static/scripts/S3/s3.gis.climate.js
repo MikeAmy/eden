@@ -167,6 +167,14 @@ IMG = NodeGenerator('img')
 TEXTAREA = NodeGenerator('textarea')
 A = NodeGenerator('a')
 
+var power_pattern = new RegExp('\\^(-?\\d+)', 'g')
+function replace_power_with_sup(string) {
+    return string.replace(
+        power_pattern,
+        '<sup>$1</sup>'
+    )
+}
+
 var ColourKey = OpenLayers.Class(OpenLayers.Control, {
     /* The colour key is implemented as an OpenLayers control
        so that it gets rendered on the printed map
@@ -239,7 +247,11 @@ var ColourKey = OpenLayers.Class(OpenLayers.Control, {
         var colour_key = this
         
         var previous_units = colour_key.$units.html()
-        colour_key.$units.html(new_units)
+        colour_key.$units.html(
+            replace_power_with_sup(
+                new_units
+            )
+        )
 
         if (
             // user can lock limits
@@ -291,8 +303,17 @@ var ColourKey = OpenLayers.Class(OpenLayers.Control, {
                 1
             )
             
-            colour_key.$lower_limit.attr('value', min_value)
-            colour_key.$upper_limit.attr('value', max_value)
+            function nice_number_string(number) {
+                var result_string = number.toString()
+                if (result_string.length > 6) {
+                    result_string = number.toPrecision(significant_digits)
+                }
+                return result_string
+            }
+            min_value_string = nice_number_string(min_value)
+            max_value_string = nice_number_string(max_value)
+            colour_key.$lower_limit.attr('value', min_value_string)
+            colour_key.$upper_limit.attr('value', max_value_string)
         }
         else {
             min_value = parseFloat(colour_key.$lower_limit.attr('value'))
@@ -919,7 +940,7 @@ Place.prototype = {
             map.getLonLatFromPixel({x:event.layerX, y:event.layerY}),
             new OpenLayers.Size(170, 125),
             info.join(''),
-            false
+            true
         )
         use_popup(popup)
     }
@@ -1870,10 +1891,13 @@ ClimateDataMapPlugin = function (config) {
         var place_ids = feature_data.keys
         var values = feature_data.values
         var units = feature_data.units
+        if (units == 'Person') {
+            units = 'People'
+        }
         var grid_size = feature_data.grid_size
         
         var converter = plugin.converter
-        var display_units = plugin.display_units
+        var display_units = replace_power_with_sup(plugin.display_units)
         
         var range = max_value - min_value
         var features = []
@@ -1925,7 +1949,7 @@ ClimateDataMapPlugin = function (config) {
                     var data = place.data
                     var lat = data.latitude
                     var lon = data.longitude
-                    var attributes
+                    var attributes = {}
                     if (grid_size == 0) {
                         var feature = plugin.countries[data.ISO_code]
                         if (!!feature) {
@@ -1958,7 +1982,6 @@ ClimateDataMapPlugin = function (config) {
                         south = lat - border
                         east = lon + border
                         west = lon - border
-                        attributes = {}
                         features.push(
                             Vector(
                                 Polygon([
@@ -2115,6 +2138,10 @@ ClimateDataMapPlugin = function (config) {
                 } else {
                     plugin.feature_data = feature_data
                     var units = feature_data.units
+                    if (units == 'Person') {
+                        units = 'People'
+                    }
+                    
                     var converter = plugin.converter = conversion_functions[units] || function (x) { return x }
                     var display_units = plugin.display_units = display_units_conversions[units] || units
                     var values = feature_data.values

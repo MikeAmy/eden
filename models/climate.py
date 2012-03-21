@@ -370,7 +370,7 @@ if deployment_settings.has_module("climate"):
             )
             date  = db.executesql(query)[0][0]
             if date is not None:
-                year,month = ClimateDataPortal.month_number_to_year_month(date)
+                year, month = ClimateDataPortal.to_date_tuple(date)
                 return "%s-%s" % (month, year)
             else:
                 return NONE
@@ -391,7 +391,7 @@ if deployment_settings.has_module("climate"):
             )
             date  = db.executesql(query)[0][0]
             if date is not None:
-                year,month = ClimateDataPortal.month_number_to_year_month(date)
+                year,month = ClimateDataPortal.to_date_tuple(date)
                 return "%s-%s" % (month, year)
             else:
                 return NONE
