@@ -2001,13 +2001,12 @@ ClimateDataMapPlugin = function (config) {
                     }
                     var pre_rounding_factor = Math.pow(
                         10, 
-                        7-Math.floor(Math.log(converted_value) / Math.LN10)
+                        7-Math.floor(Math.log(Math.abs(converted_value)) / Math.LN10)
                     )
-                    attributes.value = (
-                        Math.round(
-                            converted_value * pre_rounding_factor
-                        ) / pre_rounding_factor
-                    ).toString().replace(
+                    var attribute_value = Math.round(
+                        converted_value * pre_rounding_factor
+                    ) / pre_rounding_factor                    
+                    attributes.value = attribute_value.toString().replace(
                         exponent_pattern,
                         '\u00d710<sup>$1</sup>'
                     )+' '+display_units
