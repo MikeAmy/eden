@@ -1846,6 +1846,13 @@ ClimateDataMapPlugin = function (config) {
                                     }
                                 }
                             )
+                            plugin.when_places_loaded(
+                                function () {
+                                    plugin.colour_key.with_limits(
+                                        plugin.render_map_layer
+                                    )
+                                }
+                            )
                         },
                         failure: function () {
                             plugin.set_status(
