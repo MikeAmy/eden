@@ -2186,7 +2186,7 @@ ClimateDataMapPlugin = function (config) {
                 }
                 else {
                     if (
-                        error.error == 'MeaninglessUnits' ||
+                        error.error == 'MeaninglessUnitsException' ||
                         error.error == 'DSLTypeError' || 
                         error.error == 'DimensionError'
                     ) {
