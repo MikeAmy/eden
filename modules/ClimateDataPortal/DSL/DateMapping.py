@@ -22,6 +22,8 @@ def operation_date_mapping(binop):
             binop.date_mapping_error = MismatchedDateMapping(
                 (binop, left_date_mapping, right_date_mapping)
             )
+    else:
+        binop.date_mapping = right_date_mapping
     return binop.date_mapping
 
 from . import Pow
