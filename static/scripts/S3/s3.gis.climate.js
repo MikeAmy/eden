@@ -314,6 +314,7 @@ var ColourKey = OpenLayers.Class(OpenLayers.Control, {
                 gradient_image.mouseout(lower)
                 gradient_image.click(function () {
                     colour_key.set_gradient(colour_gradient)
+                    colour_key.use_callback()
                 })
             }
         )
@@ -2058,7 +2059,7 @@ ClimateDataMapPlugin = function (config) {
     plugin.render_map_layer = function(min_value, max_value) {
         plugin.overlay_layer.destroyFeatures()
         // Law of Demeter violation:
-        var colour_gradient = plugin.colour_key.colour_gradient
+        var colour_gradient = plugin.colour_key.gradient
         var feature_data = plugin.feature_data
         var place_ids = feature_data.keys
         var values = feature_data.values
