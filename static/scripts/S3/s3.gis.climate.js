@@ -35,110 +35,47 @@ OpenLayers.Control.SelectFeature.prototype.unselectAll = function (options) {
 }
 
 function each(array, fn) {
-    for (
-        var i = 0;
-        i < array.length;
-        ++i
+    if (!array) {
+        throw new Error(
+            ""+array+" is not an array"
+        )
+    }
+    else {
+        for (
+            var i = 0;
+            i < array.length;
+            ++i
+        ) {
+            fn(array[i], i)
+        }
+    }
+}
+
+function walk(items, use_item) {
+    if (
+        items.constructor === Array
     ) {
-        fn(array[i], i)
-    }
-}
-
-function base64_encode (s) {
-    var base64chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'.split("");
-    var r = ''; 
-    var p = ''; 
-    var c = s.length % 3;
-    if (c > 0) { 
-        for (; c < 3; c++) { 
-            p += '='; 
-            s += '\0'; 
-        } 
-    }
-    for (c = 0; c < s.length; c += 3) {
-        if (c > 0 && (c / 3 * 4) % 76 == 0) { 
-            r += '\r\n'; 
-        }
-        var n = (
-            (s.charCodeAt(c) << 16) + 
-            (s.charCodeAt(c+1) << 8) + 
-            s.charCodeAt(c+2)
-        )
-        n = [
-            (n >>> 18) & 63,
-            (n >>> 12) & 63,
-            (n >>> 6) & 63,
-            n & 63
-        ];
-        r += (
-            base64chars[n[0]] + 
-            base64chars[n[1]] + 
-            base64chars[n[2]] + 
-            base64chars[n[3]]
-        )
-    }
-    return r.substring(0, r.length - p.length) + p;
-}
-
-function create_bitmap_data() {
-    function encode(number, bytes) {
-        var oldbase = 1
-        var string = ''
-        for (var x = 0; x < bytes; x++) {
-            var byte = 0
-            if (number != 0) {
-                var base = oldbase * 256
-                byte = number % base
-                number = number - byte
-                byte = byte / oldbase
-                oldbase = base
+        each(
+            items,
+            function (item) {
+                walk(item, use_item)
             }
-            string += String.fromCharCode(byte)
-        }
-        return string
-    }
-    var width = colour_map.length;
-
-    var data = [];
-    for (var x = 0; x < width; x++) {
-        var value = colour_map[Math.floor((x/width) * colour_map.length)]
-        data.push(
-            String.fromCharCode(
-                value[2],
-                value[1],
-                value[0]
-            )
         )
     }
-    padding = (
-        width % 4 ? 
-        '\0\0\0'.substr((width % 4) - 1, 3):
-        ''
-    );
-    data.push(padding + padding + padding)
-    var data_bytes = data.join('')
-
-    var info_header = (
-        encode(40, 4) + // Number of bytes in the DIB header (from this point)
-        encode(width, 4) + // Width of the bitmap in pixels
-        encode(1, 4) + // Height of the bitmap in pixels
-        '\x01\0' + // Number of color planes being used
-        encode(24, 2) + // Number of bits per pixel
-        '\0\0\0\0'+ // BI_RGB, no Pixel Array compression used
-        encode(data_bytes.length, 4)+ // Size of the raw data in the Pixel Array (including padding)
-        encode(2835, 4)+ //Horizontal resolution of the image
-        encode(2835, 4)+ // Vertical resolution of the image
-        '\0\0\0\0\0\0\0\0'
-    );
-
-    var header_length = 14 + info_header.length
-    return (
-        'BM'+
-        encode(header_length + data_bytes.length, 4)+
-        '\0\0\0\0'+
-        encode(header_length, 4)
-    ) + info_header + data_bytes
-};
+    else {
+        use_item(items)
+    }
+}
+function flatten(items) {
+    var result = []
+    walk(
+        items,
+        function (item) {
+            result.push(item)
+        }
+    )
+    return result
+}
 
 function node(tag_name, attrs, children) {
     var result = $(document.createElement(tag_name))
@@ -147,12 +84,13 @@ function node(tag_name, attrs, children) {
             result.attr(key, attrs[key])
         }
     }
-    result.append.apply(result, children)
+    result.append.apply(result, flatten(children))
     return result
 }
 function NodeGenerator(tag_name) {
     return function (/* attrs, child1... */) {
         var attrs = Array.prototype.shift.apply(arguments)
+        arguments.constructor = Array
         return node(tag_name, attrs, arguments)
     }
 }
@@ -176,6 +114,7 @@ function replace_power_with_sup(string) {
 }
 
 var ColourKey = OpenLayers.Class(OpenLayers.Control, {
+    CLASS_NAME: 'ColourKey',
     /* The colour key is implemented as an OpenLayers control
        so that it gets rendered on the printed map
        attributes:
@@ -187,15 +126,21 @@ var ColourKey = OpenLayers.Class(OpenLayers.Control, {
         OpenLayers.Control.prototype.destroy.apply(colour_key, arguments);
     },
     
+    set_gradient: function (colour_gradient) {
+        var colour_key = this
+        colour_key.gradient = colour_gradient
+        colour_gradient.fill_image(
+            colour_key.$key_colour_key_img
+        )
+    },
+    
     activate: function() {
         var colour_key = this
-        if (OpenLayers.Control.prototype.activate.apply(colour_key, arguments)) {
+        if (
+            OpenLayers.Control.prototype.activate.apply(colour_key, arguments)
+        ) {
             // show colours
-            colour_key.$key_colour_key_img.attr(
-                'src',
-                'data:image/bmp;base64,'+
-                base64_encode(create_bitmap_data())
-            )
+            colour_key.set_gradient(colour_key.gradients[0])
             // when the user changes limits, the map colours update instantly
             colour_key.use_callback = function () {
                 if (!!colour_key.use_limits) {
@@ -212,8 +157,9 @@ var ColourKey = OpenLayers.Class(OpenLayers.Control, {
     
     deactivate: function() {
         var colour_key = this
-        if (OpenLayers.Control.prototype.deactivate.apply(colour_key, arguments)) {
-            
+        if (
+            OpenLayers.Control.prototype.deactivate.apply(colour_key, arguments)
+        ) {
             return true;
         } else {
             return false;
@@ -328,10 +274,12 @@ var ColourKey = OpenLayers.Class(OpenLayers.Control, {
         var colour_key = this
         OpenLayers.Control.prototype.draw.apply(colour_key, arguments);
         
-        colour_key.$lower_limit = INPUT({size:5, value:'Min',
+        colour_key.$lower_limit = INPUT({
+            size:5, value:'Min',
             style: 'background-color:#222; border:1px solid #888; color:white;'
         })
-        colour_key.$upper_limit = INPUT({size:5, value:'Max',
+        colour_key.$upper_limit = INPUT({
+            size:5, value:'Max',
             style:'text-align:right; background-color:#222; border:1px solid #888; color:white;'
         })
         colour_key.$limit_lock = INPUT({
@@ -340,8 +288,55 @@ var ColourKey = OpenLayers.Class(OpenLayers.Control, {
             id:'key_lock'
         })
         colour_key.$limit_lock_label = $(
-            '<label for="key_lock" style="color:white; padding:0.5em;">Lock limits between queries</label>')
-        colour_key.$key_colour_key_img = IMG({width:'100%', height:'15px'})
+            '<label for="key_lock" style="color:white; padding:0.5em;">Lock limits between queries</label>'
+        )
+        
+        var gradient_images = []
+        function raise(x) {
+            $(this).css('border-top', '1px solid #DDD')
+            $(this).css('border-bottom', '1px solid #AAA')
+        }
+        function lower(x) {
+            $(this).css('border-top', '1px solid black')
+            $(this).css('border-bottom', '1px solid black')
+        }
+        each(
+            colour_key.gradients,
+            function (colour_gradient) {
+                var gradient_image = IMG({
+                    width:'100%',
+                    height:'15px',
+                    style:'border-top: 1px solid black; border-bottom: 1px solid black; margin-top: 1px;'
+                })
+                colour_gradient.fill_image(gradient_image)
+                gradient_images.push(gradient_image)
+                gradient_image.mouseover(raise)
+                gradient_image.mouseout(lower)
+                gradient_image.click(function () {
+                    colour_key.set_gradient(colour_gradient)
+                })
+            }
+        )
+        colour_key.$controls = DIV(
+            {
+                style: 'display: none; padding-top: 3px;'
+            },
+            gradient_images,
+            DIV({style:'text-align:center;'},
+                colour_key.$limit_lock,
+                colour_key.$limit_lock_label
+            )
+        )
+        
+        colour_key.$key_colour_key_img = IMG({
+            width:'100%',
+            height:'15px'
+        })
+        colour_key.$gradient = DIV({},
+            colour_key.$key_colour_key_img,
+            colour_key.$controls
+        )
+        
         colour_key.$units = SPAN({}, 'Units')
         var $div = colour_key.$inner_div = DIV({
                 style:'width: 240px; position:absolute; top: 10px; left:55px; background-color:#222; border-top:1px solid #EEE; padding: 4px; border-radius: 5px;color:white;'
@@ -368,11 +363,17 @@ var ColourKey = OpenLayers.Class(OpenLayers.Control, {
                 )
                 // key_scale_tr (unused)
             ),
-            colour_key.$key_colour_key_img,
-            DIV({style:'text-align:center;'},
-                colour_key.$limit_lock,
-                colour_key.$limit_lock_label
-            )
+            colour_key.$gradient
+        )
+        $div.mouseover(
+            function () {
+                colour_key.$controls.css('display', 'inline')
+            }
+        )
+        $div.mouseout(
+            function () {
+                colour_key.$controls.css('display', 'none')
+            }
         )
         /*
         // code that draws a scale on the colours as lines, to aid 
@@ -405,8 +406,7 @@ var ColourKey = OpenLayers.Class(OpenLayers.Control, {
         colour_key.$limit_lock_label.hide()
         colour_key.$inner_div.css('width', 300)
         colour_key.$inner_div.css('left', 10)
-    },
-    CLASS_NAME: 'ColourKey'
+    }
 });
 
 var TextAreaAutoResizer = function(
@@ -587,8 +587,137 @@ var QueryBox = OpenLayers.Class(OpenLayers.Control, {
     }
 });
 
+function base64_encode (s) {
+    var base64chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'.split("");
+    var r = ''
+    var p = ''
+    var c = s.length % 3
+    if (c > 0) { 
+        for (; c < 3; c++) { 
+            p += '='
+            s += '\0'
+        } 
+    }
+    for (c = 0;
+        c < s.length;
+        c += 3
+    ) {
+        if (c > 0 && (c / 3 * 4) % 76 == 0) { 
+            r += '\r\n'; 
+        }
+        var n = (
+            (s.charCodeAt(c) << 16) + 
+            (s.charCodeAt(c+1) << 8) + 
+            s.charCodeAt(c+2)
+        )
+        n = [
+            (n >>> 18) & 63,
+            (n >>> 12) & 63,
+            (n >>> 6) & 63,
+            n & 63
+        ]
+        r += (
+            base64chars[n[0]] + 
+            base64chars[n[1]] + 
+            base64chars[n[2]] + 
+            base64chars[n[3]]
+        )
+    }
+    return r.substring(0, r.length - p.length) + p
+}
+function ColourGradient(
+    rgb_values
+) {
+    this.rgb_values = rgb_values
+}
+ColourGradient.prototype = {
+    colour_for_value: function (
+        normalised_value // must be between 0 and 1
+    ) {
+        var rgb_values = this.rgb_values
+        return rgb_values[
+            Math.floor(
+                normalised_value * (rgb_values.length-1)
+            )
+        ]
+    },
+    fill_image: function (image) {
+        $(image).attr(
+            'src',
+            'data:image/bmp;base64,'+
+            base64_encode(this.bitmap_data())
+        )
+    },
+    bitmap_data: function () {
+        var colour_gradient = this
+        if (colour_gradient._bitmap_data) {
+            return colour_gradient._bitmap_data
+        }
+        else {
+            var rgb_values = colour_gradient.rgb_values
+            function encode(number, bytes) {
+                var oldbase = 1
+                var string = ''
+                for (var x = 0; x < bytes; x++) {
+                    var byte = 0
+                    if (number != 0) {
+                        var base = oldbase * 256
+                        byte = number % base
+                        number = number - byte
+                        byte = byte / oldbase
+                        oldbase = base
+                    }
+                    string += String.fromCharCode(byte)
+                }
+                return string
+            }
+            var width = rgb_values.length
 
-/*colour_map = [
+            var data = []
+            for (var x = 0; x < width; x++) {
+                var value = rgb_values[Math.floor((x/width) * rgb_values.length)]
+                data.push(
+                    String.fromCharCode(
+                        value[2],
+                        value[1],
+                        value[0]
+                    )
+                )
+            }
+            padding = (
+                width % 4 ? 
+                '\0\0\0'.substr((width % 4) - 1, 3):
+                ''
+            )
+            data.push(padding + padding + padding)
+            var data_bytes = data.join('')
+
+            var info_header = (
+                encode(40, 4) + // Number of bytes in the DIB header (from this point)
+                encode(width, 4) + // Width of the bitmap in pixels
+                encode(1, 4) + // Height of the bitmap in pixels
+                '\x01\0' + // Number of color planes being used
+                encode(24, 2) + // Number of bits per pixel
+                '\0\0\0\0'+ // BI_RGB, no Pixel Array compression used
+                encode(data_bytes.length, 4)+ // Size of the raw data in the Pixel Array (including padding)
+                encode(2835, 4)+ //Horizontal resolution of the image
+                encode(2835, 4)+ // Vertical resolution of the image
+                '\0\0\0\0\0\0\0\0'
+            )
+
+            var header_length = 14 + info_header.length
+            colour_gradient._bitmap_data = (
+                'BM'+
+                encode(header_length + data_bytes.length, 4)+
+                '\0\0\0\0'+
+                encode(header_length, 4)
+            ) + info_header + data_bytes
+            return colour_gradient._bitmap_data
+        }
+    }
+}
+
+var course_colour_steps = new ColourGradient([
     [240, 10, 135],
 	[255, 62, 62],
     [240, 130, 40],
@@ -599,39 +728,73 @@ var QueryBox = OpenLayers.Class(OpenLayers.Control, {
     [30, 60, 255],
     [130, 0, 220],
     [160, 0, 200]
-]*/
-colour_map = []
-function compute_colour_map() {
+])
+
+var blue_green_red_cosines = []
+with (Math) {
     var i;
-    with (Math) {
-        /*
-        // Blue green red, cosines,
-        for (i = -900; i < 900; i++) {
-            var x = i/1000 * PI
-            var red = floor((1- (2 * abs(PI/2-x))/PI) * 255) //floor(sin(x) * 255)
-            var green = floor((1- (2 * abs(x))/PI) * 255) //floor(cos(x) *255)
-            var blue = floor((1- (2 * abs(PI/2+x))/PI) * 255) //floor(-sin(x) *255)
-            colour_map.push([
-                red < 0 ? 0 : red,
-                green < 0 ? 0 : green,
-                blue < 0 ? 0 : blue
-            ])
-        }
-        */
-        for (i = -400; i < 800; i++) {
-            var x = i/1000 * PI
-            var red = floor(sin(x) * 255)
-            var green = floor(sin(x + (PI/3)) *255)
-            var blue = floor(sin(x + (2 * PI/3)) *255)
-            colour_map.push([
-                red < 0 ? 0 : red,
-                green < 0 ? 0 : green,
-                blue < 0 ? 0 : blue
-            ])
-        }
+    for (i = -900; i < 900; i++) {
+        var x = i/1000 * PI
+        var red = floor((1- (2 * abs(PI/2-x))/PI) * 255) //floor(sin(x) * 255)
+        var green = floor((1- (2 * abs(x))/PI) * 255) //floor(cos(x) *255)
+        var blue = floor((1- (2 * abs(PI/2+x))/PI) * 255) //floor(-sin(x) *255)
+        blue_green_red_cosines.push([
+            red < 0 ? 0 : red,
+            green < 0 ? 0 : green,
+            blue < 0 ? 0 : blue
+        ])
     }
 }
-compute_colour_map()
+
+var blue_green_red_cosines = new ColourGradient(blue_green_red_cosines)
+
+var smooth_blue_green_red = []
+with (Math) {
+    var i;
+    for (i = -400; i < 800; i++) {
+        var x = i/1000 * PI
+        var red = floor(sin(x) * 255)
+        var green = floor(sin(x + (PI/3)) *255)
+        var blue = floor(sin(x + (2 * PI/3)) *255)
+        smooth_blue_green_red.push([
+            red < 0 ? 0 : red,
+            green < 0 ? 0 : green,
+            blue < 0 ? 0 : blue
+        ])
+    }
+}
+var smooth_blue_green_red = new ColourGradient(smooth_blue_green_red)
+
+function linear_gradient(start_colour, end_colour, steps) {
+    steps = steps || 100
+    var start_red = start_colour[0],
+        start_green = start_colour[1],
+        start_blue = start_colour[2]
+    var range_red = end_colour[0] - start_red,
+        range_green = end_colour[1] - start_green,
+        range_blue = end_colour[2] - start_blue
+    var colours = []
+    var floor = Math.floor
+    for (
+        var i = 0;
+        i < steps;
+        ++i
+    ) {
+        var value = i / steps
+        colours.push([
+            floor((start_red + value * range_red) * 255),
+            floor((start_green + value * range_green) * 255),
+            floor((start_blue + value * range_blue) * 255),
+        ])
+    }
+    return colours
+}
+
+var black_to_white = new ColourGradient(linear_gradient([0,0,0], [1,1,1])),
+    blue_to_yellow = new ColourGradient(linear_gradient([0,0,1], [1,1,0])),
+    red_to_green = new ColourGradient(linear_gradient([1,0,0], [0,1,0])),
+    red_to_blue = new ColourGradient(linear_gradient([1,0,0], [0,0,1])),
+    green_to_blue = new ColourGradient(linear_gradient([0,1,0], [0,0,1]))
 
 var FilterBox = OpenLayers.Class(OpenLayers.Control, {
     CLASS_NAME: 'FilterBox',
@@ -1894,6 +2057,8 @@ ClimateDataMapPlugin = function (config) {
     
     plugin.render_map_layer = function(min_value, max_value) {
         plugin.overlay_layer.destroyFeatures()
+        // Law of Demeter violation:
+        var colour_gradient = plugin.colour_key.colour_gradient
         var feature_data = plugin.feature_data
         var place_ids = feature_data.keys
         var values = feature_data.values
@@ -1941,9 +2106,9 @@ ClimateDataMapPlugin = function (config) {
                     (0.0 <= normalised_value) && 
                     (normalised_value <= 1.0)
                 ) {
-                    var colour_value = colour_map[Math.floor(
-                        normalised_value * (colour_map.length-1)
-                    )]
+                    var colour_value = colour_gradient.colour_for_value(
+                        normalised_value
+                    )
                     function hexFF(value) {
                         return (256+value).toString(16).substr(1)
                     }
@@ -2750,7 +2915,18 @@ ClimateDataMapPlugin = function (config) {
             }
         )
         
-        plugin.colour_key = new ColourKey()
+        plugin.colour_key = new ColourKey({
+            gradients: [
+                course_colour_steps,
+                smooth_blue_green_red,
+                blue_green_red_cosines,
+                black_to_white,
+                blue_to_yellow,
+                red_to_green,
+                red_to_blue,
+                green_to_blue
+            ]
+        })
         plugin.colour_key.on_change(plugin.render_map_layer)
         map.addControl(plugin.colour_key)
         plugin.colour_key.activate()
