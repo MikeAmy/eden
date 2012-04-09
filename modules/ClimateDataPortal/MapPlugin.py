@@ -139,12 +139,12 @@ class MapPlugin(object):
         DSL = env.DSL
         expression = DSL.parse(query_expression)
         understood_expression_string = str(expression)        
-        units = DSL.units(expression)
+        units = DSL.units(expression)()
         if units is None:
             analysis_strings = []
             def analysis_out(*things):
                 analysis_strings.append("".join(map(str, things)))
-            DSL.analysis(expression, analysis_out)
+            DSL.analysis(expression)(analysis_out)
             raise MeaninglessUnitsException(
                 "\n".join(analysis_strings)
             )                
@@ -179,7 +179,7 @@ class MapPlugin(object):
                     )
                 )
                 write('"units":"%s",' % units)
-                write('"grid_size":%f,' % min(grid_sizes(expression)))
+                write('"grid_size":%f,' % min(grid_sizes(expression)()))
                 
                 write('"keys":[')
                 write(",".join(map(str, keys)))
@@ -218,12 +218,12 @@ class MapPlugin(object):
         DSL = env.DSL
         expression = DSL.parse(query_expression)
         understood_expression_string = str(expression)        
-        units = DSL.units(expression)
+        units = DSL.units(expression)()
         if units is None:
             analysis_strings = []
             def analysis_out(*things):
                 analysis_strings.append("".join(map(str, things)))
-            DSL.analysis(expression, analysis_out)
+            DSL.analysis(expression)(analysis_out)
             raise MeaninglessUnitsException(
                 "\n".join(analysis_strings)
             )                
@@ -250,7 +250,7 @@ class MapPlugin(object):
                 csv_data_file = open(file_path, "w")
                 write = csv_data_file.write
                 
-                #min(grid_sizes(expression))
+                #min(grid_sizes(expression)())
                 write("latitude,longitude,station_id,station_name,elevation,%s\n" % (units))
                 place_ids = {}
                 for place_row in db(
@@ -727,22 +727,22 @@ def render_plots(
             understood_expression_string = str(expression)
             spec_names.append(label)
             
-            units = DSL.units(expression)
+            units = DSL.units(expression)()
             unit_string = str(units)
             if units is None:
                 analysis_strings = []
                 def analysis_out(*things):
                     analysis_strings.append("".join(map(str, things)))
-                DSL.analysis(expression, analysis_out)
+                DSL.analysis(expression)(analysis_out)
                 raise MeaninglessUnitsException(
                     "\n".join(analysis_strings)
                 )
             
-            date_mapper = DSL.date_mapping(expression)
+            date_mapper = DSL.date_mapping(expression)()
             
             is_yearly_values = True #"Months(" in query_expression
             yearly.append(is_yearly_values)
-            grouping_key = get_grouping_key(date_mapper, is_yearly_values)
+            grouping_key = get_grouping_key(date_mapper)(is_yearly_values)
             code = DSL.R_Code_for_values(
                 expression, 
                 grouping_key,
@@ -780,7 +780,7 @@ def render_plots(
                 converted_keys = map(
                     (
                         lambda time_period: 
-                            time_period_to_float_year(date_mapper, time_period)
+                            time_period_to_float_year(date_mapper)(time_period)
                     ),
                     keys
                 )
@@ -815,13 +815,14 @@ def render_plots(
                         add_value(converter(data[time_period]))
 
                 get_chart_values(
-                    date_mapper,
+                    date_mapper
+                )(
                     start_time_period,
                     end_time_period,
                     is_yearly_values,
                     use_time_period
                 )
-                
+                                
                 def append_time_series(**kwargs):
                     time_serieses.append(
                         R("ts")(
@@ -831,7 +832,7 @@ def render_plots(
                             **kwargs
                         )
                     )
-                time_series_args(date_mapper, is_yearly_values, append_time_series)
+                time_series_args(date_mapper)(is_yearly_values, append_time_series)
 
         min_start_time_period = min(start_time_periods)
         max_end_time_period = max(end_time_periods)
@@ -843,7 +844,8 @@ def render_plots(
         axis_labels = []
         
         get_axis_labels(
-            date_mapper,
+            date_mapper
+        )(
             min_start_time_period,
             max_end_time_period,
             axis_points,

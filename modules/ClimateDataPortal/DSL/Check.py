@@ -81,7 +81,8 @@ def MultipleYearsByMonth_check_months(date_mapper, error, months, month_numbers)
 def Months_check(month_filter, date_mapper):
     month_filter.errors = []
     check_months(
-        date_mapper,
+        date_mapper
+    )(
         error = month_filter.errors.append,
         months = month_filter.months,
         month_numbers = month_filter.month_numbers
@@ -169,7 +170,8 @@ def From_check(from_date, date_mapper):
     error = from_date.errors.append
     year = from_date.year
     from_date.date = check_from(
-        date_mapper,
+        date_mapper
+    )(
         error, 
         from_date.year,
         from_date.month,
@@ -184,8 +186,9 @@ def To_check(to_date, date_mapper):
     to_date.errors = []
     error = to_date.errors.append
     year = to_date.year
-    to_date.date = check_from(
-        date_mapper,
+    to_date.date = check_to(
+        date_mapper
+    )(
         error, 
         to_date.year,
         to_date.month,
@@ -196,8 +199,8 @@ def To_check(to_date, date_mapper):
 @check.implementation(Addition, Subtraction, Multiplication, Division)
 def Binop_check(binop):
     binop.errors = []
-    left = check(binop.left)
-    right = check(binop.right)
+    left = check(binop.left)()
+    right = check(binop.right)()
     return left or right
 
 @check.implementation(Pow)
@@ -207,7 +210,7 @@ def PowRoot_check(binop):
     exponent = binop.right
     if not isinstance(exponent, int) or exponent == 0:
         error("Exponent should be a positive, non-zero number.")
-    return check(binop.left) or binop.errors
+    return check(binop.left)() or binop.errors
 
 @check.implementation(*aggregations)
 def Aggregation_check(aggregation):
@@ -244,7 +247,7 @@ def Aggregation_check(aggregation):
                         )
                     )
                 specification_errors |= bool(
-                    check(specification, date_mapper)
+                    check(specification)(date_mapper)
                 )
     return aggregation.errors or specification_errors
 
@@ -294,11 +297,11 @@ def Binop_check_analysis(binop, out):
         out("    ", *strings)
 
     out("(")
-    check_analysis(binop.left, indent)
+    check_analysis(binop.left)(indent)
 
     indent(binop.op)
     
-    check_analysis(binop.right, indent)
+    check_analysis(binop.right)(indent)
     out(")")
     if binop.errors:
         out("# ^ ", ", ".join(binop.errors))
@@ -312,7 +315,7 @@ def aggregation_check_analysis(aggregation, out):
     indent('"%s"' % aggregation.dataset_name, ",")
     
     for specification in aggregation.specification:
-        check_analysis(specification, indent)
+        check_analysis(specification)(indent)
     out(")")
     if aggregation.errors:
         out("# ^ ", ", ".join(aggregation.errors))

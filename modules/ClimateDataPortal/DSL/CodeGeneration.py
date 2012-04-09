@@ -13,6 +13,8 @@ Maximum.SQL_function = "MAX"
 Count.SQL_function = "COUNT"
 
 
+# unused code, to try to push expressions into the SQL
+# Todo: remove or implement
 can_be_SQL = Method("can_be_SQL")
 @can_be_SQL.implementation(Number)
 def Number_can_be_SQL(number):
@@ -20,11 +22,11 @@ def Number_can_be_SQL(number):
 
 @can_be_SQL.implementation(Addition, Subtraction, Multiplication, Division)
 def Binop_can_be_SQL(binop):
-    return (not binop.R_only) and can_be_SQL(binop.left) and can_be_SQL(binop.right)
+    return (not binop.R_only) and can_be_SQL(binop.left)() and can_be_SQL(binop.right)()
 
 @can_be_SQL.implementation(Pow)
 def Binop_can_be_SQL(binop):
-    return (not binop.R_only) and can_be_SQL(binop.left)
+    return (not binop.R_only) and can_be_SQL(binop.left)()
 
 @can_be_SQL.implementation(*aggregations)
 def Aggregation_can_be_SQL(aggregation):
@@ -36,15 +38,15 @@ generate_code = Method("generate_code")
 
 @generate_code.implementation(*operations)
 def Binop_generate_code(binop, parent_node_id, key, pre, out, post, extra_filter):
-    #if can_be_SQL(binop):
+    #if can_be_SQL(binop)():
     #    out('dbGetQuery(con, "')
-    #    SQL(aggregation, key, out)
+    #    SQL(aggregation)(key, out)
     #    out('")')
     #else:
-    R(binop, parent_node_id, key, pre, out, post, extra_filter)
+    R(binop)(parent_node_id, key, pre, out, post, extra_filter)
 
 SQL = Method("SQL")
-R = Method("R")
+R = Method("R") # Todo: rename to distinguish between this and R interpreter
 
 @SQL.implementation(Number)
 def number_out(number, key, out, extra_filter):
@@ -72,11 +74,11 @@ def BinaryOperator_SQL(binop, key, out, extra_filter):
         " left.value", binop.sql_op, "right.value as value ",
         "FROM ("
     )
-    SQL(binop.left, key, out, extra_filter)
+    SQL(binop.left)(key, out, extra_filter)
     out(") AS left ",
         "JOIN ("
     )
-    SQL(binop.right, key, out, extra_filter)
+    SQL(binop.right)(key, out, extra_filter)
     out(") AS right ",
         "ON left.key = right.key"
     )
@@ -88,7 +90,7 @@ def BinaryOperator_SQL(binop, key, out, extra_filter):
         "(left.value^ ", str(binop.right), ") as value ",
         "FROM ("
     )
-    SQL(binop.left, key, out, extra_filter)
+    SQL(binop.left)(key, out, extra_filter)
     out(") AS left")
 
 def init_R_interpreter(R, database_settings):
@@ -296,16 +298,16 @@ In an R shell:
 @R.implementation(*operations)
 def BinaryOperator_R(binop, parent_node_id, key, pre, out, post, extra_filter):
     out(type(binop).__name__, "(")
-    generate_code(binop.left, parent_node_id+"_left", key, pre, out, post, extra_filter)
+    generate_code(binop.left)(parent_node_id+"_left", key, pre, out, post, extra_filter)
     out(", ")
-    generate_code(binop.right, parent_node_id+"_right", key, pre, out, post, extra_filter)
+    generate_code(binop.right)(parent_node_id+"_right", key, pre, out, post, extra_filter)
     out(")")
 
 @generate_code.implementation(
     *aggregations
 )
 def DSLAggregationNode_generate_code(aggregation, node_id, key, pre, out, post, extra_filter):
-    R(aggregation, node_id, key, pre, out, post, extra_filter)
+    R(aggregation)(node_id, key, pre, out, post, extra_filter)
 
 @R.implementation(*aggregations)
 def DSLAggregationNode_R(aggregation, parent_node_id, key, pre, out, post, extra_filter):
@@ -313,7 +315,7 @@ def DSLAggregationNode_R(aggregation, parent_node_id, key, pre, out, post, extra
     node_id =  parent_node_id+"_"+type(aggregation).__name__
     
     pre(node_id, " <- parallel(single_connection_query('")
-    SQL(aggregation, key, pre, extra_filter)
+    SQL(aggregation)(key, pre, extra_filter)
     pre("'\n))\n")
     pre("query_jobs[[length(query_jobs)+1]] <- ", node_id, "\n")
     
@@ -370,7 +372,8 @@ def DSLAggregationNode_SQL(aggregation, key, out, extra_filter):
     add_filter = filter_strings.append
     # Date Mapping
     time_period, month_numbers = time_period_and_month_numbers(
-        date_mapper,
+        date_mapper
+    )(
         aggregation.month_numbers
     )
     
@@ -403,7 +406,7 @@ def DSLAggregationNode_SQL(aggregation, key, out, extra_filter):
         if month_numbers == []:
             add_filter("FALSE")
         else:
-            add_months_filter(date_mapper, month_numbers, time_period, add_filter)
+            add_months_filter(date_mapper)(month_numbers, time_period, add_filter)
     if filter_strings:
         out(
             " WHERE ", 
@@ -435,7 +438,7 @@ def R_Code_for_values(expression, attribute, extra_filter = None):
     def post(*strings):
         extend_post_output(strings)
 
-    R(expression, "result", attribute, pre, out, post, extra_filter)
+    R(expression)("result", attribute, pre, out, post, extra_filter)
     
     post_output.append("return (result)\n")
     post_output.append("}")

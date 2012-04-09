@@ -223,8 +223,8 @@ from . import (
 )
 
 def binop_units(binop, use_units):
-    left_units = units(binop.left)
-    right_units = units(binop.right)
+    left_units = units(binop.left)()
+    right_units = units(binop.right)()
     if left_units is not None and right_units is not None:
         use_units(left_units, right_units)
     else:
@@ -331,11 +331,11 @@ def Binop_analysis(binop, out):
         out("    ", *strings)
 
     out("(")
-    analysis(binop.left, indent)
+    analysis(binop.left)(indent)
 
     indent(binop.op)
     
-    analysis(binop.right, indent)
+    analysis(binop.right)(indent)
     out(")    # ", binop.units or "???")
     if hasattr(binop, "units_error"):
         out("# ", binop.units_error)

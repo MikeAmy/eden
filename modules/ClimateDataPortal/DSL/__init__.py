@@ -376,16 +376,16 @@ def parse(expression_string):
             dsl_syntax_error.understood_expression = cleaned_expression_string
             raise dsl_syntax_error
         else:
-            if check(expression):
+            if check(expression)():
                 check_analysis_out = []
                 def analysis_out(*things):
                     check_analysis_out.append("".join(map(str, things)))
-                check_analysis(expression, analysis_out)
+                check_analysis(expression)(analysis_out)
                 raise DSLTypeError(
                     "\n".join(check_analysis_out)
                 )
             else:
-                Build(expression)
+                Build(expression)()
                 return expression
 
 from Units import (

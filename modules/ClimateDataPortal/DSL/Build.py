@@ -25,16 +25,16 @@ def apply_context(aggregation):
     aggregation.to_date = None
     aggregation.month_numbers = None
     for specification in aggregation.specification:
-        Build(specification, aggregation)
+        Build(specification)(aggregation)
 
 @Build.implementation(Addition, Subtraction, Multiplication, Division)
 def binop_build(binop):
-    Build(binop.left)
-    Build(binop.right)
+    Build(binop.left)()
+    Build(binop.right)()
 
 @Build.implementation(Pow)
 def binop_build(binop):
-    Build(binop.left)
+    Build(binop.left)()
 
 def set_months(aggregation, month_numbers):
     if aggregation.month_numbers is not None:

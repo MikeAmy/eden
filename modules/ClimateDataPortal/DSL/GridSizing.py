@@ -20,8 +20,8 @@ class MismatchedGridSize(Exception):
 from . import Addition, Subtraction, Multiplication, Division
 @grid_sizes.implementation(Addition, Subtraction, Multiplication, Division)
 def operation_grid_sizes(binop):
-    left_grid_sizes = grid_sizes(binop.left)
-    right_grid_sizes = grid_sizes(binop.right)
+    left_grid_sizes = grid_sizes(binop.left)()
+    right_grid_sizes = grid_sizes(binop.right)()
     binop.grid_sizes = best_grid_sizes = left_grid_sizes.intersection(right_grid_sizes)
     if len(best_grid_sizes) == 0:
         binop.grid_size_error = MismatchedGridSize(
@@ -32,7 +32,7 @@ def operation_grid_sizes(binop):
 from . import Pow
 @grid_sizes.implementation(Pow)
 def power_grid_sizes(pow):
-    pow.grid_sizes = grid_sizes(pow.left)
+    pow.grid_sizes = grid_sizes(pow.left)()
     return pow.grid_sizes
 
 from . import aggregations
@@ -51,12 +51,12 @@ apply_grid_size = Method("grid_size")
 
 @apply_grid_size.implementation(Addition, Subtraction, Multiplication, Division)
 def apply_operation_grid_size(binop, grid_size):
-    apply_grid_size(binop.left, grid_size)
-    apply_grid_size(binop.right, grid_size)
+    apply_grid_size(binop.left)(grid_size)
+    apply_grid_size(binop.right)(grid_size)
 
 @apply_grid_size.implementation(Pow)
 def apply_power_grid_size(pow, grid_size):
-    apply_grid_size(pow.left, grid_size)
+    apply_grid_size(pow.left)(grid_size)
 
 @apply_grid_size.implementation(*aggregations)
 def apply_aggregation_grid_size(aggregation, grid_size):

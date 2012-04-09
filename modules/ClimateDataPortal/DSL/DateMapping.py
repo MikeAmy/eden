@@ -11,8 +11,8 @@ WhateverDateMappingIsNeeded = object()
 from . import Addition, Subtraction, Multiplication, Division
 @date_mapping.implementation(Addition, Subtraction, Multiplication, Division)
 def operation_date_mapping(binop):
-    left_date_mapping = date_mapping(binop.left)
-    right_date_mapping = date_mapping(binop.right)
+    left_date_mapping = date_mapping(binop.left)()
+    right_date_mapping = date_mapping(binop.right)()
     if left_date_mapping != right_date_mapping:
         if right_date_mapping is WhateverDateMappingIsNeeded:
             binop.date_mapping = left_date_mapping
@@ -29,7 +29,7 @@ def operation_date_mapping(binop):
 from . import Pow
 @date_mapping.implementation(Pow)
 def power_date_mapping(pow):
-    pow.date_mapping = date_mapping(pow.left)
+    pow.date_mapping = date_mapping(pow.left)()
     return pow.date_mapping
 
 from . import aggregations

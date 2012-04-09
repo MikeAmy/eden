@@ -159,7 +159,7 @@ def test_analysis():
 
 def compare_expression_units(expression_string, expected_units):
     expression = Climate_DSL.parse(expression_string)
-    actual_units = Climate_DSL.units(expression)
+    actual_units = Climate_DSL.units(expression)()
     assert actual_units == expected_units, actual_units
 
 def test_parsing_expressions_1():
@@ -250,7 +250,7 @@ def check_data(
         "time_period",
         "place_id IN (1)"
     )
-    values_by_time_period_data_frame = R(code)()
+    values_by_time_period_data_frame = R(code)()()
     if isinstance(
         values_by_time_period_data_frame,
         map_plugin.robjects.vectors.StrVector
@@ -286,7 +286,7 @@ def test_december_data():
         "time_period",
         "place_id IN (1)"
     )
-    values_by_time_period_data_frame = R(code)()
+    values_by_time_period_data_frame = R(code)()()
     if isinstance(
         values_by_time_period_data_frame,
         map_plugin.robjects.vectors.StrVector
