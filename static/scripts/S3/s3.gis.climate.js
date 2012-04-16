@@ -2205,11 +2205,15 @@ ClimateDataMapPlugin = function (config) {
                     else {
                         attribute_string = attribute_string.replace(
                             new RegExp('(\\d+)(\\.\\d+)?', 'g'), 
-                            function (_, integer_part) {
-                                return integer_part.reverse().replace(
+                            function (_, integer_part, fractional_part) {
+                                var number_string = integer_part.reverse().replace(
                                     new RegExp('(\\d{3})(?!$)', 'g'),
                                     '$1,'
                                 ).reverse()
+                                if (fractional_part) {
+                                    number_string += fractional_part
+                                }
+                                return number_string
                             }
                         )
                     }
