@@ -129,7 +129,7 @@ var ColourKey = OpenLayers.Class(OpenLayers.Control, {
     set_gradient: function (colour_gradient) {
         var colour_key = this
         colour_key.gradient = colour_gradient
-        colour_gradient.fill_image(
+        colour_gradient.manage_image(
             colour_key.$key_colour_key_img
         )
     },
@@ -308,7 +308,7 @@ var ColourKey = OpenLayers.Class(OpenLayers.Control, {
                     height:'15px',
                     style:'border-top: 1px solid black; border-bottom: 1px solid black; margin-top: 1px;'
                 })
-                colour_gradient.fill_image(gradient_image)
+                colour_gradient.manage_image(gradient_image)
                 gradient_images.push(gradient_image)
                 gradient_image.mouseover(raise)
                 gradient_image.mouseout(lower)
@@ -331,11 +331,18 @@ var ColourKey = OpenLayers.Class(OpenLayers.Control, {
         
         colour_key.$key_colour_key_img = IMG({
             width:'100%',
-            height:'15px'
+            height:'15px',
+            title:'Click to invert colour gradient'
         })
         colour_key.$gradient = DIV({},
             colour_key.$key_colour_key_img,
             colour_key.$controls
+        )
+        colour_key.$key_colour_key_img.click(
+            function () {
+                colour_key.gradient.invert()
+                colour_key.use_callback()
+            }
         )
         
         colour_key.$units = SPAN({}, 'Units')
@@ -588,7 +595,7 @@ var QueryBox = OpenLayers.Class(OpenLayers.Control, {
     }
 });
 
-function base64_encode (s) {
+function base64_encode(s) {
     var base64chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'.split("");
     var r = ''
     var p = ''
@@ -629,33 +636,14 @@ function base64_encode (s) {
 function ColourGradient(
     rgb_values
 ) {
-    this.rgb_values = rgb_values
-}
-ColourGradient.prototype = {
-    colour_for_value: function (
-        normalised_value // must be between 0 and 1
-    ) {
-        var rgb_values = this.rgb_values
-        return rgb_values[
-            Math.floor(
-                normalised_value * (rgb_values.length-1)
-            )
-        ]
-    },
-    fill_image: function (image) {
-        $(image).attr(
-            'src',
-            'data:image/bmp;base64,'+
-            base64_encode(this.bitmap_data())
-        )
-    },
-    bitmap_data: function () {
-        var colour_gradient = this
-        if (colour_gradient._bitmap_data) {
-            return colour_gradient._bitmap_data
+    var colour_gradient = this
+    var rgb_values = rgb_values
+    var bitmap_string = null
+    function bitmap_data() {
+        if (bitmap_string != null) {
+            return bitmap_string
         }
         else {
-            var rgb_values = colour_gradient.rgb_values
             function encode(number, bytes) {
                 var oldbase = 1
                 var string = ''
@@ -707,14 +695,41 @@ ColourGradient.prototype = {
             )
 
             var header_length = 14 + info_header.length
-            colour_gradient._bitmap_data = (
+            bitmap_string = (
                 'BM'+
                 encode(header_length + data_bytes.length, 4)+
                 '\0\0\0\0'+
                 encode(header_length, 4)
             ) + info_header + data_bytes
-            return colour_gradient._bitmap_data
+            return bitmap_string
         }
+    }
+
+    var fill_image = function (image) {
+        $(image).attr(
+            'src',
+            'data:image/bmp;base64,'+
+            base64_encode(bitmap_data())
+        )
+    }
+    var images = []
+    colour_gradient.manage_image = function (image) {
+        images.push(image)
+        fill_image(image)
+    }
+    colour_gradient.invert = function () {
+        rgb_values = rgb_values.reverse()
+        bitmap_string = null
+        each(images, fill_image)
+    }
+    colour_gradient.colour_for_value = function (
+        normalised_value // must be between 0 and 1
+    ) {
+        return rgb_values[
+            Math.floor(
+                normalised_value * (rgb_values.length-1)
+            )
+        ]
     }
 }
 
@@ -2176,13 +2191,29 @@ ClimateDataMapPlugin = function (config) {
                         10, 
                         7-Math.floor(Math.log(Math.abs(converted_value)) / Math.LN10)
                     )
-                    var attribute_value = Math.round(
-                        converted_value * pre_rounding_factor
-                    ) / pre_rounding_factor                    
-                    attributes.value = attribute_value.toString().replace(
-                        exponent_pattern,
-                        '\u00d710<sup>$1</sup>'
-                    )+' '+display_units
+                    var attribute_string = (
+                        Math.round(
+                            converted_value * pre_rounding_factor
+                        ) / pre_rounding_factor
+                    ).toString()
+                    if (exponent_pattern.test(attribute_string)) {
+                        attribute_string = attribute_string.replace(
+                            exponent_pattern,
+                            '\u00d710<sup>$1</sup>'
+                        )
+                    }
+                    else {
+                        attribute_string = attribute_string.replace(
+                            new RegExp('(\\d+)(\\.\\d+)?', 'g'), 
+                            function (_, integer_part) {
+                                return integer_part.reverse().replace(
+                                    new RegExp('(\\d{3})(?!$)', 'g'),
+                                    '$1,'
+                                ).reverse()
+                            }
+                        )
+                    }
+                    attributes.value = attribute_string+' '+display_units
                     attributes.id = id
                     attributes.place_id = place_id
                 }                        
