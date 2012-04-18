@@ -820,7 +820,8 @@ var FilterBox = OpenLayers.Class(OpenLayers.Control, {
         'Enter filter expressions here to filter the map overlay. '+
         '"unfiltered" means the map overlay is not being filtered. '+
         'You can use any attribute that is shown in the overlay '+
-        'popup box, and logical operators "and", "not" and "or".'
+        'popup box, and logical operators "and", "not" and "or". \n'+
+        'within("Region name") and within_Nepal() filter by region.'
     ),
     destroy: function() {
         var filter_box = this
@@ -1024,6 +1025,9 @@ Place.prototype = {
             }
         }
         return false
+    },
+    within_Nepal: function () {
+        return this.spaces.length > 0
     },
     generate_marker: function (use_marker) {
         // only for stations
@@ -1594,19 +1598,12 @@ var Logo = OpenLayers.Class(OpenLayers.Control, {
     draw: function () {
         return (
             DIV({
-                    'id': 'sahana-button',
-                    style:'position:absolute; right: 5px; bottom:120px; background: url(static/img/black_glossy_horiz_bulge.png); color:white; border: solid 1px; border-color:#EEE #EEE #AAA #AAA; padding:5px; border-radius:5px; text-align:center;'
+                    style:'width: 120px; position:absolute; left: 5px; bottom:60px;'
                 },
-                SPAN({style:'font-size: smaller; '}, "Powered By:<br />"),
                 IMG({
-                    src:'static/img/S3menu_logo.png',
-                    style:'vertical-align:middle;'
-                }),
-                A({
-                    "class": 'plain',
-                    style:'vertical-align:middle; margin:0em 0.5em;',
-                    href:'http://eden.sahanafoundation.org/'
-                },'Sahana Eden')
+                    src:'static/img/Nepal-Government-Logo.png',
+                    width: '120px'
+                })
             )
         )[0]
     }
@@ -1631,7 +1628,8 @@ ClimateDataMapPlugin = function (config) {
     
     plugin.chart_popup_URL = config.chart_popup_URL
     plugin.request_image_URL = config.request_image_URL
-    plugin.world_map_URL = config.world_map_URL
+    plugin.download_data_URL = config.download_data_URL
+    plugin.download_timeseries_URL = config.download_timeseries_URL
     
     var display_mode = config.display_mode
     plugin.set_status = function (html_message) {
@@ -1663,7 +1661,6 @@ ClimateDataMapPlugin = function (config) {
     
     plugin.places = {}
     plugin.spaces = []
-    plugin.countries = {}
     
     plugin.places_events = []
     plugin.when_places_loaded = function (places_function) {
@@ -1808,9 +1805,9 @@ ClimateDataMapPlugin = function (config) {
             dataType: 'json',
             success: function (rearranged_places_data) {
                 // add marker layer for places
-                //var station_markers_layer = new OpenLayers.Layer.Markers(
-                //    "Observation stations"
-                //)
+                var station_markers_layer = new OpenLayers.Layer.Markers(
+                    "Observation stations"
+                )
                 places_data = {}
                 each(
                     rearranged_places_data,
@@ -1871,12 +1868,11 @@ ClimateDataMapPlugin = function (config) {
                         new_places.push(place)
                         plugin.places[place_id] = place
                         // add marker
-                        /* markers
                         place.generate_marker(
                             function (marker) { 
                                 station_markers_layer.addMarker(marker) 
                             }
-                        ) */
+                        )
                     }
                 }
                 each(
@@ -1885,10 +1881,9 @@ ClimateDataMapPlugin = function (config) {
                         places_function(new_places)
                     }
                 )
-                // markers
-                //station_markers_layer.setVisibility(false)
-                //map.addLayer(station_markers_layer)
-                //plugin.station_markers_layer = station_markers_layer
+                station_markers_layer.setVisibility(false)
+                map.addLayer(station_markers_layer)
+                plugin.station_markers_layer = station_markers_layer
 
                 plugin.update_map_layer(initial_query_expression)
                 plugin.filter_box = new FilterBox({
@@ -1909,8 +1904,6 @@ ClimateDataMapPlugin = function (config) {
                 map.addControl(plugin.logo)
             },
             error: function (jqXHR, textStatus, errorThrown) {
-//                console.log(textStatus, errorThrown)
-                window.jqXHR = jqXHR
                 plugin.set_status(
                     '<a target= "_blank" href="climate/places">Could not load place data!</a>'
                 )
@@ -2053,26 +2046,31 @@ ClimateDataMapPlugin = function (config) {
                         Ext.getCmp(id).hide()
                     }
                 )
-
+                
+                load_layer_and_locate_places_in_spaces(
+                    "Nepal development regions",
+                    "/eden/static/data/Development_Region.geojson",
+                    new OpenLayers.Format.GeoJSON(),
+                    "black",
+                    "11px"
+                )
                 init_tooltips()
             },
-            1000 // what is this waiting for?
+            1000
+            // this is waiting for OpenLayers to render everything 
+            // and Ext to render all components
         )
     }
     
     var conversion_functions = {
         'Kelvin': function (value) {
             return value - 273.16
-        },
-        'ratio': function (value) {
-            return value * 100
         }
     }
     var display_units_conversions = {
         'Kelvin': '&#176;C',
         // Delta
-        '\u0394 Kelvin': '&#916; &#176;C',
-        'ratio': '%'
+        '\u0394 Kelvin': '&#916; &#176;C'
     }
     
     plugin.render_map_layer = function(min_value, max_value) {
@@ -2083,9 +2081,6 @@ ClimateDataMapPlugin = function (config) {
         var place_ids = feature_data.keys
         var values = feature_data.values
         var units = feature_data.units
-        if (units == 'Person') {
-            units = 'People'
-        }
         var grid_size = feature_data.grid_size
         
         var converter = plugin.converter
@@ -2108,9 +2103,9 @@ ClimateDataMapPlugin = function (config) {
             }
             var value = values[i]
             if (place == undefined) {
-//                console.log(i)
-//                console.log(place)
-//                console.log(place_id)
+                console.log(i)
+                console.log(place)
+                console.log(place_id)
             }
             var converted_value = converter(value)
             if (
@@ -2344,23 +2339,39 @@ ClimateDataMapPlugin = function (config) {
                 if (feature_data.values.length == 0) {
                     plugin.set_status(
                         'Query was successful but contains no data. '+
-                        'Data might be unavailable for this time range. '
+                        'Data might be unavailable for this time range. '+
+                        'Gridded data runs from 1971 to 2009. '+
+                        'For Observed data please refer to '+
+                        '<a href="'+plugin.station_parameters_URL+
+                        '">Station Parameters</a>. '+
+                        'Projected data depends on the dataset.'
                     )
                 } else {
                     plugin.feature_data = feature_data
                     var units = feature_data.units
-                    if (units == 'Person') {
-                        units = 'People'
-                    }
-                    
-                    var converter = plugin.converter = conversion_functions[units] || function (x) { return x }
+                    var converter = plugin.converter = (
+                        conversion_functions[units] || 
+                        function (x) { 
+                            return x 
+                        }
+                    )
                     var display_units = plugin.display_units = display_units_conversions[units] || units
                     var values = feature_data.values
-                    
+                    var place_ids = feature_data.keys
+                    var usable_values = []
+                    for (
+                        var i = 0;
+                        i < place_ids.length;
+                        i++
+                    ) {
+                        if (plugin.places[place_ids[i]]) {
+                            usable_values.push(values[i])
+                        }
+                    }
                     plugin.colour_key.update_from(
                         display_units,
-                        converter(Math.max.apply(null, values)),
-                        converter(Math.min.apply(null, values))
+                        converter(Math.max.apply(null, usable_values)), 
+                        converter(Math.min.apply(null, usable_values))
                     )
                     plugin.update_query(feature_data.understood_expression)
                     // not right place for this:
@@ -2381,7 +2392,6 @@ ClimateDataMapPlugin = function (config) {
                     0,
                     responseText.indexOf('<!--')
                 )
-//                console.log(error_message)
                 var error = $.parseJSON(error_message)
                 if (error.error == 'SyntaxError') {
                     // don't update the last expression if it's invalid
@@ -2393,7 +2403,8 @@ ClimateDataMapPlugin = function (config) {
                     if (
                         error.error == 'MeaninglessUnitsException' ||
                         error.error == 'DSLTypeError' || 
-                        error.error == 'DimensionError'
+                        error.error == 'DimensionError' ||
+                        error.error == 'MismatchedGridSize'
                     ) {
                         window.analysis = error.analysis
                         plugin.query_box.update(error.analysis)
@@ -2423,7 +2434,6 @@ ClimateDataMapPlugin = function (config) {
     function SpecPanel(
         panel_id, panel_title, collapsed
     ) {
-    
         function make_combo_box(
             data,
             fieldLabel,
@@ -2473,7 +2483,7 @@ ClimateDataMapPlugin = function (config) {
 
         var variable_combo_box = make_combo_box(
             plugin.parameter_names,
-            'Dataset',
+            'Parameter',
             'parameter',
             {
                 width: 330,
@@ -2531,7 +2541,6 @@ ClimateDataMapPlugin = function (config) {
         variable_combo_box.years = []
         // when a dataset is selected, request the years.
         function update_years(dataset_name) {
-//            console.log(plugin.years_URL+'?dataset_name='+dataset_name)
             $.ajax({
                 url: plugin.years_URL+'?dataset_name='+dataset_name,
                 dataType: 'json',
@@ -2624,7 +2633,7 @@ ClimateDataMapPlugin = function (config) {
                     new Ext.form.Checkbox({
                         id: panel_id+'_'+name,
                         name: name,
-                        checked: false
+                        checked: (month_index > 0)
                     })
                 )
             }
@@ -2648,7 +2657,7 @@ ClimateDataMapPlugin = function (config) {
         var annual_aggregation_check_box = new Ext.form.Checkbox({
             id: annual_aggregation_check_box_id,
             name: 'annual_aggregation',
-            checked: false,
+            checked: true,
             fieldLabel: 'Annual aggregation'
         })
         plugin.month_selector_ids.push(annual_aggregation_check_box_id)
@@ -2667,13 +2676,7 @@ ClimateDataMapPlugin = function (config) {
             }
         })
         plugin.month_selector_ids.push(month_checkboxes_id)
-        
-        
-        
 
-
-        
-        
         var form_panel = new Ext.FormPanel({
             id: panel_id,
             title: panel_title,
@@ -2783,17 +2786,15 @@ ClimateDataMapPlugin = function (config) {
         // create the panels
         var climate_data_panel = SpecPanel(
             'climate_data_panel',
-            '(A) Select data:',
+            'Select data: (A)',
             false
         )
-       
         // This button does the simplest "show me data" overlay
         plugin.update_map_layer_from_form = function () {
             plugin.update_map_layer(
                 form_query_expression(climate_data_panel.getForm())
             )
         }
-        
         var update_map_layer_button = new Ext.Button({
             text: 'Show on map (A)',
             disabled: false,
@@ -2804,25 +2805,26 @@ ClimateDataMapPlugin = function (config) {
         
         var comparison_panel = SpecPanel(
             'comparison_panel',
-            '(B) Compare with data:',
+            'Compare with data (B)',
             true
         )
         // This button does the comparison overlay
         plugin.update_map_layer_from_comparison = function () {
             plugin.update_map_layer(
-                form_query_expression(climate_data_panel.getForm()) + ' - ' + 
-                form_query_expression(comparison_panel.getForm())
+                
+                form_query_expression(comparison_panel.getForm()) + ' - ' +
+                form_query_expression(climate_data_panel.getForm())
             )
         }
         var update_map_layer_comparison_button = new Ext.Button({
-            text: 'Compare on map (A - B)',
+            text: 'Compare on map (B - A)',
             disabled: false,
             handler: plugin.update_map_layer_from_comparison
         });
         comparison_panel.addButton(update_map_layer_comparison_button)
         items.push(comparison_panel)
         
-        /*
+        
         var quick_filter_data_store = plugin.quick_filter_data_store = new Ext.data.SimpleStore({
             fields: ['name', 'option']
         })
@@ -2855,7 +2857,6 @@ ClimateDataMapPlugin = function (config) {
             }
         )
         items.push(quick_filter_panel)
-        */
         
         
         var show_chart_button = new Ext.Button({
@@ -2931,7 +2932,64 @@ ClimateDataMapPlugin = function (config) {
         plugin.show_chart_button = show_chart_button
          
         items.push(show_chart_button)
-        
+ 
+        var download_data_button = new Ext.Button({
+            text: 'Download CSV map data for selected places',
+            disabled: false,
+            handler: function() {
+                var place_ids = []
+                //var place_names = []
+                each(
+                    plugin.overlay_layer.selectedFeatures, 
+                    function (feature) {
+                        var place_id = feature.attributes.place_id
+                        place_ids.push(place_id)
+                        /*
+                        var place = plugin.places[place_id]
+                        var place_data = place.data
+                        if (place_data.station_name != undefined) {
+                            place_names.push(place_data.station_name)
+                        }
+                        else {
+                            place_names.push(
+                                '('+place_data.latitude+','+place_data.longitude+')'
+                            )
+                        }*/
+                    }
+                )
+                //place_names.sort()
+                var spec = JSON.stringify({
+                    place_ids: place_ids,
+                    query_expression: plugin.last_query_expression
+                })
+                window.location.href = plugin.download_data_URL+'?spec='+encodeURI(spec)
+            }
+        })
+        plugin.download_data_button = download_data_button
+        items.push(download_data_button)
+
+        var download_time_series_button = new Ext.Button({
+            text: 'Download CSV time series for selected places',
+            disabled: false,
+            handler: function() {
+                var place_ids = []
+                each(
+                    plugin.overlay_layer.selectedFeatures, 
+                    function (feature) {
+                        var place_id = feature.attributes.place_id
+                        place_ids.push(place_id)
+                    }
+                )
+                var spec = JSON.stringify({
+                    place_ids: place_ids,
+                    query_expression: plugin.last_query_expression
+                })
+                window.location.href = plugin.download_time_series_URL+'?spec='+encodeURI(spec)
+            }
+        })
+        plugin.download_time_series_button = download_time_series_button
+        items.push(download_time_series_button)
+
         var print_button = new Ext.Button({
             text: 'Download printable map image',
             disabled: false,
@@ -2954,6 +3012,9 @@ ClimateDataMapPlugin = function (config) {
                 }                
             }
         )
+        plugin.set_status = function (html_message) {
+            $('#error_div').html(html_message)
+        }
         
         plugin.colour_key = new ColourKey({
             gradients: [
