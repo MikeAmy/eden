@@ -1,0 +1,25 @@
+
+
+Example WSGI settings:
+
+apt-get install python-setuptools
+easy_install dateutils
+apt-get install r-base
+easy_install rpy2==2.1.9
+apt-get install python-qt4
+easy_install simplejson
+apt-get install libpq-dev
+export PG_CONFIG=/usr/bin/pg_config
+R
+> install.packages("RPostgreSQL", type="source")
+> install.packages("multicore")
+
+
+#Example WSGI settings:
+
+  WSGIScriptAlias / /home/nepal/web2py/wsgihandler.py
+  WSGIApplicationGroup %{GLOBAL}
+  WSGIDaemonProcess nepal user=nepal group=nepal home=/home/nepal/web2py processes=2 maximum-requests=70
+
+apt-get install python-scipy
+
