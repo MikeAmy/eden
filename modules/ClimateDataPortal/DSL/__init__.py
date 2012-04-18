@@ -218,7 +218,6 @@ class Count(AggregationNode):
 aggregations = (Average, Maximum, Minimum, StandardDeviation, Sum, Count)
 
 from .. import SampleTable, units_in_out
-from Units import Dimensionless
 
 class DSLSyntaxError(SyntaxError):
     pass
@@ -389,12 +388,8 @@ def parse(expression_string):
                 return expression
 
 from Units import (
-    Units,
     units,
-    analysis, 
-    WhateverUnitsAreNeeded,
-    MeaninglessUnitsException,
-    DimensionError
+    analysis
 )
 from Check import check, check_analysis
 from Build import Build

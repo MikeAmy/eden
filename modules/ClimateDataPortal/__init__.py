@@ -7,8 +7,6 @@
 """
 
 from Method import Method
-from SampleTable import SampleTable
-from known_units import units_in_out
+from SampleTable import SampleTable, Observed, Gridded, Projected
+from Units import Units, Dimensions, units_in_out, WhateverUnitsAreNeeded
 from MapPlugin import MapPlugin
-
-__all__ = ["SampleTable", "MapPlugin", "Observed", "Gridded", "Projected"]

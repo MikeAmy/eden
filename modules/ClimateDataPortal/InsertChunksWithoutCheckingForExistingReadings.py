@@ -37,7 +37,23 @@ class PrintAsCSV(object):
         self.chunk = []
         self.sample_table = sample_table
         print "place_id, time_period, value"
-
+    
     def write_chunk(self):
         print "\n".join(self.chunk)
         self.chunk = []
+    
+    def __call__(
+        self,
+        time_period,
+        place_id,
+        value
+    ):
+        self.chunk.append(
+            "%i,%i,%f" % (place_id, time_period, value)
+        )
+        if len(self.chunk) >= 1000:
+            self.write_chunk()
+            
+    def done(self):
+        if len(self.chunk) > 0:    
+            self.write_chunk()

@@ -242,8 +242,8 @@ def init_R_interpreter(R, database_settings):
     """)
 
     from rpy2.rinterface import RRuntimeError
+    R("library(DBI")
     try:
-        R("library(DBI)")
         R("library(RPostgreSQL)")
     except RRuntimeError, R_runtime_error:
         message = """%s
@@ -262,7 +262,7 @@ You may need to select a mirror.
         raise ImportError(message)
 
     try:
-        R("library(multicore, quietly=TRUE)")
+        R("library(multicore)")
     except RRuntimeError, R_runtime_error:
         if "no package called" in R_runtime_error.args[0]:
             raise ImportError(
@@ -377,14 +377,6 @@ def DSLAggregationNode_SQL(aggregation, key, out, extra_filter):
         aggregation.month_numbers
     )
     
-    '''
-    if from_date is not None:
-        from_time_period = 
-        #if key == "time_period" and from_time_period:
-            #out("- %i" % from_time_period)
-    else:
-        from_time_period = None
-    '''
     from_date = aggregation.from_date
     if from_date is not None:
         add_filter(

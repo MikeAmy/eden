@@ -251,7 +251,7 @@ def Aggregation_check(aggregation):
                 )
     return aggregation.errors or specification_errors
 
-
+from .. import Units, WhateverUnitsAreNeeded
 def Units_check_number(units, value, error):
     if units._positive and value < 0:
         error(
@@ -284,12 +284,6 @@ def Date_check_analysis(date_spec, out):
     out("%s," % date_spec)
     if date_spec.errors:
         out("# ^ ", ", ".join(date_spec.errors))
-
-@check_analysis.implementation(Months)
-def Months_check_analysis(months, out):
-    out("%s," % months)
-    if months.errors:
-        out("# ^ ", ", ".join(months.errors))
 
 @check_analysis.implementation(Months)
 def Months_check_analysis(months, out):

@@ -23,7 +23,7 @@ from gluon import current
 db = current.db
 
 from datetime import date
-from known_units import units_in_out
+from Units import units_in_out
 
 class SampleTable(object):
     # Samples always have places and time (periods)
@@ -50,11 +50,11 @@ class SampleTable(object):
         
     __date_mapper = {
         "daily": Daily(
-            start_date = date(2012,1,1)
+            start_date = date(2011,11,11) # Nepal specific dates
         ),
         "monthly": Monthly(
-            start_year = 2012,
-            start_month_0_indexed = 0
+            start_year = 2011, # Nepal specific dates
+            start_month_0_indexed = 11
         ),
         "yearly": Yearly(
             start_year = 2000
@@ -102,7 +102,9 @@ class SampleTable(object):
 
         parameter_names = []
         for name, sample_table in SampleTable.__names.iteritems():
-            parameter_names.append(name)
+            # Nepal-specific (only monthly are allowed):
+            if sample_table.date_mapping_name == "monthly":
+                parameter_names.append(name)
         config_dict.update(
             data_type_option_names = data_type_option_names,
             parameter_names = parameter_names
@@ -255,7 +257,6 @@ class SampleTable(object):
                     field = field
                 )
             )
-        use_table_name(sample_table.table_name)
 
     def drop(sample_table, use_table_name):
         db = sample_table.db
@@ -365,7 +366,7 @@ class SampleTable(object):
             )
         return years
 
-def init_SampleTable():
+def init_SampleTables():
     for SampleTableType in sample_table_types:
         for sample_table_spec in db(
             (db.climate_sample_table_spec.sample_type_code == SampleTableType.code) 
@@ -386,4 +387,4 @@ def init_SampleTable():
                 grid_size = sample_table_spec.grid_size,
                 db = db
             )
-init_SampleTable()
+SampleTable.init_SampleTables = staticmethod(init_SampleTables)
