@@ -5,7 +5,7 @@ from gluon.dal import Expression
 
 from Cache import *
 import gluon.contrib.simplejson as JSON
-from SampleTable import SampleTable
+from SampleTable import SampleTable, init_SampleTables
 from Units import units_in_out, MeaninglessUnitsException
 from DSL import aggregations, grid_sizes
 
@@ -115,6 +115,7 @@ class MapPlugin(object):
                 Aggregation.__name__ for Aggregation in aggregations
             ],
         )
+        SampleTable.init_SampleTables()
         SampleTable.add_to_client_config_dict(config_dict)
         add_configuration(
             SCRIPT(
@@ -550,6 +551,7 @@ class MapPlugin(object):
     def get_available_years(map_plugin, sample_table_name):
         def generate_years_json(file_path):
             file = open(file_path, "w")
+            SampleTable.init_SampleTables()
             years = SampleTable.with_name(sample_table_name).get_available_years()
             years.sort()
             file.write(str(years))

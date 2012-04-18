@@ -16,6 +16,71 @@ ClimateDataPortal = local_import("ClimateDataPortal")
 SampleTable = ClimateDataPortal.SampleTable
 DSL = local_import("ClimateDataPortal.DSL")
 
+# Take care to use floats for all numbers in conversion calculations:
+
+Dimensions = ClimateDataPortal.Dimensions
+Dimensions.group("", 
+    "ratio", 
+    ("%", 100.0,)
+)
+
+temperature = Dimensions.parsed_from("Kelvin")
+Dimensions.group("Kelvin", 
+    "Kelvin",
+    ("Celsius", 1.0, 273.15),
+    ("Fahreinheit", (9.0/5.0), 459.67),
+)
+
+pressure = Dimensions.parsed_from("kg / m s^2")
+Dimensions.group("kg / m s^2", 
+    "Pascal",
+    ("hPa", 100.0)
+)
+
+Dimensions.group("person", "person",
+    ("capita",),
+    ("people",),
+)
+
+length = Dimensions.parsed_from("m")
+Dimensions.group("m", "metre",
+    ("km", 1000.0),
+    ("cm", 1/100.0),
+    ("mm", 1/1000.0),
+)
+
+mass = Dimensions.parsed_from("kg")
+Dimensions.group("kg", "kilogram",
+    ("tonne", 1000.0),
+    ("kilotonne", 1000000.0),
+)
+
+time = Dimensions.parsed_from("s")
+Dimensions.group("s", "second",
+    ("minute", 60),
+    ("hour", 60 * 60),
+    ("day", 60 * 60 * 24),
+    ("week", 60 * 60 * 24),
+)
+
+rainfall = Dimensions.parsed_from("precipitation mm")
+Dimensions.group("precipitation mm", "precipitation mm")
+
+rainfall = Dimensions.parsed_from("precipitation mm")
+Dimensions.group("precipitation mm", "precipitation mm")
+
+velocity = Dimensions.parsed_from("m/s")
+Dimensions.group("m/s", "m/s")
+
+preferred_units = {
+    pressure: "hPa",
+    time: "day",
+    temperature: "Kelvin",
+    rainfall: "precipitation mm",
+    velocity: "m/s",
+}
+
+
 def _map_plugin(**client_config):
     return ClimateDataPortal.MapPlugin(
         env = Storage(globals()),
@@ -51,12 +116,13 @@ def index():
     if request.vars.get("zoom", None) is not None:
         zoom = int(request.vars["zoom"])
     else:
-        zoom = 7 # ToDo: use theme values
+        zoom = 7 # ToDo: use theme values. Nepal specific
         
     if request.vars.get("coords", None) is not None:
         lon, lat = map(float, request.vars["coords"].split(","))
     else:
-        # ToDo: use theme values
+        # ToDo: use theme values.
+        # Nepal specific
         lon = 84.1
         lat = 28.5
 
@@ -466,7 +532,6 @@ def download_data():
             open(data_path, "rb"),
             chunk_size=4096
         )
-
 
 def get_years():
     from datetime import datetime, timedelta
