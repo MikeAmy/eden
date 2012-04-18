@@ -30,3 +30,14 @@ class InsertChunksWithoutCheckingForExistingReadings(object):
     def done(self):
         if len(self.chunk) > 0:    
             self.write_chunk()
+
+
+class PrintAsCSV(object):
+    def __init__(self, sample_table):
+        self.chunk = []
+        self.sample_table = sample_table
+        print "place_id, time_period, value"
+
+    def write_chunk(self):
+        print "\n".join(self.chunk)
+        self.chunk = []

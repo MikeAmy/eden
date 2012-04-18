@@ -141,7 +141,7 @@ if deployment_settings.has_module("climate"):
     )
 
     def station_represent(id):
-        row_id = db(climate_station_id.id == id).select(
+        row_id = db(climate_station_id.station_id == id).select(
             climate_station_id.station_id,
             limitby=(0,1)
         ).first()

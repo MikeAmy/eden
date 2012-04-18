@@ -262,7 +262,7 @@ You may need to select a mirror.
         raise ImportError(message)
 
     try:
-        R("library(multicore)")
+        R("library(multicore, quietly=TRUE)")
     except RRuntimeError, R_runtime_error:
         if "no package called" in R_runtime_error.args[0]:
             raise ImportError(

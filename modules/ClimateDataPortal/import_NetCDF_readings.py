@@ -30,11 +30,6 @@ NetCDF data includes units information so need to use this to convert the data.
 
 """
 
-ClimateDataPortal = local_import("ClimateDataPortal")
-InsertChunksWithoutCheckingForExistingReadings = local_import(
-    "ClimateDataPortal.InsertChunksWithoutCheckingForExistingReadings"
-).InsertChunksWithoutCheckingForExistingReadings
-
 def get_or_create(dict, key, creator):
     try:
         value = dict[key]
@@ -96,18 +91,23 @@ def nearly(expected_float, actual_float):
 #        pass
     
 import datetime
+import logging
 
 def import_climate_readings(
     netcdf_file,
     field_name,
     add_reading,
-    converter,
+    db,
+    units = None,
     start_date_time_string = None,
     is_undefined = (lambda x: (-99.900003 < x < -99.9) or (x < -1e8) or (x > 1e8)),
     time_step_string = None,
     month_mapping_string = None,
-    skip_places = False
+    skip_places = False,
+    ClimateDataPortal = None
 ):
+    if ClimateDataPortal is None:
+        ClimateDataPortal = local_import("ClimateDataPortal")
     """
     Assumptions:
         * there are no places
@@ -131,6 +131,8 @@ def import_climate_readings(
                 yield index, list[index]
         
         time = variables["time"]
+        if month_mapping_string is None:
+            month_mapping_string = time.calendar
         times = to_list(time)
         try:
             time_units_string = time.units
@@ -155,6 +157,7 @@ def import_climate_readings(
                 assert time_step_string == parsed_time_step_string
             else:
                 time_step_string = parsed_time_step_string
+            print "Times are", parsed_time_step_string, "since", start_date_time
         
         time_step = datetime.timedelta(**{time_step_string: 1})
         
@@ -171,8 +174,10 @@ def import_climate_readings(
             
         month_mapping = {
             "rounded": ClimateDataPortal.rounded_date_to_month_number,
+            "360_day": ClimateDataPortal.floored_twelfth_of_a_360_day_year,
             "twelfths": ClimateDataPortal.floored_twelfth_of_a_360_day_year,
-            "calendar": ClimateDataPortal.date_to_month_number 
+            "proleptic_gregorian": ClimateDataPortal.date_to_month_number,
+            "calendar": ClimateDataPortal.date_to_month_number,
         }[month_mapping_string]
         try:
             tt = variables[field_name]
@@ -184,10 +189,26 @@ def import_climate_readings(
                 )
             )
         else:
+            try:
+                tt_units = tt.units
+            except AttributeError:
+                assert units is not None, "No units specified and no units in NetCDF file"
+            else:
+                if units is not None:
+                    if not tt_units == units:
+                        logging.warn((
+                            "Units do not match: "
+                            "%(units)s vs %(tt_units)s" % locals()
+                        ))
+                else:
+                    units = tt_units
+            converter = ClimateDataPortal.units_in_out[units]["in"]
+
             # create grid of places
             place_ids = {}
             
             lon = to_list(lon_variable)
+            climate_place = db.climate_place
             
             if skip_places:
                 for place in db(climate_place.id > 0).select(
@@ -225,7 +246,7 @@ def import_climate_readings(
                     )
                 )
                 #print time_period
-                if month_mapping_string == "twelfths":
+                if month_mapping_string in ("twelfths", "360_day"):
                     year_offset = ((time_step * int(time_step_count)).days) / 360.0
                     month_number = int(
                         ClimateDataPortal.date_to_month_number(start_date_time)
@@ -264,9 +285,20 @@ from Scientific.IO import NetCDF
 def main(argv):
     import argparse
     import os
+    ClimateDataPortal = local_import("ClimateDataPortal")
+    InsertChunksWithoutCheckingForExistingReadings = local_import(
+        "ClimateDataPortal.InsertChunksWithoutCheckingForExistingReadings"
+    ).InsertChunksWithoutCheckingForExistingReadings
+
+    PrintAsCSV = local_import(
+        "ClimateDataPortal.InsertChunksWithoutCheckingForExistingReadings"
+    ).PrintAsCSV
+
+
     styles = {
         "quickly": InsertChunksWithoutCheckingForExistingReadings,
     #    "safely": InsertRowsIfNoConflict
+        "csv": PrintAsCSV
     }
 
     parser = argparse.ArgumentParser(
@@ -315,8 +347,8 @@ python ./run.py %(prog)s --field_name rr --style quickly --parameter_name "Gridd
     )
     parser.add_argument(
         "--units",
-        required = True,
-        help="""Units the data is in."""
+        required = False,
+        help="""Units the data is in, if not specified by the NetCDF file."""
     )
     parser.add_argument(
         "--time_steps",
@@ -356,18 +388,21 @@ python ./run.py %(prog)s --field_name rr --style quickly --parameter_name "Gridd
 
     args = parser.parse_args(argv[1:])
     sample_table = ClimateDataPortal.SampleTable.with_name(args.parameter_name)
-    sample_table.clear()
-    db.commit()       
+    print sample_table.table_name
+    if args.clear_existing_data:
+        sample_table.clear()
+    db.commit()
     
     import_climate_readings(
         netcdf_file = NetCDF.NetCDFFile(args.NetCDF_file),
         field_name = args.field_name,
         add_reading = styles[args.style](sample_table),
-        converter = ClimateDataPortal.units_in_out[args.units]["in"],
+        units = args.units,
+        db = db,
         time_step_string = args.time_steps,
         start_date_time_string = args.start_date_time,
         month_mapping_string = args.month_mapping,
-        skip_places = args.skip_places
+        skip_places = args.skip_places,
     )
 
 if __name__ == "__main__":

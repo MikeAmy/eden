@@ -92,11 +92,7 @@ class SampleTable(object):
         parameter_name,
         sample_type_code
     ):
-        try:
-            return SampleTable.__objects[(parameter_name, sample_type_code)]
-        except KeyError:
-            pass
-            #print SampleTable.__objects.keys()
+        return SampleTable.__objects[(parameter_name, sample_type_code)]
 
     @staticmethod
     def add_to_client_config_dict(config_dict):

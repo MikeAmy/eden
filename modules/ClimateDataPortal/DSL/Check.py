@@ -291,6 +291,12 @@ def Months_check_analysis(months, out):
     if months.errors:
         out("# ^ ", ", ".join(months.errors))
 
+@check_analysis.implementation(Months)
+def Months_check_analysis(months, out):
+    out("%s," % months)
+    if months.errors:
+        out("# ^ ", ", ".join(months.errors))
+
 @check_analysis.implementation(*operations)
 def Binop_check_analysis(binop, out):
     def indent(*strings):

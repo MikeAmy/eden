@@ -31,10 +31,10 @@ def mkdir_p(path):
             pass
         else: raise
 
-def get_cached_or_generated_file(cache_file_name, generate):
+def get_cached_or_generated_file(application, cache_file_name, generate):
     # this needs to become a setting
     climate_data_image_cache_path = join(
-        "/tmp","climate_data_portal","images"
+        "/tmp",application,"images"
     )
     recent_cache = join(climate_data_image_cache_path, "recent")
     mkdir_p(recent_cache)

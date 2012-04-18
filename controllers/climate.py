@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 
 module = "climate"
 resourcename = request.function
@@ -51,13 +51,14 @@ def index():
     if request.vars.get("zoom", None) is not None:
         zoom = int(request.vars["zoom"])
     else:
-        zoom = 2
+        zoom = 7 # ToDo: use theme values
         
     if request.vars.get("coords", None) is not None:
         lon, lat = map(float, request.vars["coords"].split(","))
     else:
-        lon = 0
-        lat = 0
+        # ToDo: use theme values
+        lon = 84.1
+        lat = 28.5
 
     gis_map = gis.show_map(
         lon = lon,
@@ -70,7 +71,8 @@ def index():
             _map_plugin(
                 **request.vars
             )
-        ]
+        ],
+        catalogue_layers = True
     )
 
     response.title = module_name
@@ -118,7 +120,8 @@ def climate_overlay_data():
         except (
             DSL.MeaninglessUnitsException,
             DSL.DimensionError,
-            DSL.DSLTypeError
+            DSL.DSLTypeError,
+            DSL.GridSizing.MismatchedGridSize
         ), exception:
             raise HTTP(400, JSON.dumps({
                 "error": exception.__class__.__name__,
@@ -130,39 +133,6 @@ def climate_overlay_data():
                 chunk_size=4096
             )
 
-def climate_csv_location_data():
-    kwargs = dict(request.vars)
-    
-    arguments = {}
-    errors = []
-    for kwarg_name, converter in dict(
-        query_expression = str,
-    ).iteritems():
-        try:
-            value = kwargs.pop(kwarg_name)
-        except KeyError:
-            errors.append("%s missing" % kwarg_name)
-        else:
-            try:
-                arguments[kwarg_name] = converter(value)
-            except TypeError:
-                errors.append("%s is wrong type" % kwarg_name)
-            except AssertionError, assertion_error:
-                errors.append("%s: %s" % (kwarg_name, assertion_error))                
-    if kwargs:
-        errors.append("Unexpected arguments: %s" % kwargs.keys())
-    
-    if errors:
-        raise HTTP(400, "<br />".join(errors))
-    else:
-        import gluon.contrib.simplejson as JSON
-        data_path = _map_plugin().get_csv_location_data(**arguments)
-        # only DSL exception types should be raised here
-        return response.stream(
-            open(data_path, "rb"),
-            chunk_size=4096
-        )
-
 def climate_chart():
     import gluon.contenttype
     data_image_file_path = _climate_chart(gluon.contenttype.contenttype(".png"))
@@ -170,22 +140,23 @@ def climate_chart():
         open(data_image_file_path,"rb"),
         chunk_size=4096
     )
+    
+def _list_of(converter):
+    def convert_list(choices):
+        return map(converter, choices)
+    return convert_list
 
 def _climate_chart(content_type):
     kwargs = dict(request.vars)
     import gluon.contrib.simplejson as JSON
     specs = JSON.loads(kwargs.pop("spec"))
-    def list_of(converter):
-        def convert_list(choices):
-            return map(converter, choices)
-        return convert_list
     checked_specs = []
     for label, spec in specs.iteritems():
         arguments = {}
         errors = []
         for name, converter in dict(
             query_expression = str,
-            place_ids = list_of(int)
+            place_ids = _list_of(int)
         ).iteritems():
             try:
                 value = spec.pop(name)
@@ -359,6 +330,27 @@ def prices():
             return s3_rest_controller()
     
 
+def prices():
+    prices_table = db.climate_prices
+    if not auth.is_logged_in():
+        redirect(
+            URL(
+                c = "default",
+                f = "user",
+                args = ["login"],
+                vars = {
+                    "_next": URL(
+                        c = "climate",
+                        f = "prices"
+                    )
+                }
+            )
+        )
+    else:
+        if s3_has_role(1):
+            return s3_rest_controller()
+    
+
 # =============================================================================
 def save_query():
     output = s3_rest_controller()
@@ -437,7 +429,45 @@ def download_purchased_data():
         return csv_data
     else:
         return
+
+def download_data():
+    kwargs = dict(request.vars)
+    import gluon.contrib.simplejson as JSON
+    spec = JSON.loads(kwargs.pop("spec"))
+    arguments = {}
+    errors = []
+    for name, converter in dict(
+        query_expression = str,
+        place_ids = _list_of(int)
+    ).iteritems():
+        try:
+            value = spec.pop(name)
+        except KeyError:
+            errors.append("%s missing" % name)
+        else:
+            try:
+                arguments[name] = converter(value)
+            except TypeError:
+                errors.append("%s is wrong type" % name)
+            except AssertionError, assertion_error:
+                errors.append("%s: %s" % (name, assertion_error))
+    if spec:
+        errors.append("Unexpected arguments: %s" % spec.keys())
     
+    if errors:
+        raise HTTP(400, "<br />".join(errors))
+    else:
+        data_path = _map_plugin().get_csv_location_data(**arguments)
+        response.headers["Content-Type"] = "application/force-download"
+        response.headers["Content-disposition"] = (
+            "attachment; filename=" + arguments["query_expression"]
+        )
+        return response.stream(
+            open(data_path, "rb"),
+            chunk_size=4096
+        )
+
+
 def get_years():
     from datetime import datetime, timedelta
     response.headers["Expires"] = (
@@ -446,4 +476,20 @@ def get_years():
     return response.stream(
         open(_map_plugin().get_available_years(request.vars["dataset_name"]),"rb"),
         chunk_size=4096
+    )
+
+def manual():
+    redirect(
+        URL(
+            "static",
+            "user_documentation/NepalClimateDataPortal.pdf"
+        )
+    )
+    
+def model_descriptions():
+    redirect(
+        URL(
+            "static",
+            "user_documentation/Technical_Approach_and_Methodology_for_Data_Preparation.pdf"
+        )
     )
