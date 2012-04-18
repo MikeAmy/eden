@@ -2063,12 +2063,16 @@ ClimateDataMapPlugin = function (config) {
     var conversion_functions = {
         'Kelvin': function (value) {
             return value - 273.16
+        },
+        'ratio': function (value) {
+            return value * 100
         }
     }
     var display_units_conversions = {
         'Kelvin': '&#176;C',
         // Delta
-        '\u0394 Kelvin': '&#916; &#176;C'
+        '\u0394 Kelvin': '&#916; &#176;C',
+        'ratio': '%'
     }
     
     plugin.render_map_layer = function(min_value, max_value) {
