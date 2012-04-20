@@ -50,8 +50,6 @@ Meaningless expressions are allowed in the DSL but then
 detected during the dimensional analysis phase. Some types can be inferred.
 """
 
-from .. import Method
-
 def normalised(value):
     if isinstance(value, (int, float)):
         return Number(value)

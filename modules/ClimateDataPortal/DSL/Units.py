@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from . import Method
+from ..Method import Method
 from .. import Units
 
 units = Method("units")

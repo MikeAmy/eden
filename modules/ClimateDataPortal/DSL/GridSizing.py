@@ -11,7 +11,7 @@
 # Actually, grids are a special case of Place Sets
 # e.g. model data might be defined for countries rather than, or as well as grids.
 
-from . import Method
+from ..Method import Method
 grid_sizes = Method("grid_sizes")
 
 class MismatchedGridSize(Exception):

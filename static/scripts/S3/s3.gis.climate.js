@@ -1121,7 +1121,7 @@ Place.prototype = {
         var popup = new OpenLayers.Popup(
             null,
             map.getLonLatFromPixel({x:event.layerX, y:event.layerY}),
-            new OpenLayers.Size(170, 125),
+            new OpenLayers.Size(170, 150),
             info.join(''),
             true
         )
@@ -1458,7 +1458,6 @@ OpenLayers.Geometry.MultiPoint.prototype.atZoom = function (max_x_diff, max_y_di
 load_layer_and_locate_places_in_spaces = function (
     name, layer_URL, format, label_colour, label_size
 ) {
-    // can load the Kfrom http://maps.worldbank.org/overlays/3388.kml
     var vector_layer = new VariableResolutionVectorLayer(
         name,
         {
@@ -1609,6 +1608,108 @@ var Logo = OpenLayers.Class(OpenLayers.Control, {
     }
 })
 
+function load_world_map(plugin) {
+    if (!Ext.isIE || Ext.isIE9 || display_mode == 'print') { 
+        $.ajax({
+            url: plugin.world_map_URL,
+            format: 'json',
+            success: function (delta_polygon_feature_collection) {
+                var format = new OpenLayers.Format.GeoJSON({
+                    ignoreExtraDims: true
+                })
+                
+                function decompressiblize_GeometryCollection(geometry_collection) {
+                    each(
+                        geometry_collection["geometries"],
+                        function (geometry) {
+                            decompressiblize[geometry["type"]](geometry)
+                        }
+                    )
+                }
+                    
+                function decompressiblize_Polygon(polygon) {
+                    var new_linear_rings = []
+                    each(
+                        polygon["coordinates"],
+                        function(linear_ring) {
+                            var longitude_deltas = linear_ring[0]
+                            var latitude_deltas = linear_ring[1]
+                            var new_linear_ring = []
+                            var previous_longitude = 0, previous_latitude = 0
+                            for (
+                                var i = 0, 
+                                    len = longitude_deltas.length; 
+                                i < len;
+                                i++
+                            ) {
+                                var longitude_delta = longitude_deltas[i]
+                                var latitude_delta = latitude_deltas[i]
+                                new_linear_ring.push(
+                                    [
+                                        (previous_longitude + longitude_delta)*1000,
+                                        (previous_latitude + latitude_delta)*1000,
+                                    ]
+                                )
+                                previous_longitude = previous_longitude + longitude_delta
+                                previous_latitude = previous_latitude + latitude_delta
+                            }
+                            new_linear_rings.push(new_linear_ring)
+                        }
+                    )
+                    polygon["coordinates"] = new_linear_rings
+                }
+
+                var decompressiblize = {
+                    GeometryCollection: decompressiblize_GeometryCollection,
+                    Polygon: decompressiblize_Polygon,
+                    Point: function () {}
+                }
+                
+                window.delta_polygon_feature_collection = delta_polygon_feature_collection
+                each(
+                    delta_polygon_feature_collection.features,
+                    function (delta_polygon_feature) {
+                        var geometry = delta_polygon_feature.geometry
+                        decompressiblize[geometry["type"]](geometry)
+                        // feature is no longer in delta format
+                        var feature_json = delta_polygon_feature
+                        delete delta_polygon_feature
+                        var feature = format.parseFeature(feature_json)
+                        if (!!feature.data.ISO3) {
+                            plugin.countries[feature.data.ISO3] = feature
+                        }
+                    }
+                )
+                plugin.when_places_loaded(
+                    function () {
+                        plugin.colour_key.with_limits(
+                            plugin.render_map_layer
+                        )
+                    }
+                )
+            },
+            failure: function () {
+                plugin.set_status(
+                    'Could not load world map!'
+                )
+            }
+        })
+    }
+    else {
+        plugin.set_status(
+            'Sorry, Internet Explorer < 9 is not performant '+
+            'enough to show detailed vector maps. Countries will '+
+            'be represented by circles at their capital cities'
+        )
+    }
+    each(
+        plugin.month_selector_ids,
+        function (id) {
+            Ext.getCmp(id).hide()
+        }
+    )
+}
+
 ClimateDataMapPlugin = function (config) {
     var plugin = this // let's be explicit!
     window.plugin = plugin
@@ -1743,11 +1844,12 @@ ClimateDataMapPlugin = function (config) {
                 hover_timeout = setTimeout(
                     function () {
                         hover_delay = 0
-                        var place = plugin.places[feature.attributes.place_id]
+                        var data = feature.data
+                        var place = plugin.places[data.place_id]
                         if (!!place) {
                             place.popup(
                                 feature,
-                                feature.attributes.value,
+                                data.value,
                                 function (popup) {
                                     feature.popup = popup
                                     map.addPopup(popup)
@@ -1799,7 +1901,6 @@ ClimateDataMapPlugin = function (config) {
         map.addControl(hover_control)
         hover_control.activate()
         
-//        console.log(plugin.places_URL)
         $.ajax({
             url: plugin.places_URL,
             dataType: 'json',
@@ -1942,111 +2043,9 @@ ClimateDataMapPlugin = function (config) {
             map.updateSize()
         }
 
-        // make room by closing the layer tree
         setTimeout(
-                function () {
-                    // load a file containing world map info
-                    if (!Ext.isIE || Ext.isIE9 || display_mode == 'print') { 
-//                        console.log(plugin.world_map_URL)
-                        $.ajax({
-                        url: plugin.world_map_URL,
-                        format: 'json',
-                        success: function (delta_polygon_feature_collection) {
-                            var format = new OpenLayers.Format.GeoJSON({
-                                ignoreExtraDims: true
-                            })
-                            
-                            function decompressiblize_GeometryCollection(geometry_collection) {
-                                each(
-                                    geometry_collection["geometries"],
-                                    function (geometry) {
-                                        decompressiblize[geometry["type"]](geometry)
-                                    }
-                                )
-                            }
-                                
-                            function decompressiblize_Polygon(polygon) {
-                                var new_linear_rings = []
-                                each(
-                                    polygon["coordinates"],
-                                    function(linear_ring) {
-                                        var longitude_deltas = linear_ring[0]
-                                        var latitude_deltas = linear_ring[1]
-                                        var new_linear_ring = []
-                                        var previous_longitude = 0, previous_latitude = 0
-                                        for (
-                                            var i = 0, 
-                                                len = longitude_deltas.length; 
-                                            i < len;
-                                            i++
-                                        ) {
-                                            var longitude_delta = longitude_deltas[i]
-                                            var latitude_delta = latitude_deltas[i]
-                                            new_linear_ring.push(
-                                                [
-                                                    (previous_longitude + longitude_delta)*1000,
-                                                    (previous_latitude + latitude_delta)*1000,
-                                                ]
-                                            )
-                                            previous_longitude = previous_longitude + longitude_delta
-                                            previous_latitude = previous_latitude + latitude_delta
-                                        }
-                                        new_linear_rings.push(new_linear_ring)
-                                    }
-                                )
-                                polygon["coordinates"] = new_linear_rings
-                            }
-
-                            var decompressiblize = {
-                                GeometryCollection: decompressiblize_GeometryCollection,
-                                Polygon: decompressiblize_Polygon,
-                                Point: function () {}
-                            }
-                            
-                            window.delta_polygon_feature_collection = delta_polygon_feature_collection
-                            each(
-                                delta_polygon_feature_collection.features,
-                                function (delta_polygon_feature) {
-                                    var geometry = delta_polygon_feature.geometry
-                                    decompressiblize[geometry["type"]](geometry)
-                                    // feature is no longer in delta format
-                                    var feature_json = delta_polygon_feature
-                                    delete delta_polygon_feature
-                                    var feature = format.parseFeature(feature_json)
-                                    if (!!feature.data.ISO3) {
-                                        plugin.countries[feature.data.ISO3] = feature
-                                    }
-                                }
-                            )
-                            plugin.when_places_loaded(
-                                function () {
-                                    plugin.colour_key.with_limits(
-                                        plugin.render_map_layer
-                                    )
-                                }
-                            )
-                        },
-                        failure: function () {
-                            plugin.set_status(
-                                'Could not load world map!'
-                            )
-                        }
-                    })
-                }
-                else {
-                    plugin.set_status(
-                        'Sorry, Internet Explorer < 9 is not performant '+
-                        'enough to show detailed vector maps. Countries will '+
-                        'be represented by circles at their capital cities'
-                    )
-                }
-                each(
-                    plugin.month_selector_ids,
-                    function (id) {
-                        Ext.getCmp(id).hide()
-                    }
-                )
-                
+            function () {
+                //load_world_map()
                 load_layer_and_locate_places_in_spaces(
                     "Nepal development regions",
                     "/eden/static/data/Development_Region.geojson",
@@ -2138,7 +2137,8 @@ ClimateDataMapPlugin = function (config) {
                     var lon = data.longitude
                     var attributes = {}
                     if (grid_size == 0) {
-                        var feature = plugin.countries[data.ISO_code]
+                        /*
+                        var feature = plugin.places[data.station_id]
                         if (!!feature) {
                             feature = feature.clone()
                             features.push(feature)
@@ -2149,7 +2149,7 @@ ClimateDataMapPlugin = function (config) {
                             }
                             attributes = feature.attributes
                         }
-                        else {
+                        else {*/
                             features.push(
                                 Vector(
                                     Point(lon, lat),
@@ -2160,7 +2160,7 @@ ClimateDataMapPlugin = function (config) {
                                     }
                                 )
                             )
-                        }
+                        //}
                     }
                     else {
                         var border = grid_size / 220
@@ -2486,7 +2486,7 @@ ClimateDataMapPlugin = function (config) {
             'Parameter',
             'parameter',
             {
-                width: 330,
+                width: 310,
                 heigth: 25
             }
         )
@@ -2683,7 +2683,7 @@ ClimateDataMapPlugin = function (config) {
             collapsible: true,
             collapseMode: 'mini',
             collapsed: collapsed,
-            labelWidth: 42,
+            labelWidth: 55,
             items: [{
                 region: 'center',
                 items: [
@@ -3043,6 +3043,14 @@ ClimateDataMapPlugin = function (config) {
         map.panDuration = 0
     }
     
+    function apply_attributes(object, attributes) {
+        for (var name in attributes) {
+            if (attributes.hasOwnProperty(name)) {
+                object[name] = attributes[name]
+            }
+        }
+    }
+    
     plugin.setupToolbar = function (toolbar) {
         var SelectDragHandler = OpenLayers.Class(OpenLayers.Handler.Drag, {
             // Ensure that we propagate clicks (so we can still use other controls)
@@ -3066,18 +3074,26 @@ ClimateDataMapPlugin = function (config) {
                 hover: false,
                 box: true,
                 onSelect: function (feature) {
-                    var style = feature.style
-                    style.strokeColor = 'white'
-                    style.strokeDashstyle = 'dash'
-                    style.strokeWidth = 3
+                    apply_attributes(
+                        feature.style,
+                        {
+                            strokeColor: 'black',
+                            strokeDashstyle: 'dash',
+                            strokeWidth: 1
+                        }
+                    )
                     plugin.overlay_layer.drawFeature(feature)
                     plugin.show_chart_button.enable()
                 },
                 onUnselect: function (feature) {
-                    var style = feature.style
-                    style.strokeColor = 'black'
-                    style.strokeDashstyle = 'solid'
-                    style.strokeWidth = 1
+                    apply_attributes(
+                        feature.style,
+                        {
+                            strokeColor: '',
+                            strokeDashstyle: '',
+                            strokeWidth: 1
+                        }
+                    )
                     plugin.overlay_layer.drawFeature(feature)
                     if (plugin.overlay_layer.selectedFeatures.length == 0) {
                         plugin.show_chart_button.disable()

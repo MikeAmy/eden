@@ -9,6 +9,7 @@ class DimensionError(Exception):
 class Units(object):
     __slots__ = ("_dimensions", "_positive")
     delta_strings = ("delta", "Δ")
+    @staticmethod
     def parsed_from(string, positive=None):
         if positive is None:
             positive = True
@@ -27,7 +28,7 @@ class Units(object):
         >>> u = Dimensions({"a": 4, "b": 2}, False)
 
         """
-        units._dimensions = Dimensions(dimensions)
+        units._dimensions = dimensions
         units._positive = bool(positive)
 
     def __repr__(units):
@@ -152,7 +153,7 @@ class Dimensions(object):
         if not dimensions._counts:
             return "(dimensionless)"
         else:
-            negative_counts = []
+            negative_dimension_counts = []
             positive_dimension_counts = []
             for dimension, count in dimensions._counts.iteritems():
                 if count < 0:

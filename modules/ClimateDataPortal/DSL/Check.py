@@ -1,5 +1,6 @@
 import datetime
 
+from ..Method import Method
 from . import *
 
 check = Method("check")
@@ -104,6 +105,7 @@ def checked_year(year, error):
 def checked_year_month(year, month, error):
     return checked_year(year, error) + (month_number_from_arg(month, error),)
 
+import calendar
 def checked_year_month_day(year, month, day, error):
     if not isinstance(day, int):
         error("Day should be a whole number")    
@@ -119,23 +121,19 @@ def checked_year_month_day(year, month, day, error):
 
 @check_from.implementation(Monthly)
 def Monthly_check_from(yearly, error, year, month, day):
-    if from_date.month is None:
+    if month is None:
         month = 1
-    else:
-        month = from_date.month
     if day is not None:
         error("Monthly datasets cannot use days in time ranges")
-    return checked_year_month(year, month, day, error)
+    return checked_year_month(year, month, error)
 
 @check_to.implementation(Monthly)
 def Monthly_check_to(yearly, error, year, month, day):
-    if from_date.month is None:
+    if month is None:
         month = 12
-    else:
-        month = from_date.month
     if day is not None:
         error("Monthly datasets cannot use days in time ranges")
-    return checked_year_month(year, month, day, error)
+    return checked_year_month(year, month, error)
 
 @check_to.implementation(MultipleYearsByMonth, Yearly)
 @check_from.implementation(MultipleYearsByMonth, Yearly)
@@ -178,8 +176,6 @@ def From_check(from_date, date_mapper):
         from_date.day
     )
     return from_date.errors
-
-import calendar
 
 @check.implementation(To)
 def To_check(to_date, date_mapper):
@@ -227,7 +223,11 @@ def Aggregation_check(aggregation):
             specification_errors = False
             date_mapper = aggregation.sample_table.date_mapper
             for specification in aggregation.specification:
-                if not isinstance(specification, allowed_specifications):
+                if isinstance(specification, allowed_specifications):
+                    specification_errors |= bool(
+                        check(specification)(date_mapper)
+                    )
+                else:
                     error(
                         "%(specification)s cannot be used inside "
                         "%(aggregation_name)s(...).\n"
@@ -246,9 +246,7 @@ def Aggregation_check(aggregation):
                             )
                         )
                     )
-                specification_errors |= bool(
-                    check(specification)(date_mapper)
-                )
+                    
     return aggregation.errors or specification_errors
 
 from .. import Units, WhateverUnitsAreNeeded
@@ -282,13 +280,13 @@ def Number_check_analysis(number, out):
 @check_analysis.implementation(From, To)
 def Date_check_analysis(date_spec, out):
     out("%s," % date_spec)
-    if date_spec.errors:
+    if hasattr(date_spec, "errors") and date_spec.errors:
         out("# ^ ", ", ".join(date_spec.errors))
 
 @check_analysis.implementation(Months)
 def Months_check_analysis(months, out):
     out("%s," % months)
-    if months.errors:
+    if hasattr(months, "errors") and months.errors:
         out("# ^ ", ", ".join(months.errors))
 
 @check_analysis.implementation(*operations)

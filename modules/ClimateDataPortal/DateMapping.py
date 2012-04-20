@@ -41,7 +41,7 @@ class Monthly(object):
         monthly.start_year = start_year
         monthly.start_month_0_indexed = start_month_0_indexed
         
-    def to_time_period(date_mapper, year, month):
+    def to_time_period(monthly, year, month):
         """Time periods are integers representing months in years, 
         from 1960 onwards.
         
@@ -50,29 +50,29 @@ class Monthly(object):
         This function converts a year and month to a month number.
         """
         return (
-            ((year - date_mapper.start_year) * 12) + 
+            ((year - monthly.start_year) * 12) + 
             (month - 1) 
-        ) - date_mapper.start_month_0_indexed
+        ) - monthly.start_month_0_indexed
    
-    def to_date(date_mapper, month_number):
-        year, month = date_mapper.to_date_tuple(month_number)
+    def to_date(monthly, month_number):
+        year, month = monthly.to_date_tuple(month_number)
         return date(year, month, 1)
 
-    def to_date_tuple(date_mapper, month_number):
-        month_number += start_month_0_indexed
-        return (month_number / 12) + start_year, ((month_number % 12) + 1)
+    def to_date_tuple(monthly, month_number):
+        month_number += monthly.start_month_0_indexed
+        return (month_number / 12) + monthly.start_year, ((month_number % 12) + 1)
 
-    def __repr__(date_mapper):
-        return "Monthly(start_date=%(start_date)s)" % date_mapper.start_date
+    def __repr__(monthly):
+        return "Monthly(start_date=%(start_date)s)" % monthly.start_date
 
-    def SQL_query(date_mapper, start_date, end_date, use):
+    def SQL_query(monthly, start_date, end_date, use):
         use(
-            from_start = "time_period >= %i" % date_mapper.to_time_period(start_date),
-            until_end = "time_period <= %i " % date_mapper.to_time_period(end_date),
+            from_start = "time_period >= %i" % monthly.to_time_period(start_date),
+            until_end = "time_period <= %i " % monthly.to_time_period(end_date),
             ordering_specification = "time_period ASC",
             format_time_period = (
                 lambda time_period: 
-                    "%i-%i" % date_mapper.to_date_tuple(
+                    "%i-%i" % monthly.to_date_tuple(
                         time_period
                     )
             )

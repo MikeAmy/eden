@@ -1,6 +1,7 @@
 
 # Code generation --------------------------------------------------
 
+from ..Method import Method
 from . import *
 
 BinaryOperator.R_only = False
@@ -242,7 +243,7 @@ def init_R_interpreter(R, database_settings):
     """)
 
     from rpy2.rinterface import RRuntimeError
-    R("library(DBI")
+    R("library(DBI)")
     try:
         R("library(RPostgreSQL)")
     except RRuntimeError, R_runtime_error:
@@ -321,7 +322,6 @@ def DSLAggregationNode_R(aggregation, parent_node_id, key, pre, out, post, extra
     
     out("query_results[[toString(processID(", node_id, "))]]")
 
-from . import Method
 from ..DateMapping import Monthly, Yearly, MultipleYearsByMonth
 
 time_period_and_month_numbers = Method("time_period_and_month_numbers")

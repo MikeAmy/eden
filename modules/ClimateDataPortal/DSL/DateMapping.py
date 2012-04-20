@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from . import Method
+from ..Method import Method
 date_mapping = Method("date_mapping")
 
 class MismatchedDateMapping(Exception):

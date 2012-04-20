@@ -1,5 +1,6 @@
 
 
+from ..Method import Method
 from . import *
 
 Build = Method("Build")

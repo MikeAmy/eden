@@ -16,71 +16,6 @@ ClimateDataPortal = local_import("ClimateDataPortal")
 SampleTable = ClimateDataPortal.SampleTable
 DSL = local_import("ClimateDataPortal.DSL")
 
-# Take care to use floats for all numbers in conversion calculations:
-
-Dimensions = ClimateDataPortal.Dimensions
-Dimensions.group("", 
-    "ratio", 
-    ("%", 100.0,)
-)
-
-temperature = Dimensions.parsed_from("Kelvin")
-Dimensions.group("Kelvin", 
-    "Kelvin",
-    ("Celsius", 1.0, 273.15),
-    ("Fahreinheit", (9.0/5.0), 459.67),
-)
-
-pressure = Dimensions.parsed_from("kg / m s^2")
-Dimensions.group("kg / m s^2", 
-    "Pascal",
-    ("hPa", 100.0)
-)
-
-Dimensions.group("person", "person",
-    ("capita",),
-    ("people",),
-)
-
-length = Dimensions.parsed_from("m")
-Dimensions.group("m", "metre",
-    ("km", 1000.0),
-    ("cm", 1/100.0),
-    ("mm", 1/1000.0),
-)
-
-mass = Dimensions.parsed_from("kg")
-Dimensions.group("kg", "kilogram",
-    ("tonne", 1000.0),
-    ("kilotonne", 1000000.0),
-)
-
-time = Dimensions.parsed_from("s")
-Dimensions.group("s", "second",
-    ("minute", 60),
-    ("hour", 60 * 60),
-    ("day", 60 * 60 * 24),
-    ("week", 60 * 60 * 24),
-)
-
-rainfall = Dimensions.parsed_from("precipitation mm")
-Dimensions.group("precipitation mm", "precipitation mm")
-
-rainfall = Dimensions.parsed_from("precipitation mm")
-Dimensions.group("precipitation mm", "precipitation mm")
-
-velocity = Dimensions.parsed_from("m/s")
-Dimensions.group("m/s", "m/s")
-
-preferred_units = {
-    pressure: "hPa",
-    time: "day",
-    temperature: "Kelvin",
-    rainfall: "precipitation mm",
-    velocity: "m/s",
-}
-
-
 def _map_plugin(**client_config):
     return ClimateDataPortal.MapPlugin(
         env = Storage(globals()),
@@ -184,8 +119,8 @@ def climate_overlay_data():
                 "understood_expression": syntax_error.understood_expression
             }))
         except (
-            DSL.MeaninglessUnitsException,
-            DSL.DimensionError,
+            ClimateDataPortal.MeaninglessUnitsException,
+            ClimateDataPortal.DimensionError,
             DSL.DSLTypeError,
             DSL.GridSizing.MismatchedGridSize
         ), exception:
@@ -538,8 +473,9 @@ def get_years():
     response.headers["Expires"] = (
         datetime.now() + timedelta(days = 7)
     ).strftime("%a, %d %b %Y %H:%M:%S GMT") # not GMT, but can't find a way
+    file_path =_map_plugin().get_available_years(request.vars["dataset_name"])
     return response.stream(
-        open(_map_plugin().get_available_years(request.vars["dataset_name"]),"rb"),
+        open(file_path,"rb"),
         chunk_size=4096
     )
 

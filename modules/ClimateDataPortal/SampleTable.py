@@ -357,7 +357,8 @@ class SampleTable(object):
     ):
         years = set()
         for (time_period,) in db.executesql(
-            "SELECT DISTINCT time_period FROM climate_sample_table_%(sample_table_id)i;" % dict(
+            "SELECT DISTINCT time_period "
+            "FROM climate_sample_table_%(sample_table_id)i;" % dict(
                 sample_table_id = sample_table.id
             )
         ):
@@ -366,7 +367,7 @@ class SampleTable(object):
             )
         return years
 
-def init_SampleTables():
+def init_SampleTables():    
     for SampleTableType in sample_table_types:
         for sample_table_spec in db(
             (db.climate_sample_table_spec.sample_type_code == SampleTableType.code) 
@@ -375,7 +376,9 @@ def init_SampleTables():
         ):
             sample_type_code = sample_table_spec.sample_type_code
             parameter_name = sample_table_spec.name
-            sample_type = sample_table_types_by_code[sample_table_spec.sample_type_code]
+            sample_type = sample_table_types_by_code[
+                sample_table_spec.sample_type_code
+            ]
             date_mapper = SampleTable._SampleTable__date_mapper
             SampleTable(
                 name = sample_table_spec.name,
@@ -387,4 +390,5 @@ def init_SampleTables():
                 grid_size = sample_table_spec.grid_size,
                 db = db
             )
+
 SampleTable.init_SampleTables = staticmethod(init_SampleTables)
