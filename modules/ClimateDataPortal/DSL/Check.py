@@ -42,15 +42,7 @@ def Yearly_check_months(yearly, add_error):
     add_error("Yearly data sets cannot have Months specified, so remove the Months(...).")
 
 @check_months.implementation(Monthly)
-def Monthly_check_months(yearly, error, months, month_numbers):
-    month_filter.month_numbers = month_numbers = list()
-    for month in months:                
-        month_number = month_number_from_arg(month, error) - 1
-        if month_number in month_numbers:
-            error(
-                "%s was added more than once" % month_sequence[month_number]
-            )
-        month_numbers.append(month_number)
+def Monthly_check_months(yearly, error, month_numbers):
     if (
         Months.options["PreviousDecember"] - 1 in month_numbers and 
         Months.options["December"] - 1 in month_numbers
@@ -62,14 +54,6 @@ def Monthly_check_months(yearly, error, months, month_numbers):
 
 @check_months.implementation(MultipleYearsByMonth)
 def MultipleYearsByMonth_check_months(date_mapper, error, months, month_numbers):
-    month_filter.month_numbers = month_numbers = list()
-    for month in months:                
-        month_number = month_number_from_arg(month, error) - 1
-        if month_number in month_numbers:
-            error(
-                "%s was added more than once" % month_sequence[month_number]
-            )
-        month_numbers.append(month_number)
     if (
         Months.options["PreviousDecember"] - 1 in month_numbers
     ):
@@ -78,14 +62,27 @@ def MultipleYearsByMonth_check_months(date_mapper, error, months, month_numbers)
             "concept of dates. Please choose December instead."
         )
 
+
+
 @check.implementation(Months)
 def Months_check(month_filter, date_mapper):
-    month_filter.errors = []
+    month_filter.errors = set()
+    error = month_filter.errors.add
+    month_filter.month_numbers = month_numbers = list()
+    months = month_filter.months
+    for month in months:                
+        month_number_or_null = month_filter_number_from_arg(month, error)
+        if month_number_or_null is not None:
+            month_number = month_number_or_null - 1
+            if month_number in month_numbers:
+                error(
+                    "%s was added more than once" % Months.sequence[month_number]
+                )
+            month_numbers.append(month_number)
     check_months(
         date_mapper
     )(
-        error = month_filter.errors.append,
-        months = month_filter.months,
+        error = error,
         month_numbers = month_filter.month_numbers
     )
     return month_filter.errors
@@ -103,7 +100,7 @@ def checked_year(year, error):
     return (year,)
 
 def checked_year_month(year, month, error):
-    return checked_year(year, error) + (month_number_from_arg(month, error),)
+    return checked_year(year, error) + (month_filter_number_from_arg(month, error),)
 
 import calendar
 def checked_year_month_day(year, month, day, error):
@@ -164,8 +161,8 @@ def Daily_check_to(date_mapper, error, year, month, day):
 
 @check.implementation(From)
 def From_check(from_date, date_mapper):
-    from_date.errors = []
-    error = from_date.errors.append
+    from_date.errors = set()
+    error = from_date.errors.add
     year = from_date.year
     from_date.date = check_from(
         date_mapper
@@ -179,8 +176,8 @@ def From_check(from_date, date_mapper):
 
 @check.implementation(To)
 def To_check(to_date, date_mapper):
-    to_date.errors = []
-    error = to_date.errors.append
+    to_date.errors = set()
+    error = to_date.errors.add
     year = to_date.year
     to_date.date = check_to(
         date_mapper
@@ -194,15 +191,15 @@ def To_check(to_date, date_mapper):
 
 @check.implementation(Addition, Subtraction, Multiplication, Division)
 def Binop_check(binop):
-    binop.errors = []
+    binop.errors = set()
     left = check(binop.left)()
     right = check(binop.right)()
     return left or right
 
 @check.implementation(Pow)
 def PowRoot_check(binop):
-    binop.errors = []
-    error = binop.errors.append
+    binop.errors = set()
+    error = binop.errors.add
     exponent = binop.right
     if not isinstance(exponent, int) or exponent == 0:
         error("Exponent should be a positive, non-zero number.")
@@ -210,7 +207,7 @@ def PowRoot_check(binop):
 
 @check.implementation(*aggregations)
 def Aggregation_check(aggregation):
-    aggregation.errors = []
+    aggregation.errors = set()
     def error(message):
         aggregation.errors.append(message)
     if not isinstance(aggregation.dataset_name, str):
@@ -262,7 +259,7 @@ Units.check_number = WhateverUnitsAreNeeded.check_number = Units_check_number
 
 @check.implementation(Number)
 def Number_check(number):
-    number.errors = []
+    number.errors = set()
     number.units.check_number(
         number.value,
         number.errors.append
