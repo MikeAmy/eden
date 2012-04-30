@@ -276,11 +276,13 @@ var ColourKey = OpenLayers.Class(OpenLayers.Control, {
         
         colour_key.$lower_limit = INPUT({
             size:5, value:'Min',
-            style: 'background-color:#222; border:1px solid #888; color:white;'
+            style: 'background-color:#222; border:1px solid #888; color:white;',
+            title: 'minimum (click to edit)'
         })
         colour_key.$upper_limit = INPUT({
             size:5, value:'Max',
-            style:'text-align:right; background-color:#222; border:1px solid #888; color:white;'
+            style:'text-align:right; background-color:#222; border:1px solid #888; color:white;',
+            title: 'maximum (click to edit)'
         })
         colour_key.$limit_lock = INPUT({
             type:'checkbox',
@@ -306,7 +308,8 @@ var ColourKey = OpenLayers.Class(OpenLayers.Control, {
                 var gradient_image = IMG({
                     width:'100%',
                     height:'15px',
-                    style:'border-top: 1px solid black; border-bottom: 1px solid black; margin-top: 1px;'
+                    style:'border-top: 1px solid black; border-bottom: 1px solid black; margin-top: 1px;',
+                    title: 'click to use this gradient'
                 })
                 colour_gradient.manage_image(gradient_image)
                 gradient_images.push(gradient_image)
@@ -322,6 +325,7 @@ var ColourKey = OpenLayers.Class(OpenLayers.Control, {
             {
                 style: 'display: none; padding-top: 3px;'
             },
+            SPAN({}, 'Click to select gradient:'),
             gradient_images,
             DIV({style:'text-align:center;'},
                 colour_key.$limit_lock,
