@@ -12,7 +12,7 @@ Gridded.__name__ = "Interpolated"
 class Projected(object):
     code = "P"
 
-from simplejson import OrderedDict
+from gluon.contrib.simplejson import OrderedDict
 sample_table_types = (Observed, Gridded, Projected)
 sample_table_types_by_code = OrderedDict()
 for SampleTableType in sample_table_types:
