@@ -1742,17 +1742,21 @@ ClimateDataMapPlugin = function (config) {
         )
     }
     else {
-        var initial_query_expression = (
-            plugin.aggregation_names[0]+'('+
-                '"'+ //form_values.data_type+' '+
-                plugin.parameter_names[0].replace(
-                    new RegExp('\\+','g'),
-                    ' '
-                )+'", '+
-                'From('+plugin.year_min+'), '+
-                'To('+plugin.year_max+')'+
-            ')'
-        )
+        if (plugin.parameter_names.length > 0) {
+            var initial_query_expression = (
+                plugin.aggregation_names[0]+'('+
+                    '"'+ //form_values.data_type+' '+
+                    plugin.parameter_names[0].replace(
+                        new RegExp('\\+','g'),
+                        ' '
+                    )+'", '+
+                    'From('+plugin.year_min+'), '+
+                    'To('+plugin.year_max+')'+
+                ')'
+            )
+        } else {
+            var initial_query_expression = ''
+        }
     }
     var initial_filter = decodeURI(config.filter || 'unfiltered')
     
@@ -2322,109 +2326,116 @@ ClimateDataMapPlugin = function (config) {
     plugin.update_map_layer = function (
         query_expression
     ) {
-        // request new features
-        plugin.overlay_layer.destroyFeatures()
-        plugin.set_status('Updating...')
-        plugin.query_box.update(query_expression)
-        plugin.show_chart_button.disable()
-//        console.log(plugin.overlay_data_URL)
-        $.ajax({
-            url: plugin.overlay_data_URL,
-            dataType: 'json',
-            data: {
-                query_expression: query_expression
-            },
-            //timeout: 1000 * 20, // timeout doesn't seem to work
-            success: function(feature_data, status_code) {
-                if (feature_data.values.length == 0) {
-                    plugin.set_status(
-                        'Query was successful but contains no data. '+
-                        'Data might be unavailable for this time range. '+
-                        'Gridded data runs from 1971 to 2009. '+
-                        'For Observed data please refer to '+
-                        '<a href="'+plugin.station_parameters_URL+
-                        '">Station Parameters</a>. '+
-                        'Projected data depends on the dataset.'
-                    )
-                } else {
-                    plugin.feature_data = feature_data
-                    var units = feature_data.units
-                    var converter = plugin.converter = (
-                        conversion_functions[units] || 
-                        function (x) { 
-                            return x 
+        if (query_expression != '') {
+            // request new features
+            plugin.overlay_layer.destroyFeatures()
+            plugin.set_status('Updating...')
+            plugin.query_box.update(query_expression)
+            plugin.show_chart_button.disable()
+    //        console.log(plugin.overlay_data_URL)
+            $.ajax({
+                url: plugin.overlay_data_URL,
+                dataType: 'json',
+                data: {
+                    query_expression: query_expression
+                },
+                //timeout: 1000 * 20, // timeout doesn't seem to work
+                success: function(feature_data, status_code) {
+                    if (feature_data.values.length == 0) {
+                        plugin.set_status(
+                            'Query was successful but contains no data. '+
+                            'Data might be unavailable for this time range. '+
+                            'Gridded data runs from 1971 to 2009. '+
+                            'For Observed data please refer to '+
+                            '<a href="'+plugin.station_parameters_URL+
+                            '">Station Parameters</a>. '+
+                            'Projected data depends on the dataset.'
+                        )
+                    } else {
+                        plugin.feature_data = feature_data
+                        var units = feature_data.units
+                        var converter = plugin.converter = (
+                            conversion_functions[units] || 
+                            function (x) { 
+                                return x 
+                            }
+                        )
+                        var display_units = plugin.display_units = display_units_conversions[units] || units
+                        var values = feature_data.values
+                        var place_ids = feature_data.keys
+                        var usable_values = []
+                        for (
+                            var i = 0;
+                            i < place_ids.length;
+                            i++
+                        ) {
+                            if (plugin.places[place_ids[i]]) {
+                                usable_values.push(values[i])
+                            }
                         }
-                    )
-                    var display_units = plugin.display_units = display_units_conversions[units] || units
-                    var values = feature_data.values
-                    var place_ids = feature_data.keys
-                    var usable_values = []
-                    for (
-                        var i = 0;
-                        i < place_ids.length;
-                        i++
-                    ) {
-                        if (plugin.places[place_ids[i]]) {
-                            usable_values.push(values[i])
-                        }
+                        plugin.colour_key.update_from(
+                            display_units,
+                            converter(Math.max.apply(null, usable_values)), 
+                            converter(Math.min.apply(null, usable_values))
+                        )
+                        plugin.update_query(feature_data.understood_expression)
+                        // not right place for this:
+                        plugin.filter_box.resizer.resize(true)
+                        plugin.set_status('')
                     }
-                    plugin.colour_key.update_from(
-                        display_units,
-                        converter(Math.max.apply(null, usable_values)), 
-                        converter(Math.min.apply(null, usable_values))
+                },
+                error: function (jqXHR, textStatus, errorThrown) {
+                    plugin.set_status(
+                        'An error occurred: ' + (
+                            jqXHR.statusText == 'error' ? 
+                                'Is the connection OK?'
+                                : jqXHR.statusText
+                        )
                     )
-                    plugin.update_query(feature_data.understood_expression)
-                    // not right place for this:
-                    plugin.filter_box.resizer.resize(true)
-                    plugin.set_status('')
-                }
-            },
-            error: function (jqXHR, textStatus, errorThrown) {
-                plugin.set_status(
-                    'An error occurred: ' + (
-                        jqXHR.statusText == 'error' ? 
-                            'Is the connection OK?'
-                            : jqXHR.statusText
+                    var responseText = jqXHR.responseText
+                    var error_message = responseText.substr(
+                        0,
+                        responseText.indexOf('<!--')
                     )
-                )
-                var responseText = jqXHR.responseText
-                var error_message = responseText.substr(
-                    0,
-                    responseText.indexOf('<!--')
-                )
-                var error = $.parseJSON(error_message)
-                if (error.error == 'SyntaxError') {
-                    // don't update the last expression if it's invalid
-                    plugin.query_box.update(error.understood_expression)
-                    plugin.query_box.error(error.offset)
-                    plugin.set_status('')
-                }
-                else {
-                    if (
-                        error.error == 'MeaninglessUnitsException' ||
-                        error.error == 'DSLTypeError' || 
-                        error.error == 'DimensionError' ||
-                        error.error == 'MismatchedGridSize'
-                    ) {
-                        window.analysis = error.analysis
-                        plugin.query_box.update(error.analysis)
+                    var error = $.parseJSON(error_message)
+                    if (error.error == 'SyntaxError') {
+                        // don't update the last expression if it's invalid
+                        plugin.query_box.update(error.understood_expression)
+                        plugin.query_box.error(error.offset)
+                        plugin.set_status('')
                     }
                     else {
-                        plugin.set_status(
-                            '<a target= "_blank" href="'+
-                                plugin.overlay_data_URL+'?'+
-                                $.param(query_expression)+
-                            '">Error</a>'
-                        )
+                        if (
+                            error.error == 'MeaninglessUnitsException' ||
+                            error.error == 'DSLTypeError' || 
+                            error.error == 'DimensionError' ||
+                            error.error == 'MismatchedGridSize'
+                        ) {
+                            window.analysis = error.analysis
+                            plugin.query_box.update(error.analysis)
+                        }
+                        else {
+                            plugin.set_status(
+                                '<a target= "_blank" href="'+
+                                    plugin.overlay_data_URL+'?'+
+                                    $.param(query_expression)+
+                                '">Error</a>'
+                            )
+                        }
+                    }
+                },
+                complete: function (jqXHR, status) {
+                    if (status != 'success' && status != 'error') {
+                        plugin.set_status(status)
                     }
                 }
-            },
-            complete: function (jqXHR, status) {
-                if (status != 'success' && status != 'error') {
-                    plugin.set_status(status)
-                }
-            }
-        });
+            })
+        } else {
+            plugin.query_box.update(
+                '# (There are no datasets in the database '+
+                '- the system administrator may import them)'
+            )
+        }
     }
     var months = [
         '', 'Jan', 'Feb', 'Mar', 'Apr', 'May',
