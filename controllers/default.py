@@ -33,32 +33,60 @@ def register_validation(form):
             form.errors.mobile = T("Invalid phone number")
     elif deployment_settings.get_auth_registration_mobile_phone_mandatory():
         form.errors.mobile = T("Phone number is required")
+
+    org = deployment_settings.get_auth_registration_organisation_id_default()
+    if org:
+        # Add to default organisation
+        form.vars.organisation_id = org
+
     return
 
 # -----------------------------------------------------------------------------
 def register_onaccept(form):
     """ Tasks to be performed after a new user registers """
+
     # Add newly-registered users to Person Registry, add 'Authenticated' role
     # If Organisation is provided, then: add HRM record & add to 'Org_X_Access' role
-    person = auth.s3_register(form)
+    person_id = auth.s3_register(form)
 
-    if deployment_settings.has_module("delphi"):
-        # Add user as a participant of the default problem group
+    if form.vars.organisation_id and not deployment_settings.get_hrm_show_staff():
+        # Convert HRM record to a volunteer
+        htable = s3db.hrm_human_resource
+        query = (htable.person_id == person_id)
+        db(query).update(type=2)
+
+    # Add to required roles:
+    roles = deployment_settings.get_auth_registration_roles()
+    if roles or deployment_settings.has_module("delphi"):
         utable = auth.settings.table_user
         ptable = s3db.pr_person
         ltable = s3db.pr_person_user
-        query = (ptable.id == person) & \
+        query = (ptable.id == person_id) & \
                 (ptable.pe_id == ltable.pe_id) & \
                 (ltable.user_id == utable.id)
-        user_id = db(query).select(utable.id, limitby=(0, 1)).first().id
+        user = db(query).select(utable.id,
+                                ltable.user_id,
+                                limitby=(0, 1)).first()
+
+    if roles:
+        gtable = auth.settings.table_group
+        mtable = auth.settings.table_membership
+        query = (gtable.uuid.belongs(roles))
+        rows = db(query).select(gtable.id)
+        for role in rows:
+            mtable.insert(user_id=user[ltable._tablename].user_id,
+                          group_id=role.id)
+
+    if deployment_settings.has_module("delphi"):
+        # Add user as a participant of the default problem group
         table = s3db.delphi_group
-        query = (table.deleted != True)
+        query = (table.uuid == "DEFAULT")
         group = db(query).select(table.id,
                                  limitby=(0, 1)).first()
         if group:
             table = s3db.delphi_membership
             table.insert(group_id=group.id,
-                         user_id=user_id,
+                         user_id=user[utable._tablename].id,
                          status=3)
 
 # -----------------------------------------------------------------------------
@@ -79,17 +107,6 @@ _table_user.language.comment = DIV(_class="tooltip",
                                    _title="%s|%s" % (T("Language"),
                                                      T("The language you wish the site to be displayed in.")))
 _table_user.language.represent = lambda opt: s3_languages.get(opt, UNKNOWN_OPT)
-
-# Photo widget
-if not deployment_settings.get_auth_registration_requests_image():
-    _table_user.image.readable = _table_user.image.writable = False
-else:
-    _table_user.image.comment = DIV(_class="stickytip",
-                                     _title="%s|%s" % (T("Image"),
-                                                       T("You can either use %(gravatar)s or else upload a picture here. The picture will be resized to 50x50.") % \
-                                                        dict(gravatar = A("Gravatar",
-                                                                          _target="top",
-                                                                          _href="http://gravatar.com"))))
 
 # Organisation widget for use in Registration Screen
 # NB User Profile is only editable by Admin - using User Management
@@ -126,6 +143,16 @@ def index():
 
     title = deployment_settings.get_system_name()
     response.title = title
+
+    item = ""
+    if deployment_settings.has_module("cms"):
+        table = s3db.cms_post
+        item = db(table.module == module).select(table.body,
+                                                 limitby=(0, 1)).first()
+        if item:
+            item = DIV(XML(item.body))
+        else:
+            item = ""
 
     if deployment_settings.has_module("cr"):
         s3mgr.load("cr_shelter")
@@ -205,7 +232,7 @@ def index():
         response.view = "default/index.html"
         auth.permission.controller = "org"
         auth.permission.function = "site"
-        permitted_facilities = auth.permission.permitted_facilities(redirect_on_error=False)
+        permitted_facilities = auth.permitted_facilities(redirect_on_error=False)
         manage_facility_box = ""
         if permitted_facilities:
             facility_list = s3_represent_facilities(db, permitted_facilities,
@@ -365,6 +392,7 @@ google.setOnLoadCallback(LoadDynamicFeedControl);"""))
         response.s3.js_global.append( feed_control )
 
     return dict(title = title,
+                item = item,
 
                 sit_dec_res_box = sit_dec_res_box,
                 facility_box = facility_box,
@@ -475,7 +503,53 @@ def user():
         _table_user.utc_offset.readable = True
         _table_user.utc_offset.writable = True
 
+        # If we have an opt_in and some post_vars then update the opt_in value
+        if deployment_settings.get_auth_opt_in_to_email() and request.post_vars:
+            opt_list = deployment_settings.get_auth_opt_in_team_list()
+            removed = []
+            selected = []
+            for opt_in in opt_list:
+                if opt_in in request.post_vars:
+                    selected.append(opt_in)
+                else:
+                    removed.append(opt_in)
+            ptable = s3db.pr_person
+            putable = s3db.pr_person_user
+            query = (putable.user_id == request.post_vars.id) & \
+                    (putable.pe_id == ptable.pe_id)
+            person_id = db(query).select(ptable.id, limitby=(0, 1)).first().id
+            db(ptable.id == person_id).update(opt_in = selected)
+
+            g_table = s3db["pr_group"]
+            gm_table = s3db["pr_group_membership"]
+            # Remove them from any team they are a member of in the removed list
+            for team in removed:
+                query = (g_table.name == team) & \
+                        (gm_table.group_id == g_table.id) & \
+                        (gm_table.person_id == person_id)
+                gm_rec = db(query).select(g_table.id, limitby=(0, 1)).first()
+                if gm_rec:
+                    db(gm_table.id == gm_rec.id).delete()
+            # Add them to the team (if they are not already a team member)
+            for team in selected:
+                query = (g_table.name == team) & \
+                        (gm_table.group_id == g_table.id) & \
+                        (gm_table.person_id == person_id)
+                gm_rec = db(query).select(g_table.id, limitby=(0, 1)).first()
+                if not gm_rec:
+                    query = (g_table.name == team)
+                    team_rec = db(query).select(g_table.id, limitby=(0, 1)).first()
+                    # if the team doesn't exist then add it
+                    if team_rec == None:
+                        team_id = g_table.insert(name = team, group_type = 5)
+                    else:
+                        team_id = team_rec.id
+                    gm_table.insert(group_id = team_id,
+                                    person_id = person_id)
+
     auth.settings.profile_onaccept = user_profile_onaccept
+
+    self_registration = deployment_settings.get_security_self_registration()
 
     login_form = register_form = None
     if request.args and request.args(0) == "login":
@@ -485,6 +559,9 @@ def user():
         if s3.crud.submit_style:
             form[0][-1][1][0]["_class"] = s3.crud.submit_style
     elif request.args and request.args(0) == "register":
+        if not self_registration:
+            session.error = T("Registration not permitted")
+            redirect(URL(f="index"))
         if deployment_settings.get_terms_of_service():
             auth.messages.submit_button = T("I accept. Create my account.")
         else:
@@ -495,14 +572,37 @@ def user():
         register_form = form
         # Add client-side validation
         s3_register_validation()
-    else:
+    elif request.args and request.args(0) == "change_password":
         form = auth()
-
-    if request.args and request.args(0) == "profile" and \
-       deployment_settings.get_auth_openid():
-        form = DIV(form, openid_login_form.list_user_openids())
-
-    self_registration = deployment_settings.get_security_self_registration()
+    elif request.args and request.args(0) == "profile":
+        if deployment_settings.get_auth_openid():
+            form = DIV(form, openid_login_form.list_user_openids())
+        else:
+            form = auth()
+        # add an opt in clause to receive emails depending on the deployment settings
+        if deployment_settings.get_auth_opt_in_to_email():
+            ptable = s3db.pr_person
+            ltable = s3db.pr_person_user
+            opt_list = deployment_settings.get_auth_opt_in_team_list()
+            query = (ltable.user_id == form.record.id) & \
+                    (ltable.pe_id == ptable.pe_id)
+            db_opt_in_list = db(query).select(ptable.opt_in, limitby=(0, 1)).first().opt_in
+            for opt_in in opt_list:
+                field_id = "%s_opt_in_%s" % (_table_user, opt_list)
+                if opt_in in db_opt_in_list:
+                    checked = "selected"
+                else:
+                    checked = None
+                form[0].insert(-1,
+                               TR(TD(LABEL("Receive %s updates:" % opt_in,
+                                           _for="opt_in",
+                                           _id=field_id + SQLFORM.ID_LABEL_SUFFIX),
+                                     _class="w2p_fl"),
+                                     INPUT(_name=opt_in, _id=field_id, _type="checkbox", _checked=checked),
+                               _id=field_id + SQLFORM.ID_ROW_SUFFIX))
+    else:
+        # Retrieve Password
+        form = auth()
 
     # Use Custom Ext views
     # Best to not use an Ext form for login: can't save username/password in browser & can't hit 'Enter' to submit!
@@ -514,6 +614,30 @@ def user():
                 login_form=login_form,
                 register_form=register_form,
                 self_registration=self_registration)
+
+# -----------------------------------------------------------------------------
+def facebook():
+    """ Login using Facebook """
+
+    if not auth.settings.facebook:
+        redirect(URL(f="user", args=request.args, vars=request.vars))
+
+    auth.settings.login_form = s3base.FaceBookAccount()
+    form = auth()
+
+    return dict(form=form)
+
+# -----------------------------------------------------------------------------
+def google():
+    """ Login using Google """
+
+    if not auth.settings.google:
+        redirect(URL(f="user", args=request.args, vars=request.vars))
+
+    auth.settings.login_form = s3base.GooglePlusAccount()
+    form = auth()
+
+    return dict(form=form)
 
 # -----------------------------------------------------------------------------
 def source():
@@ -619,7 +743,8 @@ def contact():
         or:
             Custom View
     """
-    if auth.is_logged_in() and deployment_settings.get_options_support_requests():
+
+    if auth.is_logged_in() and deployment_settings.has_module("support"):
         # Provide an internal Support Requests ticketing system.
         prefix = "support"
         resourcename = "req"

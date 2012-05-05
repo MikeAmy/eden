@@ -21,6 +21,9 @@ if deployment_settings.has_module("cr"):
         location_id = s3db.gis_location_id
         organisation_id = s3db.org_organisation_id
 
+        super_entity = s3mgr.model.super_entity
+        super_link = s3mgr.model.super_link
+
         # -------------------------------------------------------------------------
         # Shelter types
         # e.g. NGO-operated, Government evacuation center, School, Hospital -- see Agasti opt_camp_type.)
@@ -51,7 +54,9 @@ if deployment_settings.has_module("cr"):
                 msg_record_created = T("Camp Type added"),
                 msg_record_modified = T("Camp Type updated"),
                 msg_record_deleted = T("Camp Type deleted"),
-                msg_list_empty = T("No Camp Types currently registered"))
+                msg_list_empty = T("No Camp Types currently registered"),
+                name_nice = T("Camp"),
+                name_nice_plural = T("Camps"))
         else:
             ADD_SHELTER_TYPE = T("Add Shelter Type")
             LIST_SHELTER_TYPES = T("List Shelter Types")
@@ -69,30 +74,18 @@ if deployment_settings.has_module("cr"):
                 msg_record_created = T("Shelter Type added"),
                 msg_record_modified = T("Shelter Type updated"),
                 msg_record_deleted = T("Shelter Type deleted"),
-                msg_list_empty = T("No Shelter Types currently registered"))
+                msg_list_empty = T("No Shelter Types currently registered"),
+                name_nice = T("Shelter"),
+                name_nice_plural = T("Shelters"))
 
         shelter_type_id = S3ReusableField("shelter_type_id", db.cr_shelter_type,
                                           requires = IS_NULL_OR(IS_ONE_OF(db,
                                                                           "cr_shelter_type.id",
                                                                           "%(name)s")),
                                           represent = lambda id: (id and [db.cr_shelter_type[id].name] or ["None"])[0],
-                                          comment = S3Comment(desc=None,
-                                                              title=None,
-                                                              anchor_link=\
-                                                                  URL(c="cr", f="shelter_type",
-                                                                      args="create",
-                                                                      vars=dict(format="popup")
-                                                                      ),
-                                                              anchor_title=ADD_SHELTER_TYPE,
-                                                              ),
-                                          # A(ADD_SHELTER_TYPE,
-                                          #             _class="colorbox",
-                                          #             _href=URL(c="cr",
-                                          #                       f="shelter_type",
-                                          #                       args="create",
-                                          #                       vars=dict(format="popup")),
-                                          #             _target="top",
-                                          #             _title=ADD_SHELTER_TYPE),
+                                          comment=S3AddResourceLink(c="cr",
+                                                                    f="shelter_type",
+                                                                    label=ADD_SHELTER_TYPE),
                                           ondelete = "RESTRICT",
                                           label = SHELTER_TYPE_LABEL)
 
@@ -124,7 +117,9 @@ if deployment_settings.has_module("cr"):
                 msg_record_created = T("Camp Service added"),
                 msg_record_modified = T("Camp Service updated"),
                 msg_record_deleted = T("Camp Service deleted"),
-                msg_list_empty = T("No Camp Services currently registered"))
+                msg_list_empty = T("No Camp Services currently registered"),
+                name_nice = T("Camp Service"),
+                name_nice_plural = T("Camp Services"))
         else:
             ADD_SHELTER_SERVICE = T("Add Shelter Service")
             LIST_SHELTER_SERVICES = T("List Shelter Services")
@@ -142,7 +137,9 @@ if deployment_settings.has_module("cr"):
                 msg_record_created = T("Shelter Service added"),
                 msg_record_modified = T("Shelter Service updated"),
                 msg_record_deleted = T("Shelter Service deleted"),
-                msg_list_empty = T("No Shelter Services currently registered"))
+                msg_list_empty = T("No Shelter Services currently registered"),
+                name_nice = T("Shelter Service"),
+                name_nice_plural = T("Shelter Services"))
 
         def cr_shelter_service_represent(shelter_service_ids):
             table = db.cr_shelter_service
@@ -166,19 +163,19 @@ if deployment_settings.has_module("cr"):
                                                                              "%(name)s", multiple=True)),
                                              represent = cr_shelter_service_represent,
                                              label = SHELTER_SERVICE_LABEL,
-                                             comment = A(ADD_SHELTER_SERVICE,
-                                                         _class="colorbox",
-                                                         _href=URL(c="cr", f="shelter_service",
-                                                                   args="create",
-                                                                   vars=dict(format="popup")),
-                                                         _target="top",
-                                                         _title=ADD_SHELTER_SERVICE),
+                                             comment = S3AddResourceLink(c="cr",
+                                                                         f="shelter_service",
+                                                                         label=ADD_SHELTER_SERVICE),
                                              ondelete = "RESTRICT",
                                              #widget = SQLFORM.widgets.checkboxes.widget
                                              )
 
         # -------------------------------------------------------------------------
-        resourcename = "shelter"
+        cr_shelter_opts = {
+            1 : T("Closed"),
+            2 : T("Open")
+        }
+        
         tablename = "cr_shelter"
         table = db.define_table(tablename,
                                 super_link("site_id", "org_site"),
@@ -199,13 +196,19 @@ if deployment_settings.has_module("cr"):
                                 person_id(label = T("Contact Person")),
                                 Field("capacity", "integer",
                                       label = T("Capacity (Max Persons)"),
-                                      requires = IS_NULL_OR(IS_INT_IN_RANGE(0, 999999))),
+                                      requires = IS_NULL_OR(IS_INT_IN_RANGE(0, 999999)),
+                                      represent=lambda v, row=None: IS_INT_AMOUNT.represent(v)),
                                 Field("population", "integer",
                                       label = T("Population"),
-                                      requires = IS_NULL_OR(IS_INT_IN_RANGE(0, 999999))),
+                                      requires = IS_NULL_OR(IS_INT_IN_RANGE(0, 999999)),
+                                      represent=lambda v, row=None: IS_INT_AMOUNT.represent(v)),
+                                Field("status", "integer",
+                                      requires = IS_NULL_OR(IS_IN_SET(cr_shelter_opts)),
+                                      represent = lambda opt: \
+                                        cr_shelter_opts.get(opt, current.messages.UNKNOWN_OPT),
+                                      label = T("Status")),
                                 Field("source",
                                       label = T("Source")),
-                                #document_id(), # Better to have multiple Documents on a Tab
                                 s3_comments(),
                                 *(address_fields() + s3_meta_fields()))
 
@@ -228,7 +231,10 @@ if deployment_settings.has_module("cr"):
                 msg_record_created = T("Camp added"),
                 msg_record_modified = T("Camp updated"),
                 msg_record_deleted = T("Camp deleted"),
-                msg_list_empty = T("No Camps currently registered"))
+                msg_list_empty = T("No Camps currently registered"),
+                name_nice = T("Camp Service"),
+                name_nice_plural = T("Camp Services"))
+
         else:
             ADD_SHELTER = T("Add Shelter")
             LIST_SHELTERS = T("List Shelters")
@@ -247,7 +253,9 @@ if deployment_settings.has_module("cr"):
                 msg_record_created = T("Shelter added"),
                 msg_record_modified = T("Shelter updated"),
                 msg_record_deleted = T("Shelter deleted"),
-                msg_list_empty = T("No Shelters currently registered"))
+                msg_list_empty = T("No Shelters currently registered"),
+                name_nice = T("Shelter"),
+                name_nice_plural = T("Shelters"))
 
         # Reusable field
         shelter_id = S3ReusableField("shelter_id", db.cr_shelter,
@@ -257,17 +265,12 @@ if deployment_settings.has_module("cr"):
                                                                      sort=True)),
                                      represent = lambda id: (id and [db.cr_shelter[id].name] or ["None"])[0],
                                      ondelete = "RESTRICT",
-                                     comment = DIV(A(ADD_SHELTER,
-                                                     _class="colorbox",
-                                                     _href=URL(c="cr", f="shelter",
-                                                               args="create",
-                                                               vars=dict(format="popup")),
-                                                     _target="top",
-                                                     _title=ADD_SHELTER),
-                                               DIV( _class="tooltip",
-                                                    _title="%s|%s" % (SHELTER_LABEL,
-                                                                      "%s (%s)." % (SHELTER_HELP,
-                                                                                    T("optional"))))),
+                                     comment=S3AddResourceLink(c="cr",
+                                                               f="shelter",
+                                                               label=ADD_SHELTER,
+                                                               title=SHELTER_LABEL,
+                                                               tooltip="%s (%s)." % (SHELTER_HELP,
+                                                                                    T("optional"))),
                                      label = SHELTER_LABEL,
                                      widget = S3AutocompleteWidget("cr", "shelter")
                                      )
@@ -278,6 +281,7 @@ if deployment_settings.has_module("cr"):
                         onvalidation=address_onvalidation,
                         list_fields=["id",
                                      "name",
+                                     "status",
                                      "shelter_type_id",
                                      "shelter_service_id",
                                      "capacity",

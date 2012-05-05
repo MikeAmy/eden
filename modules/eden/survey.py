@@ -1283,7 +1283,7 @@ def survey_getQuestionFromName(name, series_id):
         for row in locList.items():
             if row[1] == name:
                 return survey_getQuestionFromName(row[0],series_id)
-        
+
     question = {}
     question["qstn_id"] = record.survey_question.id
     question["code"] = record.survey_question.code
@@ -1717,22 +1717,22 @@ class S3SeriesModel(S3Model):
                                           )
                 if r.representation == "html":
                     table = buildTableFromCompletedList(items)
-#                        exporter = S3Exporter()
-#                        table = exporter.html(items)
+                        #exporter = S3Exporter()
+                        #table = exporter.html(items)
                 output["items"] = table
-                output["sortby"] = [[0,"asc"]]
+                output["sortby"] = [[0, "asc"]]
                 url_pdf = URL(c="survey",
                               f="series",
-                              args=[series_id,"summary.pdf"],
-                              vars = {"mode":mode,"selected":vars["selected"]}
+                              args=[series_id, "summary.pdf"],
+                              vars = {"mode":mode, "selected":vars["selected"]}
                              )
                 url_xls = URL(c="survey",
                               f="series",
-                              args=[series_id,"summary.xls"],
-                              vars = {"mode":mode,"selected":vars["selected"]}
+                              args=[series_id, "summary.xls"],
+                              vars = {"mode":mode, "selected":vars["selected"]}
                              )
-                s3.formats["pdf"]=url_pdf
-                s3.formats["xls"]=url_xls
+                s3.formats["pdf"] = url_pdf
+                s3.formats["xls"] = url_xls
             else:
                 output["items"] = None
             output["title"] = crud_strings.title_selected
@@ -1971,7 +1971,7 @@ $.post('%s',
                 qstn_type = qstn["type"]
                 answers = getAnswers(qstn_id, series_id)
                 analysisTool = survey_analysis_type[qstn_type](qstn_id, answers)
-                label = analysisTool.qstnWidget.question.name
+                label = analysisTool.qstnWidget.fullName()
                 if len(label) > 20:
                     label = "%s..." % label[0:20]
                 legendLabels.append(label)
@@ -2037,23 +2037,63 @@ $.post('%s',
         else:
             seriesList = [series_id]
         pqstn_name = None
+        pqstn = {}
         if "post_vars" in request and len(request.post_vars) > 0:
             if "pqstn_name" in request.post_vars:
                 pqstn_name = request.post_vars.pqstn_name
+        if pqstn_name == None:
+            pqstn = survey_getPriorityQuestionForSeries(series_id)
+            pqstn_name = pqstn["name"]
         feature_queries = []
         bounds = {}
 
+        # Build the drop down list of priority questions
+        allQuestions = survey_getAllQuestionsForSeries(series_id)
+        numericTypeList = ("Numeric")
+        numericQuestions = survey_get_series_questions_of_type(allQuestions,
+                                                               numericTypeList)
+        numQstns = []
+        for question in numericQuestions:
+            numQstns.append(question["name"])
+
+        form = FORM(_id="mapQstnForm")
+        table = TABLE()
+
+        priorityQstn = SELECT(numQstns, _name="pqstn_name",
+                              value=pqstn_name)
+
         # Set up the legend
+        priorityObj = S3AnalysisPriority(range=[-.66, .66],
+                                         colour={-1:"#888888", # grey
+                                                  0:"#008000", # green
+                                                  1:"#FFFF00", # yellow
+                                                  2:"#FF0000", # red
+                                                 },
+                                         # Make Higher-priority show up more clearly
+                                         opacity={-1:0.5,
+                                                   0:0.6,
+                                                   1:0.7,
+                                                   2:0.8,
+                                                },
+                                         image={-1:"grey",
+                                                 0:"green",
+                                                 1:"yellow",
+                                                 2:"red",
+                                                },
+                                         desc={-1:"No Data",
+                                                0:"Low",
+                                                1:"Average",
+                                                2:"High",
+                                                },
+                                          zero = True)
         for series_id in seriesList:
             series_name = survey_getSeriesName(series_id)
             response_locations = getLocationList(series_id)
-            if pqstn_name == None:
-                pqstn = survey_getPriorityQuestionForSeries(series_id)
-            else:
-                pqstn = survey_getQuestionFromName(pqstn_name,
-                                                      series_id)
+            if pqstn == {} and pqstn_name:
+                for question in numericQuestions:
+                    if pqstn_name == question["name"]:
+                        pqstn = question
             if pqstn != {}:
-                pqstn_name = pqstn["name"]
                 pqstn_id = pqstn["qstn_id"]
                 answers = survey_getAllAnswersForQuestionInSeries(pqstn_id,
                                                                      series_id)
@@ -2062,23 +2102,6 @@ $.post('%s',
                 analysisTool.advancedResults()
             else:
                 analysisTool = None
-            priorityObj = S3AnalysisPriority(range=[-.66, .66],
-                                             colour={-1:"#888888", # grey
-                                                     0:"#008000", # green
-                                                     1:"#FFFF00", # yellow
-                                                     2:"#FF0000", # red
-                                                     },
-                                              image={-1:"grey",
-                                                      0:"green",
-                                                      1:"yellow",
-                                                      2:"red",
-                                                    },
-                                               desc={-1:"No Data",
-                                                      0:"Low",
-                                                      1:"Average",
-                                                      2:"High",
-                                                    },
-                                              zero = True)
             if analysisTool != None and not math.isnan(analysisTool.mean):
                 pBand = analysisTool.priorityBand(priorityObj)
                 legend = TABLE(
@@ -2096,7 +2119,8 @@ $.post('%s',
 
             if len(response_locations) > 0:
                 for i in range( 0 , len( response_locations) ):
-                    complete_id = response_locations[i].complete_id
+                    location = response_locations[i]
+                    complete_id = location.complete_id
                     # Insert how we want this to appear on the map
                     url = URL(c="survey",
                               f="series",
@@ -2106,16 +2130,17 @@ $.post('%s',
                                     "read"
                                     ]
                               )
-                    response_locations[i].shape = "circle"
-                    response_locations[i].size = 5
+                    location.shape = "circle"
+                    location.size = 5
                     if analysisTool is None:
                         priority = -1
                     else:
                         priority = analysisTool.priority(complete_id,
                                                          priorityObj)
-                    response_locations[i].colour = priorityObj.colour[priority]
-                    response_locations[i].popup_url = url
-                    response_locations[i].popup_label = response_locations[i].name
+                    location.colour = priorityObj.colour[priority]
+                    location.opacity = priorityObj.opacity[priority]
+                    location.popup_url = url
+                    location.popup_label = response_locations[i].name
                 feature_queries.append({ "name": "%s: Assessments" % series_name,
                                          "query": response_locations,
                                          "active": True })
@@ -2133,19 +2158,6 @@ $.post('%s',
                            #collapsed = True,
                            catalogue_layers = True,
                           )
-        allQuestions = survey_getAllQuestionsForSeries(series_id)
-        numericTypeList = ("Numeric")
-        numericQuestions = survey_get_series_questions_of_type(allQuestions,
-                                                                  numericTypeList)
-        numQstns = []
-        for question in numericQuestions:
-            numQstns.append(question["name"])
-
-        form = FORM(_id="mapQstnForm")
-        table = TABLE()
-
-        priorityQstn = SELECT(numQstns, _name="pqstn_name",
-                              value=pqstn_name)
         series = INPUT(_type="hidden",
                        _id="selectSeriesID",
                        _name="series",
@@ -2236,7 +2248,6 @@ def survey_series_rheader(r, tabs=[]):
             record = survey_getSeries(series_id)
         if record != None:
             # Tabs
-            #if auth.permission(c="survey", f = "newAssessment") & auth.permission.CREATE:
             if auth.s3_has_permission("create", "survey_complete"):
                 tabs = [(T("Details"), None),
                         (T("Enter Completed Assessment"), "newAssessment/"),

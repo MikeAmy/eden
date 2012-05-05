@@ -40,7 +40,7 @@
 """
 
 __all__ = ["S3NavigationItem",
-           "s3_popup_comment",
+           "S3ResourceHeader",
            "s3_rheader_tabs",
            "s3_rheader_resource"]
 
@@ -49,7 +49,7 @@ from gluon.storage import Storage
 
 # =============================================================================
 
-class S3NavigationItem:
+class S3NavigationItem(object):
     """
         Base class and API for navigation items.
 
@@ -261,26 +261,26 @@ class S3NavigationItem:
         """
 
         # Deactivate the item if its target controller is deactivated
-        settings = current.deployment_settings
         c = self.get("controller")
-        if c and c not in settings.modules:
-            return False
-
-        # mandatory flag overrides all further checks
-        if self.mandatory:
-            return True
+        if c:
+            return current.deployment_settings.has_module(c)
+        return True
 
         # Fall back to current.request
         if request is None:
             request = current.request
 
-        # If this is a component item, check the parent
         parent = self.parent
         if parent is not None:
+            # For component items, the parent's status applies
             return parent.check_active(request)
 
-        # Otherwise, check whether this item matches the request
+        elif self.mandatory:
+            # mandatory flag overrides request match
+            return True
+
         elif self.match(request):
+            # item is active if it matches the request
             return True
 
         return False
@@ -326,10 +326,6 @@ class S3NavigationItem:
                     break
         else:
             authorized = True
-
-        # mandatory flag overrides all further checks
-        if self.mandatory:
-            return authorized
 
         if self.accessible_url() == False:
             authorized = False
@@ -674,16 +670,25 @@ class S3NavigationItem:
             return "<%s>" % label
 
     # -------------------------------------------------------------------------
-    def url(self):
+    def url(self, extension=None, **kwargs):
         """
             Return the target URL for this item, doesn't check permissions
+
+            @param extension: override the format extension
+            @param kwargs: override URL query vars
         """
 
         if not self.link:
             return None
 
         args = self.args
-        vars = self.vars
+        if self.vars:
+            vars = Storage(self.vars)
+            vars.update(kwargs)
+        else:
+            vars = Storage(kwargs)
+        if extension is None:
+            extension = self.extension
         a = self.get("application")
         if a is None:
             a = current.request.application
@@ -693,13 +698,17 @@ class S3NavigationItem:
         f = self.get("function")
         if f is None:
             f = "index"
+        f, args = self.__format(f, args, extension)
         return URL(a=a, c=c, f=f, args=args, vars=vars)
 
     # -------------------------------------------------------------------------
-    def accessible_url(self):
+    def accessible_url(self, extension=None, **kwargs):
         """
             Return the target URL for this item if accessible by the
             current user, otherwise False
+
+            @param extension: override the format extension
+            @param kwargs: override URL query vars
         """
 
         auth = current.auth
@@ -709,7 +718,13 @@ class S3NavigationItem:
             return None
 
         args = self.args
-        vars = self.vars
+        if self.vars:
+            vars = Storage(self.vars)
+            vars.update(kwargs)
+        else:
+            vars = Storage(kwargs)
+        if extension is None:
+            extension = self.extension
         a = self.get("application")
         if a is None:
             a = current.request.application
@@ -720,7 +735,29 @@ class S3NavigationItem:
         if f is None:
             f = "index"
         p = self.p
+        f, args = self.__format(f, args, extension)
         return aURL(p=p, a=a, c=c, f=f, args=args, vars=vars)
+
+    # -------------------------------------------------------------------------
+    @staticmethod
+    def __format(f, args, ext):
+        """
+            Append the format extension to the last argument
+
+            @param f: the function
+            @param args: argument list
+            @param ext: the format extension
+
+            @returns: tuple (f, args)
+        """
+        if not ext or ext == "html":
+            return f, args
+        items = [f]
+        if args:
+            items += args
+        items = [i.rsplit(".", 1)[0] for i in items]
+        items.append("%s.%s" % (items.pop(), ext))
+        return (items[0], items[1:])
 
     # -------------------------------------------------------------------------
     def render(self, request=None):
@@ -1128,67 +1165,6 @@ class S3NavigationItem:
         return None
 
 # =============================================================================
-def s3_popup_comment(c=None,
-                     f=None,
-                     t=None,
-                     vars=None,
-                     label=None,
-                     info=None,
-                     title=None,
-                     tooltip=None):
-
-    """
-        Generate a ADD-popup comment, return an empty DIV if the user
-        is not permitted to add records to the referenced table
-
-        @param c: the target controller
-        @param f: the target function
-        @param t: the target table (defaults to c_f)
-        @param vars: the request vars (format="popup" will be added automatically)
-        @param label: the link label
-        @param info: hover-title for the label
-        @param title: the tooltip title
-        @param tooltip: the tooltip text
-
-        @todo: replace by S3NavigationItem
-    """
-
-    auth = current.auth
-
-    if title is None:
-        return None
-
-    if label is None:
-        label = title
-    if info is None:
-        info = title
-
-    if vars is not None:
-        _vars = Storage(vars)
-    else:
-        _vars = Storage()
-    _vars.update(format="popup")
-
-    popup = ""
-    ttip = ""
-    if c and f and auth is not None:
-        _href = auth.permission.accessible_url(c=c, f=f, t=t,
-                                               p="create",
-                                               args="create", vars=_vars)
-        if _href is not False:
-            popup = A(label,
-                      _class="colorbox",
-                      _href=_href,
-                      _target="top",
-                      _title=info)
-            if tooltip is not None:
-                ttip = DIV(_class="tooltip",
-                           _title="%s|%s" % (title, tooltip))
-
-    comment = DIV(popup, ttip)
-    return comment
-
-# =============================================================================
 def s3_rheader_resource(r):
     """
         Identify the tablename and record ID for the rheader
@@ -1200,9 +1176,13 @@ def s3_rheader_resource(r):
     _vars = r.get_vars
 
     if "viewing" in _vars:
-        tablename, record_id = _vars.viewing.rsplit(".", 1)
-        db = current.db
-        record = db[tablename][record_id]
+        try:
+            tablename, record_id = _vars.viewing.rsplit(".", 1)
+            db = current.db
+            record = db[tablename][record_id]
+        except:
+            tablename = r.tablename
+            record = r.record
     else:
         tablename = r.tablename
         record = r.record
@@ -1473,5 +1453,128 @@ class S3SearchTab:
         self.title = title
         self.method = method
         self.vars = vars
+
+# =============================================================================
+class S3ResourceHeader:
+    """ Simple Generic Resource Header for tabbed component views """
+
+    def __init__(self, fields=None, tabs=None):
+        """
+            Constructor
+
+            @param fields: the fields to display as list of lists of
+                           fieldnames, Field instances or callables
+            @param tabs: the tabs
+
+            Fields are specified in order rows->cols, i.e. if written
+            like:
+
+            [
+                ["fieldA", "fieldF", "fieldX"],
+                ["fieldB", None, "fieldY"]
+            ]
+
+            then that's exactly the screen order. Row or column spans are
+            not supported - empty fields will be rendered as empty fields.
+            If you need to construct more complex rheaders, you should
+            implement a custom method.
+
+            Fields can be specified by field names, Field instances or
+            as callables. Where a field specifier is a callable, it will
+            be invoked with the record as parameter and is respected to
+            return the representation value.
+
+            Where a field specifier is a tuple of two items, the first
+            item is taken for the label (overriding the field label, if
+            any), like in:
+
+
+            [
+                [(T("Name"), s3_fullname)],
+                ...
+            ]
+
+            Where the second item is a callable, it maybe necessary to
+            specify a label.
+
+            If you don't want any fields, specify this explicitly as:
+
+                rheader = S3ResourceHeader(fields=[])
+
+            Where you don't specify any fields and the table contains a
+            "name" field, the rheader defaults to: [["name"]].
+        """
+
+        self.fields = fields
+        self.tabs = tabs
+
+    # -------------------------------------------------------------------------
+    def __call__(self, r, tabs=None):
+        """
+            Return the HTML representation of this rheader
+
+            @param r: the S3Request instance to render the header for
+            @param tabs: the tabs (overrides the original tabs definition)
+        """
+
+        table = r.table
+        record = r.record
+
+        if tabs is None:
+            tabs = self.tabs
+
+        if self.fields is None and "name" in table.fields:
+            fields = [["name"]]
+        else:
+            fields = self.fields
+
+        if record:
+
+            if tabs is not None:
+                rheader_tabs = s3_rheader_tabs(r, tabs)
+            else:
+                rheader_tabs = ""
+
+            trs = []
+            for row in fields:
+                tr = TR()
+                for col in row:
+                    field = None
+                    label = ""
+                    value = ""
+                    if isinstance(col, (tuple, list)) and len(col) == 2:
+                        label, f = col
+                    else:
+                        f = col
+                    if callable(f):
+                        try:
+                            value = f(record)
+                        except:
+                            pass
+                    else:
+                        if isinstance(f, str):
+                            fn = f
+                            if "." in fn:
+                                tn, fn = col.split(".", 1)
+                                if fn not in table.fields or \
+                                   fn not in record:
+                                    continue
+                            field = table[fn]
+                            value = record[fn]
+                        elif isinstance(f, Field) and f.name in record:
+                            field = f
+                            value = record[f.name]
+                    if field is not None:
+                        if not label:
+                            label = field.label
+                        if field.represent is not None:
+                            value = field.represent(value)
+                    tr.append(TH("%s: " % unicode(label)))
+                    tr.append(TD(unicode(value)))
+                trs.append(tr)
+            rheader = DIV(TABLE(trs), rheader_tabs)
+            return rheader
+
+        return None
 
 # END =========================================================================

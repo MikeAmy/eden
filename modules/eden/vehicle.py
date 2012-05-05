@@ -98,10 +98,12 @@ class S3VehicleModel(S3Model):
                                   Field("gps",
                                         label=T("GPS ID")),
                                   Field("mileage", "integer",
-                                        label=T("Current Mileage")),
+                                        label=T("Current Mileage"),
+                                        represent = lambda v, row=None: IS_INT_AMOUNT.represent(v)),
                                   Field("service_mileage", "integer",
                                         label=T("Service Due"),
-                                       comment=T("Mileage")),
+                                        comment=T("Mileage"),
+                                        represent = lambda v, row=None: IS_INT_AMOUNT.represent(v)),
                                   Field("service_date", "date",
                                         label=T("Service Due"),
                                         comment=T("Date")),
@@ -181,6 +183,18 @@ class S3VehicleModel(S3Model):
         # ---------------------------------------------------------------------
         # Pass variables back to global scope (response.s3.*)
         #
+        return Storage(
+                    vehicle_vehicle_id = vehicle_id,
+                )
+
+    # -------------------------------------------------------------------------
+    @staticmethod
+    def defaults():
+        """ Return safe defaults for names in case the model is disabled """
+
+        vehicle_id = S3ReusableField("vehicle_id", "integer",
+                                     writable=False,
+                                     readable=False)
         return Storage(
                     vehicle_vehicle_id = vehicle_id,
                 )

@@ -51,20 +51,15 @@ if deployment_settings.has_module("assess"):
             msg_record_created = T("Impact Type added"),
             msg_record_modified = T("Impact Type updated"),
             msg_record_deleted = T("Impact Type deleted"),
-            msg_list_empty = T("No Impact Types currently registered"))
+            msg_list_empty = T("No Impact Types currently registered"),
+            name_nice = T("Impact"),
+            name_nice_plural = T("Impacts"))
 
         def impact_type_comment():
             if auth.has_membership(auth.id_group("'Administrator'")):
-                return DIV(A(ADD_IMPACT_TYPE,
-                             _class="colorbox",
-                             _href=URL(c="impact", f="type",
-                                       args="create",
-                                       vars=dict(format="popup",
-                                                 child="impact_type_id")),
-                             _target="top",
-                             _title=ADD_IMPACT_TYPE
-                             )
-                           )
+                return S3AddResourceLink(c="impact",
+                                         f="type",
+                                         vars=dict(child="impact_type_id"))
             else:
                 return None
 

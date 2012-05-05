@@ -46,16 +46,20 @@ __all__ = ["URL2",
            "s3_represent_multiref",
            "s3_comments_represent",
            "s3_url_represent",
-           "s3_user_represent",
+           "s3_avatar_represent",
+           "s3_auth_user_represent",
+           "s3_auth_group_represent",
            "sort_dict_by_values",
            "jaro_winkler",
            "jaro_winkler_distance_row",
-           "soundex"]
+           "soundex",
+           "search_vars_represent"]
 
 import sys
 import os
-import re
 import hashlib
+import md5
+import re
 import uuid
 
 from gluon import *
@@ -289,9 +293,14 @@ def s3_mark_required(fields,
     _required = False
     for field in fields:
         if field.writable:
-            required = field.required or field.notnull or \
-                        mark_required and field.name in mark_required
             validators = field.requires
+            if isinstance(validators, IS_EMPTY_OR):
+                # Allow notnull fields to be marked as not required if we populate them onvalidation
+                labels[field.name] = "%s:" % field.label
+                continue
+            else:
+                required = field.required or field.notnull or \
+                            mark_required and field.name in mark_required
             if not validators and not required:
                 labels[field.name] = "%s:" % field.label
                 continue
@@ -442,11 +451,43 @@ def s3_filter_staff(r):
         pass
 
 # =============================================================================
+def s3_format_fullname(fname=None, mname=None, lname=None, truncate=True):
+    """
+        Formats the full name of a person
+
+        @param fname: the person's pr_person.first_name value
+        @param mname: the person's pr_person.middle_name value
+        @param lname: the person's pr_person.last_name value
+        @param truncate: truncate the name to max 24 characters
+    """
+
+    name = ""
+    if fname or mname or lname:
+        if not fname:
+            fname = ""
+        if not mname:
+            mname = ""
+        if not lname:
+            lname = ""
+        if truncate:
+            fname = "%s" % s3_truncate(fname, 24)
+            mname = "%s" % s3_truncate(mname, 24)
+            lname = "%s" % s3_truncate(lname, 24, nice = False)
+        if not mname or mname.isspace():
+            name = ("%s %s" % (fname, lname)).rstrip()
+        else:
+            name = ("%s %s %s" % (fname, mname, lname)).rstrip()
+        if truncate:
+            name = s3_truncate(name, 24, nice = False)
+    return name
+
+# =============================================================================
 def s3_fullname(person=None, pe_id=None, truncate=True):
     """
         Returns the full name of a person
 
-        @param person: the pr_person record or record_id
+        @param person: the pr_person record or record_id or a list of record_ids
+                       (last used by gis.get_representation())
         @param pe_id: alternatively, the person entity ID
         @param truncate: truncate the name to max 24 characters
     """
@@ -458,14 +499,21 @@ def s3_fullname(person=None, pe_id=None, truncate=True):
 
     record = None
     query = None
+    rows = None
     if isinstance(person, (int, long)) or str(person).isdigit():
         query = (ptable.id == person) & (ptable.deleted != True)
+    elif isinstance(person, list):
+        query = (ptable.id.belongs(person)) & (ptable.deleted != True)
+        rows = db(query).select(ptable.id,
+                                ptable.first_name,
+                                ptable.middle_name,
+                                ptable.last_name)
     elif person is not None:
         record = person
     elif pe_id is not None:
         query = (ptable.pe_id == pe_id) & (ptable.deleted != True)
 
-    if not record and query:
+    if not record and not rows and query:
         record = db(query).select(ptable.first_name,
                                   ptable.middle_name,
                                   ptable.last_name,
@@ -488,18 +536,22 @@ def s3_fullname(person=None, pe_id=None, truncate=True):
                 mname = record.pr_person.middle_name.strip()
             if record.pr_person.last_name:
                 lname = record.pr_person.last_name.strip()
+        return s3_format_fullname(fname, mname, lname, truncate)
 
-        if fname:
-            fname = "%s " % s3_truncate(fname, 24)
-        if mname:
-            mname = "%s " % s3_truncate(mname, 24)
-        if lname:
-            lname = "%s " % s3_truncate(lname, 24, nice = False)
+    elif rows:
+        represents = {}
+        for record in rows:
+            fname, mname, lname = "", "", ""
+            if record.first_name:
+                fname = record.first_name.strip()
+            if record.middle_name:
+                mname = record.middle_name.strip()
+            if record.last_name:
+                lname = record.last_name.strip()
+            represent = s3_format_fullname(fname, mname, lname, truncate)
+            represents[record.id] = represent
+        return represents
 
-        if mname.isspace():
-            return "%s%s" % (fname, lname)
-        else:
-            return "%s%s%s" % (fname, mname, lname)
     else:
         return DEFAULT
 
@@ -636,20 +688,108 @@ def s3_url_represent(url):
     return A(url, _href=url, _target="blank")
 
 # =============================================================================
-def s3_user_represent(id):
-    """ Represent a User as their email address """
+def s3_avatar_represent(id, tablename="auth_user", _class="avatar"):
+    """ Represent a User as their profile picture or Gravatar """
 
     db = current.db
     s3db = current.s3db
     cache = s3db.cache
 
+    table = s3db[tablename]
+
+    email = None
+    image = None
+
+    if tablename == "auth_user":
+        user = db(table.id == id).select(table.email,
+                                         limitby=(0, 1),
+                                         cache=cache).first()
+        if user:
+            email = user.email.strip().lower()
+        ltable = s3db.pr_person_user
+        itable = s3db.pr_image
+        query = (ltable.user_id == id) & \
+                (ltable.pe_id == itable.pe_id) & \
+                (itable.profile == True)
+        image = db(query).select(itable.image,
+                                 limitby=(0, 1)).first()
+        if image:
+            image = image.image
+    elif tablename == "pr_person":
+        user = db(table.id == id).select(table.pe_id,
+                                         limitby=(0, 1),
+                                         cache=cache).first()
+        if user:
+            ctable = s3db.pr_contact
+            query = (ctable.pe_id == user.pe_id) & \
+                    (ctable.contact_method == "EMAIL")
+            email = db(query).select(ctable.value,
+                                     limitby=(0, 1),
+                                     cache=cache).first()
+            if email:
+                email = email.value
+            itable = s3db.pr_image
+            query = (itable.pe_id == user.pe_id) & \
+                    (itable.profile == True)
+            image = db(query).select(itable.image,
+                                     limitby=(0, 1)).first()
+            if image:
+                image = image.image
+
+    if image:
+        url = URL(c="default", f="download",
+                  args=image)
+    elif email:
+        # If no Image uploaded, try Gravatar, which also provides a nice fallback identicon
+        hash = md5.new(email).hexdigest()
+        url = "http://www.gravatar.com/avatar/%s?s=50&d=identicon" % hash
+
+    else:
+        url = "http://www.gravatar.com/avatar/00000000000000000000000000000000?d=mm"
+
+    return IMG(_src=url,
+               _class=_class,
+               _height=50, _width=50)
+
+# =============================================================================
+def s3_auth_user_represent(id):
+    """ Represent a user as their email address """
+
+    db = current.db
+    s3db = current.s3db
+
     table = s3db.auth_user
     user = db(table.id == id).select(table.email,
                                      limitby=(0, 1),
-                                     cache=cache).first()
+                                     cache=s3db.cache).first()
     if user:
         return user.email
     return None
+
+# =============================================================================
+def s3_auth_group_represent(opt):
+    """ Represent user groups by their role names """
+
+    auth = current.auth
+    s3db = current.s3db
+
+    table = auth.settings.table_group
+    groups = current.db(table.id > 0).select(table.id,
+                                             table.role,
+                                             cache=s3db.cache).as_dict()
+    if not isinstance(opt, (list, tuple)):
+        opt = [opt]
+    roles = []
+    for o in opt:
+        try:
+            key = int(opt)
+        except ValueError:
+            continue
+        if key in groups:
+            roles.append(groups[key])
+    if not roles:
+        return current.messages.NONE
+    return ", ".join(roles)
 
 # =============================================================================
 def sort_dict_by_values(adict):
@@ -851,5 +991,52 @@ def soundex(name, len=4):
 
     # return soundex code padded to len characters
     return (sndx + (len * "0"))[:len]
+
+# =============================================================================
+def search_vars_represent(search_vars):
+        """
+            Returns Search Criteria in a Human Readable Form
+
+            @author: Pratyush Nigam
+        """
+
+        import cPickle
+        import re
+        s = ""
+        search_vars = search_vars.replace("&apos;", "'")
+        try:
+            search_vars = cPickle.loads(str(search_vars))
+            s = "<p>"
+            pat = '_'
+            for var in search_vars.iterkeys():
+                if var == "criteria" :
+                    c_dict = search_vars[var]
+                    #s = s + crud_string("pr_save_search", "Search Criteria")
+                    for j in c_dict.iterkeys():
+                        st = str(j)
+                        if st[0] == '_':
+                            continue
+                        else:
+                            st = st.replace("_search_", " ")
+                            st = st.replace("_advanced", "")
+                            st = st.replace("_simple", "")
+                            st = st.replace("text", "text matching")
+                            """st = st.replace(search_vars["function"], "")
+                            st = st.replace(search_vars["prefix"], "")"""
+                            st = st.replace("_", " ")
+                            s = "%s <b> %s </b>: %s <br />" %(s, st.capitalize(), str(c_dict[j]))
+                elif var == "simple" or var == "advanced":
+                    continue
+                else:
+                    if var == "function":
+                        v1 = "Resource Name"
+                    elif var == "prefix":
+                        v1 = "Module"
+                    s = "%s<b>%s</b>: %s<br />" %(s, v1, str(search_vars[var]))
+            s = s + "</p>"
+        except:
+            raise HTTP(500,"ERROR RETRIEVING THE SEARCH CRITERIA")
+
+        return XML(s)
 
 # END =========================================================================

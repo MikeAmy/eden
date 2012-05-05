@@ -9,12 +9,6 @@
 module = request.controller
 resourcename = request.function
 
-# @todo: rewrite this for new framework:
-#if not deployment_settings.get_security_map() or s3_has_role(MAP_ADMIN):
-#   response.menu_options.append([T("Service Catalogue"), False, URL(f="map_service_catalogue")])
-#   # Not yet ready for Production
-#   response.menu_options.append([T("De-duplicator"), False, URL(f="location_duplicates")])
-
 # -----------------------------------------------------------------------------
 def index():
     """
@@ -25,45 +19,30 @@ def index():
     response.title = module_name
 
     # Include an embedded Map on the index page
-
-    # Icon toolbar?
-    toolbar = True
-
     map = define_map(window=False,
-                     toolbar=toolbar,
-                     maximizable=True)
+                     toolbar=True,
+                     closable=False,
+                     maximizable=False)
 
-    # Don't bother with breadcrumbs as they use up real-estate needlessly
-    breadcrumbs = []
-
-    # Provide access to the Personalised config
-    pconfig = ""
-    config_id = session.s3.gis_config_id
-    if auth.is_logged_in():
-        if config_id == 1:
-            pconfig = T("You are using the site-wide map configuration. To create or use a personal map configuration, click %(here)s") % \
-                        dict(here=A(T("here"),
-                                    _class="marron",
-                                    _style="font-weight:bold;",
-                                    _href=URL(c="pr", f="person",
-                                              args=["config"],
-                                              vars={"person.pe_id":auth.user.pe_id})))
-        else:
-            table = s3db.gis_config
-            query = (table.id == config_id)
-            config = db(query).select(table.pe_id,
-                                      limitby=(0, 1)).first()
-            if config and config.pe_id:
-                if auth.user and auth.user.pe_id == config.pe_id:
-                    pconfig = T("You are using a personal map configuration. To edit your personal configuration, click %(here)s") % \
-                                dict(here=A(T("here"),
-                                            _class="marron",
-                                            _style="font-weight:bold;",
-                                            _href=URL(c="pr", f="person",
-                                                      args=["config"],
-                                                      vars={"person.pe_id":auth.user.pe_id})))
-
-    return dict(map=map, breadcrumbs=breadcrumbs, pconfig=pconfig)
+    # Code to go fullscreen
+    response.s3.jquery_ready.append("""
+$('#gis_fullscreen_map-btn').click( function(evt) {
+    if (navigator.appVersion.indexOf("MSIE") != -1) {
+        // IE (even 9) doesn't like the dynamic full-screen, so simply do a page refresh for now
+    } else {
+        // Remove components from embedded Map's containers without destroying their contents
+        S3.gis.mapWestPanelContainer.removeAll(false);
+        S3.gis.mapPanelContainer.removeAll(false);
+        S3.gis.mapWin.items.items = [];
+        S3.gis.mapWin.doLayout();
+        S3.gis.mapWin.destroy();
+        // Add a full-screen window which will inherit these components
+        addMapWindow();
+        evt.preventDefault();
+    }
+});""")
+                     
+    return dict(map=map)
 
 # =============================================================================
 def map_viewing_client():
@@ -94,8 +73,8 @@ def define_map(window=False, toolbar=False, closable=True, maximizable=True, con
     # @ToDo: Make these configurable
     search = True
     legend = True
-    googleEarth = True
-    googleStreetview = True
+    #googleEarth = True
+    #googleStreetview = True
     catalogue_layers = True
 
     if config.wmsbrowser_url:
@@ -137,35 +116,53 @@ def location():
     table = s3db[tablename]
 
     # Location Search Method
-    gis_location_search = s3base.S3LocationSearch(
-        simple = (s3base.S3SearchSimpleWidget(
-            name="location_search_text_simple",
-            label = T("Search"),
-            #comment = T("Search for a Location by name, including local names."),  # How? These aren't fields in this table or in a table that we link to.
-            comment = T("To search for a location, enter the name. You may use % as wildcard. Press 'Search' without input to list all locations."),
-            field = [ "name" ]
-            )
-        ),
-        advanced = (s3base.S3SearchSimpleWidget(
+    gis_location_adv_search = (s3base.S3SearchSimpleWidget(
             name = "location_search_text_advanced",
             label = T("Search"),
             #comment = T("Search for a Location by name, including local names."),
             comment = T("To search for a location, enter the name. You may use % as wildcard. Press 'Search' without input to list all locations."),
-            field = [ "name"]
+            field = "name"
+            ),
+            s3base.S3SearchLocationHierarchyWidget(
+                name="location_search_L0",
+                field="L0",
+                cols = 3,
+            ),
+            s3base.S3SearchLocationHierarchyWidget(
+                name="location_search_L1",
+                field="L1",
+                cols = 3,
+            ),
+            s3base.S3SearchLocationHierarchyWidget(
+                name="location_search_L2",
+                field="L2",
+                cols = 3,
             ),
             s3base.S3SearchOptionsWidget(
                 name = "location_search_level",
                 label = T("Level"),
-                field = ["level"],
+                field = "level",
                 cols = 2
             ),
             # NB This currently only works for locations with the country as direct parent (i.e. mostly L1s)
             #s3base.S3SearchOptionsWidget(
             #    name = "location_search_country",
             #    label = T("Country"),
-            #    field = ["parent"],
+            #    field = "parent",
             #    cols = 2
             #),
+        )
+    gis_location_search = s3base.S3LocationSearch(
+        simple = (s3base.S3SearchSimpleWidget(
+            name="location_search_text_simple",
+            label = T("Search"),
+            #comment = T("Search for a Location by name, including local names."),  # How? These aren't fields in this table or in a table that we link to.
+            comment = T("To search for a location, enter the name. You may use % as wildcard. Press 'Search' without input to list all locations."),
+            field = ["name"]
+            )
+        ),
+        advanced = (
+            gis_location_adv_search
         )
     )
 
@@ -173,7 +170,13 @@ def location():
                     # Don't include Bulky Location Selector in List Views
                     listadd=False,
                     # Custom Search Method
-                    search_method=gis_location_search)
+                    search_method=gis_location_search,
+                    report_filter=gis_location_adv_search,
+                    report_rows = ["name"],
+                    report_cols = [],
+                    report_fact = ["population"],
+                    report_method=["sum"],
+                    )
 
     # Custom Method
     s3mgr.model.set_method("gis", "location", method="parents",
@@ -266,15 +269,11 @@ def location():
                 table.parent.comment = parent_comment
             else:
                 # Include 'Add Location' button
-                table.parent.comment = DIV(A(ADD_LOCATION,
-                                             _class="colorbox",
-                                             _href=URL(c="gis", f="location",
-                                                       args="create",
-                                                       vars=dict(format="popup",
-                                                                 child="parent")),
-                                             _target="top",
-                                             _title=ADD_LOCATION),
-                                           parent_comment),
+                table.parent.comment = DIV(S3AddResourceLink(c="gis",
+                                                         f="location",
+                                                         vars=dict(child="parent")),
+                                           parent_comment)
+
             table.osm_id.comment = DIV(_class="stickytip",
                                        _title="OpenStreetMap ID|%s%s%s" % (T("The"),
                                                                            " <a href='http://openstreetmap.org' target=_blank>OpenStreetMap</a> ID. ",
@@ -711,164 +710,6 @@ def location_links():
     return output
 
 # =============================================================================
-def map_service_catalogue():
-    """
-        Map Service Catalogue.
-        Allows selection of which Layers are active.
-    """
-
-    if deployment_settings.get_security_map() and not s3_has_role(MAP_ADMIN):
-        auth.permission.fail()
-
-    subtitle = T("List Layers")
-    # Start building the Return with the common items
-    output = dict(subtitle=subtitle)
-
-    # Hack: We control all perms from this 1 table
-    table = s3db.gis_layer_entity
-    authorised = s3_has_permission("update", table)
-    item_list = []
-    even = True
-    ltable = s3db.gis_layer_config
-    if authorised:
-        # List View with checkboxes to Enable/Disable layers
-        for type in response.s3.gis_layer_types:
-            table = s3db[type]
-            query = (table.id > 0) & (ltable.layer_id == table.layer_id)
-            rows = db(query).select(table.id,
-                                    table.name,
-                                    table.description,
-                                    ltable.enabled)
-            for row in rows:
-                row = row[type]
-                lrow = row.gis_layer_config
-                if even:
-                    theclass = "even"
-                    even = False
-                else:
-                    theclass = "odd"
-                    even = True
-                description = row.description or ""
-                label = "%s_%s" % (type, str(row.id))
-                if lrow.enabled:
-                    enabled = INPUT(_type="checkbox", value=True, _name=label)
-                else:
-                    enabled = INPUT(_type="checkbox", _name=label)
-                item_list.append(TR(TD(A(row.name,
-                                         _href=URL("layer_%s" % type,
-                                                   args=row.id))),
-                                    TD(description),
-                                    TD(enabled),
-                                    _class=theclass))
-        table_header = THEAD(TR(TH(T("Layer")),
-                                TH(T("Description")),
-                                TH(T("Enabled?"))))
-        table_footer = TFOOT(TR(TD(INPUT(_id="submit_button",
-                                         _type="submit",
-                                         _value=T("Update")),
-                                   _colspan=3)),
-                             _align="right")
-        items = DIV(FORM(TABLE(table_header,
-                               TBODY(item_list),
-                               table_footer,
-                               _id="table-container"),
-                    _name="custom",
-                    _method="post",
-                    _enctype="multipart/form-data",
-                    _action=URL(f="layers_enable")))
-
-    else:
-        # Simple List View
-        for type in response.s3.gis_layer_types:
-            table = s3db[type]
-            query = (table.id > 0) & (ltable.layer_id == table.layer_id)
-            rows = db(table.id > 0).select(table.id,
-                                           table.name,
-                                           table.description,
-                                           ltable.enabled)
-            for row in rows:
-                row = row[type]
-                lrow = row.gis_layer_config
-                if even:
-                    theclass = "even"
-                    even = False
-                else:
-                    theclass = "odd"
-                    even = True
-                description = row.description or ""
-                if lrow.enabled:
-                    enabled = INPUT(_type="checkbox",
-                                    value="on",
-                                    _disabled="disabled")
-                else:
-                    enabled = INPUT(_type="checkbox",
-                                    _disabled="disabled")
-                item_list.append(TR(TD(A(row.name,
-                                         _href=URL("layer_%s" % type,
-                                                   args=row.id))),
-                                    TD(description),
-                                    TD(enabled),
-                                    _class=theclass))
-
-        table_header = THEAD(TR(TH(T("Layer")),
-                                TH(T("Description")),
-                                TH(T("Enabled?"))))
-        items = DIV(TABLE(table_header,
-                          TBODY(item_list),
-                          _id="table-container"))
-
-    output.update(dict(items=items))
-    return output
-
-# -----------------------------------------------------------------------------
-def layers_enable():
-    """
-        Enable/Disable Layers
-    """
-
-    table = s3db.gis_layer_config
-    authorised = s3_has_permission("update", table)
-    vars = request.vars
-    if authorised:
-        for resourcename in response.s3.gis_layer_types:
-            table = s3db[resourcename]
-            rows = db(table.id > 0).select(table.id)
-            for row in rows:
-                query_inner = (table.id == row.id)
-                var = "%s_%i" % (resourcename, row.id)
-                # Read current state
-                if db(query_inner).select(table.enabled,
-                                          limitby=(0, 1)).first().enabled:
-                    # Old state: Enabled
-                    if var in vars:
-                        # Do nothing
-                        pass
-                    else:
-                        # Disable
-                        db(query_inner).update(enabled=False)
-                        # Audit
-                        s3_audit("update", module, resourcename, record=row.id,
-                                 representation="html")
-                else:
-                    # Old state: Disabled
-                    if var in vars:
-                        # Enable
-                        db(query_inner).update(enabled=True)
-                        # Audit
-                        s3_audit("update", module, resourcename, record=row.id,
-                                 representation="html")
-                    else:
-                        # Do nothing
-                        pass
-
-        session.confirmation = T("Layers updated")
-
-    else:
-        session.error = T("Not authorised!")
-
-    redirect(URL(f="map_service_catalogue"))
-
-# =============================================================================
 # Common CRUD strings for all layers
 ADD_LAYER = T("Add Layer")
 LAYER_DETAILS = T("Layer Details")
@@ -889,8 +730,23 @@ LIST_TYPE_LAYERS_FMT = "List %s Layers"
 NO_TYPE_LAYERS_FMT = "No %s Layers currently defined"
 
 # -----------------------------------------------------------------------------
+def catalog():
+    """ Custom View to link to different Layers """
+    return dict()
+
+# -----------------------------------------------------------------------------
 def config():
     """ RESTful CRUD controller """
+
+    # Custom Methods to enable/disable layers
+    s3mgr.model.set_method(module, resourcename,
+                           component_name="layer_entity",
+                           method="enable",
+                           action=enable_layer)
+    s3mgr.model.set_method(module, resourcename,
+                           component_name="layer_entity",
+                           method="disable",
+                           action=disable_layer)
 
     # Pre-process
     def prep(r):
@@ -912,15 +768,15 @@ def config():
                     field.writable = False
             elif r.component_name == "layer_entity":
                 s3.crud_strings["gis_layer_config"] = Storage(
-                    title_create = T("Add Layer Configuration for this Profile"),
+                    title_create = T("Add Layer to this Profile"),
                     title_display = LAYER_DETAILS,
                     title_list = LAYERS,
                     title_update = EDIT_LAYER,
-                    subtitle_create = T("Add New Layer Configuration"),
-                    subtitle_list = T("List Layer Configurations in Profile"),
-                    label_list_button = T("List Layer Configurations in Profile"),
-                    label_create_button = ADD_LAYER,
-                    label_delete_button = T("Remove Layer Configuration from Profile"),
+                    subtitle_create = T("Add Layer from Catalog"),
+                    subtitle_list = T("List Layers in Profile"),
+                    label_list_button = T("List Layers in Profile"),
+                    label_create_button = T("Add Layer from Catalog"),
+                    label_delete_button = T("Remove Layer from Profile"),
                     msg_record_created = LAYER_ADDED,
                     msg_record_modified = LAYER_UPDATED,
                     msg_list_empty = T("No Layers currently configured in this Profile"),
@@ -953,6 +809,14 @@ def config():
                         field = ltable.visible
                         field.readable = False
                         field.writable = False
+                    elif type in ("gis_layer_theme",
+                                  ):
+                        field = ltable.base
+                        field.readable = False
+                        field.writable = False
+                        field = ltable.style
+                        field.readable = True
+                        field.writable = True
                 else:
                     # Only show Layers not yet in this config
                     # Find the records which are used
@@ -966,11 +830,122 @@ def config():
                                                          not_filterby="layer_id",
                                                          not_filter_opts=[row.layer_id for row in rows]
                                                          )
+
+        elif r.representation == "url":
+            # Save from Map
+            if r.method == "create" and \
+                 auth.is_logged_in() and \
+                 not auth.s3_has_role(MAP_ADMIN):
+                pe_id = auth.user.pe_id
+                r.table.pe_id.default = pe_id
+                r.table.pe_type.default = 1
+
         return True
     response.s3.prep = prep
 
+    # Post-processor
+    def postp(r, output):
+        if r.interactive:
+            if r.component_name == "layer_entity":
+                s3_action_buttons(r, deletable=False)
+                ltable = s3db.gis_layer_config
+                query = (ltable.config_id == r.id)
+                rows = db(query).select(ltable.layer_id,
+                                        ltable.enabled)
+                # Show the enable button if the layer is not currently enabled
+                restrict = [str(row.layer_id) for row in rows if not row.enabled]
+                response.s3.actions.append(dict(label=str(T("Enable")),
+                                                _class="action-btn",
+                                                url=URL(args=[r.id, "layer_entity", "[id]", "enable"]),
+                                                restrict = restrict
+                                                )
+                                            )
+                # Show the disable button if the layer is not currently disabled
+                restrict = [str(row.layer_id) for row in rows if row.enabled]
+                response.s3.actions.append(dict(label=str(T("Disable")),
+                                                _class="action-btn",
+                                                url=URL(args=[r.id, "layer_entity", "[id]", "disable"]),
+                                                restrict = restrict
+                                                )
+                                            )
+        elif r.representation == "url":
+            # Save from Map
+            result = json.loads(output["item"])
+            if result["status"] == "success":
+                # Process Layers
+                ltable = s3db.gis_layer_config
+                id = r.id
+                layers = json.loads(request.post_vars.layers)
+                form = Storage()
+                for layer in layers:
+                    if "id" in layer:
+                        layer_id = layer["id"]
+                        vars = Storage(
+                                config_id = id,
+                                layer_id = layer_id,
+                            )
+                        if "base" in layer:
+                            vars.base = layer["base"]
+                        if "visible" in layer:
+                            vars.visible = layer["visible"]
+                        else:
+                            vars.visible = False
+                        if "style" in layer:
+                            vars.style = json.dumps(layer["style"])
+                        # Update or Insert?
+                        query = (ltable.config_id == id) & \
+                                (ltable.layer_id == layer_id)
+                        record = db(query).select(ltable.id,
+                                                  limitby=(0, 1)).first()
+                        if record:
+                            vars.id = record.id
+                        else:
+                            vars.id = ltable.insert(**vars)
+                        # Ensure that Default Base processing happens properly
+                        form.vars = vars
+                        s3db.gis_layer_config_onaccept(form)
+
+        return output
+    response.s3.postp = postp
+
     output = s3_rest_controller(rheader=s3db.gis_rheader)
     return output
+
+# -----------------------------------------------------------------------------
+def enable_layer(r, **attr):
+    """
+        Enable a Layer
+            designed to be a custom method called by an action button
+    """
+
+    if r.component_name != "layer_entity":
+        session.error = T("Incorrect parameters")
+        redirect(URL(args=[r.id, "layer_entity"]))
+
+    ltable = s3db.gis_layer_config
+    query = (ltable.config_id == r.id) & \
+            (ltable.layer_id == r.component_id)
+    db(query).update(enabled = True)
+    session.confirmation = T("Layer has been Enabled")
+    redirect(URL(args=[r.id, "layer_entity"]))
+
+# -----------------------------------------------------------------------------
+def disable_layer(r, **attr):
+    """
+        Disable a Layer
+            designed to be a custom method called by an action button in config/layer_entity
+    """
+
+    if r.component_name != "layer_entity":
+        session.error = T("Incorrect parameters")
+        redirect(URL(args=[r.id, "layer_entity"]))
+
+    ltable = s3db.gis_layer_config
+    query = (ltable.config_id == r.id) & \
+            (ltable.layer_id == r.component_id)
+    db(query).update(enabled = False)
+    session.confirmation = T("Layer has been Disabled")
+    redirect(URL(args=[r.id, "layer_entity"]))
 
 # -----------------------------------------------------------------------------
 def hierarchy():
@@ -984,14 +959,11 @@ def hierarchy():
 def symbology():
     """ RESTful CRUD controller """
 
-    if deployment_settings.get_security_map() and not s3_has_role(MAP_ADMIN):
-        auth.permission.fail()
-
     # Pre-process
     def prep(r):
         if r.interactive:
             if r.component_name == "layer_entity":
-                s3.crud_strings[tablename] = Storage(
+                s3.crud_strings["gis_layer_entity"] = Storage(
                     title_create=T("Configure Layer for this Symbology"),
                     title_display=LAYER_DETAILS,
                     title_list=LAYERS,
@@ -1011,7 +983,7 @@ def symbology():
                     ltable = s3db.gis_layer_symbology
                     # Find the records which are used
                     query = (ltable.layer_id == table.layer_id) & \
-                            (ltable.config_id == r.id)
+                            (ltable.symbology_id == r.id)
                     rows = db(query).select(table.layer_id)
                     # Filter them out
                     # Restrict Layers to those which have Markers
@@ -1037,9 +1009,6 @@ def symbology():
 # -----------------------------------------------------------------------------
 def marker():
     """ RESTful CRUD controller """
-
-    if deployment_settings.get_security_map() and not s3_has_role(MAP_ADMIN):
-        auth.permission.fail()
 
     # Pre-process
     def prep(r):
@@ -1087,46 +1056,44 @@ def trackpoint():
 def track():
     """ RESTful CRUD controller for GPS Tracks (uploaded as files) """
 
-    if deployment_settings.get_security_map() and not s3_has_role(MAP_ADMIN):
-        auth.permission.fail()
-
     return s3_rest_controller()
 
 # =============================================================================
-def enable_layer(r):
+def inject_enable(output):
     """
-        Enable a Layer
-            designed to be a custom method called by an action button
-        @ToDo: See if we want to reinstate somethign like this for the new data model (currently unsued)
+        Inject an 'Enable in Default Config?' checkbox into the form
     """
 
-    if not r.id:
-        session.error = T("Can only enable 1 record at a time!")
-        redirect(URL(args=[]))
-
-    ltable = s3db.gis_layer_config
-    query = (r.table.id == r.id) & (ltable.layer_id == table.layer_id)
-    #db(query).update(ltable.enabled = True)
-    session.confirmation = T("Layer has been Enabled")
-    redirect(URL(args=[]))
+    if "form" in output:
+        row = s3.crud.formstyle(id  = "layer_enable",
+                                label  = LABEL("%s:" % T("Enable in Default Config?"),
+                                               _for="enable"
+                                               ),
+                                widget = (INPUT(_name="enable",
+                                                _type="checkbox",
+                                                 _value="on",
+                                                 _id="layer_enable",
+                                                _class="boolean"),
+                                           ),
+                                comment = "")
+        output["form"][0][-2].append(row)
 
 # -----------------------------------------------------------------------------
-def disable_layer(r):
-    """
-        Disable a Layer
-            designed to be a custom method called by an action button
-        @ToDo: See if we want to reinstate somethign like this for the new data model (currently unsued)
-    """
+def layer_config():
+    """ RESTful CRUD controller """
 
-    if not r.id:
-        session.error = T("Can only disable 1 record at a time!")
-        redirect(URL(args=[]))
+    if deployment_settings.get_security_map() and not s3_has_role(MAP_ADMIN):
+        auth.permission.fail()
 
-    ltable = s3db.gis_layer_config
-    query = (r.table.id == r.id) & (ltable.layer_id == table.layer_id)
-    #db(query).update(ltable.enabled = False)
-    session.confirmation = T("Layer has been Disabled")
-    redirect(URL(args=[]))
+    layer = request.get_vars.get("layer", None)
+    if layer:
+        csv_stylesheet = "layer_%s.xsl" % layer
+    else:
+        # Cannot import without a specific layer type
+        csv_stylesheet = None
+
+    output = s3_rest_controller(csv_stylesheet = csv_stylesheet)
+    return output
 
 # -----------------------------------------------------------------------------
 def layer_entity():
@@ -1158,7 +1125,8 @@ def layer_entity():
                     field = ltable.base
                     field.readable = False
                     field.writable = False
-                elif type in ("gis_layer_bing",
+                elif type in ("gis_layer_empty",
+                              "gis_layer_bing",
                               "gis_layer_google",
                               "gis_layer_tms",
                               ):
@@ -1211,35 +1179,12 @@ def layer_entity():
         return True
     response.s3.prep = prep
 
-    # Post-processor
-    def postp(r, output):
-        s3_action_buttons(r)
-        # Only show the disable button if the layer is not currently disabled
-        # @ToDo: Fix for new data model
-        ltable = s3db.gis_layer_config
-        query = (ltable.enabled != False) & \
-                (r.table.layer_id == ltable.layer_id)
-        rows = db(query).select(r.table.id)
-        restrict = [str(row.id) for row in rows]
-        response.s3.actions.append(dict(label=str(T("Disable")),
-                                        _class="action-btn",
-                                        url=URL(args=["[id]", "disable"]),
-                                        restrict = restrict
-                                        )
-                                    )
-
-        return output
-    #response.s3.postp = postp
-
     output = s3_rest_controller(rheader=s3db.gis_rheader)
     return output
 
 # -----------------------------------------------------------------------------
 def layer_feature():
     """ RESTful CRUD controller """
-
-    if deployment_settings.get_security_map() and not s3_has_role(MAP_ADMIN):
-        auth.permission.fail()
 
     # Custom Method
     s3mgr.model.set_method(module, resourcename,
@@ -1288,23 +1233,13 @@ def layer_feature():
 
     # Post-processor
     def postp(r, output):
-        s3_action_buttons(r)
-        # Only show the disable button if the layer is not currently disabled
-        # @ToDo: Fix for new data model
-        ltable = s3db.gis_layer_config
-        query = (ltable.enabled != False) & \
-                (r.table.layer_id == ltable.layer_id)
-        rows = db(query).select(r.table.id)
-        restrict = [str(row.id) for row in rows]
-        response.s3.actions.append(dict(label=str(T("Disable")),
-                                        _class="action-btn",
-                                        url=URL(args=["[id]", "disable"]),
-                                        restrict = restrict
-                                        )
-                                    )
-
+        if r.interactive and r.method != "import":
+            if not r.component:
+                s3_action_buttons(r, copyable=True)
+                # Inject checkbox to enable layer in default config
+                inject_enable(output)
         return output
-    #response.s3.postp = postp
+    response.s3.postp = postp
 
     output = s3_rest_controller(rheader=s3db.gis_rheader)
     return output
@@ -1312,9 +1247,6 @@ def layer_feature():
 # -----------------------------------------------------------------------------
 def layer_openstreetmap():
     """ RESTful CRUD controller """
-
-    if deployment_settings.get_security_map() and not s3_has_role(MAP_ADMIN):
-        auth.permission.fail()
 
     tablename = "%s_%s" % (module, resourcename)
     s3mgr.load(tablename)
@@ -1363,6 +1295,15 @@ def layer_openstreetmap():
         return True
     response.s3.prep = prep
 
+    # Post-processor
+    def postp(r, output):
+        if r.interactive and r.method != "import":
+            if not r.component:
+                # Inject checkbox to enable layer in default config
+                inject_enable(output)
+        return output
+    response.s3.postp = postp
+
     output = s3_rest_controller(rheader=s3db.gis_rheader)
 
     return output
@@ -1371,14 +1312,70 @@ def layer_openstreetmap():
 def layer_bing():
     """ RESTful CRUD controller """
 
-    if deployment_settings.get_security_map() and not s3_has_role(MAP_ADMIN):
-        auth.permission.fail()
-
     tablename = "%s_%s" % (module, resourcename)
     s3mgr.load(tablename)
 
     # CRUD Strings
     type = "Bing"
+    EDIT_LAYER = T(EDIT_TYPE_LAYER_FMT % type)
+    s3.crud_strings[tablename] = Storage(
+        title_create=ADD_LAYER,
+        title_update=EDIT_LAYER,
+        msg_record_created=LAYER_ADDED,
+        msg_record_modified=LAYER_UPDATED)
+
+    s3mgr.configure(tablename,
+                    deletable=False,
+                    listadd=False)
+
+    # Pre-processor
+    def prep(r):
+        if r.interactive:
+            if r.component_name == "config":
+                ltable = s3db.gis_layer_config
+                field = ltable.visible
+                field.readable = False
+                field.writable = False
+                if r.method != "update":
+                    # Only show Configs with no definition yet for this layer
+                    table = r.table
+                    # Find the records which are used
+                    query = (ltable.layer_id == table.layer_id) & \
+                            (table.id == r.id)
+                    rows = db(query).select(ltable.config_id)
+                    # Filter them out
+                    ltable.config_id.requires = IS_ONE_OF(db,
+                                                         "gis_config.id",
+                                                         "%(name)s",
+                                                         not_filterby="config_id",
+                                                         not_filter_opts=[row.config_id for row in rows]
+                                                         )
+
+        return True
+    response.s3.prep = prep
+
+    # Post-processor
+    def postp(r, output):
+        if r.interactive and r.method != "import":
+            if not r.component:
+                # Inject checkbox to enable layer in default config
+                inject_enable(output)
+        return output
+    response.s3.postp = postp
+
+    output = s3_rest_controller(rheader=s3db.gis_rheader)
+
+    return output
+
+# -----------------------------------------------------------------------------
+def layer_empty():
+    """ RESTful CRUD controller """
+
+    tablename = "%s_%s" % (module, resourcename)
+    s3mgr.load(tablename)
+
+    # CRUD Strings
+    type = "Empty"
     EDIT_LAYER = T(EDIT_TYPE_LAYER_FMT % type)
     s3.crud_strings[tablename] = Storage(
         title_create=ADD_LAYER,
@@ -1424,9 +1421,6 @@ def layer_bing():
 def layer_google():
     """ RESTful CRUD controller """
 
-    if deployment_settings.get_security_map() and not s3_has_role(MAP_ADMIN):
-        auth.permission.fail()
-
     tablename = "%s_%s" % (module, resourcename)
     s3mgr.load(tablename)
 
@@ -1468,6 +1462,15 @@ def layer_google():
         return True
     response.s3.prep = prep
 
+    # Post-processor
+    def postp(r, output):
+        if r.interactive and r.method != "import":
+            if not r.component:
+                # Inject checkbox to enable layer in default config
+                inject_enable(output)
+        return output
+    response.s3.postp = postp
+
     output = s3_rest_controller(rheader=s3db.gis_rheader)
 
     return output
@@ -1475,9 +1478,6 @@ def layer_google():
 # -----------------------------------------------------------------------------
 def layer_mgrs():
     """ RESTful CRUD controller """
-
-    if deployment_settings.get_security_map() and not s3_has_role(MAP_ADMIN):
-        auth.permission.fail()
 
     tablename = "%s_%s" % (module, resourcename)
     s3mgr.load(tablename)
@@ -1535,11 +1535,81 @@ def layer_mgrs():
     return output
 
 # -----------------------------------------------------------------------------
-def layer_geojson():
+def layer_arcrest():
     """ RESTful CRUD controller """
 
-    if deployment_settings.get_security_map() and not s3_has_role(MAP_ADMIN):
-        auth.permission.fail()
+    tablename = "%s_%s" % (module, resourcename)
+    s3mgr.load(tablename)
+
+    # CRUD Strings
+    type = "ArcGIS REST"
+    LAYERS = T(TYPE_LAYERS_FMT % type)
+    ADD_NEW_LAYER = T(ADD_NEW_TYPE_LAYER_FMT % type)
+    EDIT_LAYER = T(EDIT_TYPE_LAYER_FMT % type)
+    LIST_LAYERS = T(LIST_TYPE_LAYERS_FMT % type)
+    NO_LAYERS = T(NO_TYPE_LAYERS_FMT % type)
+    s3.crud_strings[tablename] = Storage(
+        title_create=ADD_LAYER,
+        title_display=LAYER_DETAILS,
+        title_list=LAYERS,
+        title_update=EDIT_LAYER,
+        title_search=SEARCH_LAYERS,
+        subtitle_create=ADD_NEW_LAYER,
+        subtitle_list=LIST_LAYERS,
+        label_list_button=LIST_LAYERS,
+        label_create_button=ADD_LAYER,
+        label_delete_button = DELETE_LAYER,
+        msg_record_created=LAYER_ADDED,
+        msg_record_modified=LAYER_UPDATED,
+        msg_record_deleted=LAYER_DELETED,
+        msg_list_empty=NO_LAYERS)
+
+    # Custom Method
+    s3mgr.model.set_method(module, resourcename, method="enable",
+                           action=enable_layer)
+
+    # Pre-processor
+    def prep(r):
+        if r.interactive:
+            if r.component_name == "config":
+                ltable = s3db.gis_layer_config
+                field = ltable.base
+                field.readable = False
+                field.writable = False
+                if r.method != "update":
+                    # Only show Configs with no definition yet for this layer
+                    table = r.table
+                    # Find the records which are used
+                    query = (ltable.layer_id == table.layer_id) & \
+                            (table.id == r.id)
+                    rows = db(query).select(ltable.config_id)
+                    # Filter them out
+                    ltable.config_id.requires = IS_ONE_OF(db,
+                                                         "gis_config.id",
+                                                         "%(name)s",
+                                                         not_filterby="config_id",
+                                                         not_filter_opts=[row.config_id for row in rows]
+                                                         )
+        return True
+    response.s3.prep = prep
+
+    # Post-processor
+    def postp(r, output):
+        if r.interactive and r.method != "import":
+            if not r.component:
+                s3_action_buttons(r, copyable=True)
+                # Inject checkbox to enable layer in default config
+                inject_enable(output)
+        return output
+    response.s3.postp = postp
+
+    output = s3_rest_controller(rheader=s3db.gis_rheader)
+
+    return output
+
+# -----------------------------------------------------------------------------
+def layer_geojson():
+    """ RESTful CRUD controller """
 
     tablename = "%s_%s" % (module, resourcename)
     s3mgr.load(tablename)
@@ -1611,6 +1681,16 @@ def layer_geojson():
         return True
     response.s3.prep = prep
 
+    # Post-processor
+    def postp(r, output):
+        if r.interactive and r.method != "import":
+            if not r.component:
+                s3_action_buttons(r, copyable=True)
+                # Inject checkbox to enable layer in default config
+                inject_enable(output)
+        return output
+    response.s3.postp = postp
+
     output = s3_rest_controller(rheader=s3db.gis_rheader)
 
     return output
@@ -1618,9 +1698,6 @@ def layer_geojson():
 # -----------------------------------------------------------------------------
 def layer_georss():
     """ RESTful CRUD controller """
-
-    if deployment_settings.get_security_map() and not s3_has_role(MAP_ADMIN):
-        auth.permission.fail()
 
     tablename = "%s_%s" % (module, resourcename)
     s3mgr.load(tablename)
@@ -1699,20 +1776,12 @@ def layer_georss():
     # Post-processor
     def postp(r, output):
         if r.interactive and r.method != "import":
-            s3_action_buttons(r)
-            # Only show the enable button if the layer is not currently enabled
-            # @ToDo: Fix for new data model
-            query = (r.table.enabled != True)
-            rows = db(query).select(r.table.id)
-            restrict = [str(row.id) for row in rows]
-            response.s3.actions.append(dict(label=str(T("Enable")),
-                                            _class="action-btn",
-                                            url=URL(args=["[id]", "enable"]),
-                                            restrict = restrict
-                                            )
-                                        )
+            if not r.component:
+                s3_action_buttons(r, copyable=True)
+                # Inject checkbox to enable layer in default config
+                inject_enable(output)
         return output
-    #response.s3.postp = postp
+    response.s3.postp = postp
 
     output = s3_rest_controller(rheader=s3db.gis_rheader)
 
@@ -1721,9 +1790,6 @@ def layer_georss():
 # -----------------------------------------------------------------------------
 def layer_gpx():
     """ RESTful CRUD controller """
-
-    if deployment_settings.get_security_map() and not s3_has_role(MAP_ADMIN):
-        auth.permission.fail()
 
     tablename = "%s_%s" % (module, resourcename)
     s3mgr.load(tablename)
@@ -1779,6 +1845,15 @@ def layer_gpx():
         return True
     response.s3.prep = prep
 
+    # Post-processor
+    def postp(r, output):
+        if r.interactive and r.method != "import":
+            if not r.component:
+                # Inject checkbox to enable layer in default config
+                inject_enable(output)
+        return output
+    response.s3.postp = postp
+
     output = s3_rest_controller(rheader=s3db.gis_rheader)
 
     return output
@@ -1786,9 +1861,6 @@ def layer_gpx():
 # -----------------------------------------------------------------------------
 def layer_kml():
     """ RESTful CRUD controller """
-
-    if deployment_settings.get_security_map() and not s3_has_role(MAP_ADMIN):
-        auth.permission.fail()
 
     tablename = "%s_%s" % (module, resourcename)
     s3mgr.load(tablename)
@@ -1866,7 +1938,10 @@ def layer_kml():
     # Post-processor
     def postp(r, output):
         if r.interactive and r.method != "import":
-            s3_action_buttons(r, copyable=True)
+            if not r.component:
+                s3_action_buttons(r, copyable=True)
+                # Inject checkbox to enable layer in default config
+                inject_enable(output)
         return output
     response.s3.postp = postp
 
@@ -1877,9 +1952,6 @@ def layer_kml():
 # -----------------------------------------------------------------------------
 def layer_theme():
     """ RESTful CRUD controller """
-
-    if deployment_settings.get_security_map() and not s3_has_role(MAP_ADMIN):
-        auth.permission.fail()
 
     tablename = "%s_%s" % (module, resourcename)
     s3mgr.load(tablename)
@@ -1920,6 +1992,9 @@ def layer_theme():
                 field = ltable.base
                 field.readable = False
                 field.writable = False
+                field = ltable.style
+                field.readable = True
+                field.writable = True
                 if r.method != "update":
                     # Only show Configs with no definition yet for this layer
                     table = r.table
@@ -1940,17 +2015,10 @@ def layer_theme():
     # Post-processor
     def postp(r, output):
         if r.interactive and r.method != "import":
-            s3_action_buttons(r, copyable=True)
-            # Only show the enable button if the layer is not currently enabled
-            #query = (r.table.enabled != True)
-            #rows = db(query).select(r.table.id)
-            #restrict = [str(row.id) for row in rows]
-            #response.s3.actions.append(dict(label=str(T("Enable")),
-            #                                _class="action-btn",
-            #                                url=URL(args=["[id]", "enable"]),
-            #                                restrict = restrict
-            #                                )
-            #                            )
+            if not r.component:
+                s3_action_buttons(r, copyable=True)
+                # Inject checkbox to enable layer in default config
+                inject_enable(output)
         return output
     response.s3.postp = postp
 
@@ -1972,9 +2040,6 @@ def theme_data():
 # -----------------------------------------------------------------------------
 def layer_tms():
     """ RESTful CRUD controller """
-
-    if deployment_settings.get_security_map() and not s3_has_role(MAP_ADMIN):
-        auth.permission.fail()
 
     tablename = "%s_%s" % (module, resourcename)
     s3mgr.load(tablename)
@@ -2035,17 +2100,10 @@ def layer_tms():
     # Post-processor
     def postp(r, output):
         if r.interactive and r.method != "import":
-            s3_action_buttons(r, copyable=True)
-            # Only show the enable button if the layer is not currently enabled
-            #query = (r.table.enabled != True)
-            #rows = db(query).select(r.table.id)
-            #restrict = [str(row.id) for row in rows]
-            #response.s3.actions.append(dict(label=str(T("Enable")),
-            #                                _class="action-btn",
-            #                                url=URL(args=["[id]", "enable"]),
-            #                                restrict = restrict
-            #                                )
-            #                            )
+            if not r.component:
+                s3_action_buttons(r, copyable=True)
+                # Inject checkbox to enable layer in default config
+                inject_enable(output)
         return output
     response.s3.postp = postp
 
@@ -2056,9 +2114,6 @@ def layer_tms():
 # -----------------------------------------------------------------------------
 def layer_wfs():
     """ RESTful CRUD controller """
-
-    if deployment_settings.get_security_map() and not s3_has_role(MAP_ADMIN):
-        auth.permission.fail()
 
     tablename = "%s_%s" % (module, resourcename)
     s3mgr.load(tablename)
@@ -2114,7 +2169,10 @@ def layer_wfs():
     # Post-processor
     def postp(r, output):
         if r.interactive and r.method != "import":
-            s3_action_buttons(r, copyable=True)
+            if not r.component:
+                s3_action_buttons(r, copyable=True)
+                # Inject checkbox to enable layer in default config
+                inject_enable(output)
         return output
     response.s3.postp = postp
 
@@ -2125,9 +2183,6 @@ def layer_wfs():
 # -----------------------------------------------------------------------------
 def layer_wms():
     """ RESTful CRUD controller """
-
-    if deployment_settings.get_security_map() and not s3_has_role(MAP_ADMIN):
-        auth.permission.fail()
 
     tablename = "%s_%s" % (module, resourcename)
     s3mgr.load(tablename)
@@ -2185,17 +2240,10 @@ def layer_wms():
     # Post-processor
     def postp(r, output):
         if r.interactive and r.method != "import":
-            s3_action_buttons(r, copyable=True)
-            # Only show the enable button if the layer is not currently enabled
-            #query = (r.table.enabled != True)
-            #rows = db(query).select(r.table.id)
-            #restrict = [str(row.id) for row in rows]
-            #response.s3.actions.append(dict(label=str(T("Enable")),
-            #                                _class="action-btn",
-            #                                url=URL(args=["[id]","enable"]),
-            #                                restrict = restrict
-            #                                )
-            #                            )
+            if not r.component:
+                s3_action_buttons(r, copyable=True)
+                # Inject checkbox to enable layer in default config
+                inject_enable(output)
         return output
     response.s3.postp = postp
 
@@ -2204,9 +2252,85 @@ def layer_wms():
     return output
 
 # -----------------------------------------------------------------------------
-@auth.s3_requires_membership("MapAdmin")
+def layer_xyz():
+    """ RESTful CRUD controller """
+
+    tablename = "%s_%s" % (module, resourcename)
+    s3mgr.load(tablename)
+
+    # CRUD Strings
+    type = "XYZ"
+    LAYERS = T(TYPE_LAYERS_FMT % type)
+    ADD_NEW_LAYER = T(ADD_NEW_TYPE_LAYER_FMT % type)
+    EDIT_LAYER = T(EDIT_TYPE_LAYER_FMT % type)
+    LIST_LAYERS = T(LIST_TYPE_LAYERS_FMT % type)
+    NO_LAYERS = T(NO_TYPE_LAYERS_FMT % type)
+    s3.crud_strings[tablename] = Storage(
+        title_create=ADD_LAYER,
+        title_display=LAYER_DETAILS,
+        title_list=LAYERS,
+        title_update=EDIT_LAYER,
+        title_search=SEARCH_LAYERS,
+        subtitle_create=ADD_NEW_LAYER,
+        subtitle_list=LIST_LAYERS,
+        label_list_button=LIST_LAYERS,
+        label_create_button=ADD_LAYER,
+        label_delete_button = DELETE_LAYER,
+        msg_record_created=LAYER_ADDED,
+        msg_record_modified=LAYER_UPDATED,
+        msg_record_deleted=LAYER_DELETED,
+        msg_list_empty=NO_LAYERS)
+
+    # Custom Method
+    s3mgr.model.set_method(module, resourcename,
+                           method="enable",
+                           action=enable_layer)
+
+    # Pre-processor
+    def prep(r):
+        if r.interactive:
+            if r.component_name == "config":
+                ltable = s3db.gis_layer_config
+                field = ltable.visible
+                field.readable = False
+                field.writable = False
+                if r.method != "update":
+                    # Only show Configs with no definition yet for this layer
+                    table = r.table
+                    # Find the records which are used
+                    query = (ltable.layer_id == table.layer_id) & \
+                            (table.id == r.id)
+                    rows = db(query).select(ltable.config_id)
+                    # Filter them out
+                    ltable.config_id.requires = IS_ONE_OF(db,
+                                                         "gis_config.id",
+                                                         "%(name)s",
+                                                         not_filterby="config_id",
+                                                         not_filter_opts=[row.config_id for row in rows]
+                                                         )
+        return True
+    response.s3.prep = prep
+
+    # Post-processor
+    def postp(r, output):
+        if r.interactive and r.method != "import":
+            if not r.component:
+                s3_action_buttons(r, copyable=True)
+                # Inject checkbox to enable layer in default config
+                inject_enable(output)
+        return output
+    response.s3.postp = postp
+
+    output = s3_rest_controller(rheader=s3db.gis_rheader)
+
+    return output
+
+# -----------------------------------------------------------------------------
 def layer_js():
     """ RESTful CRUD controller """
+
+    if deployment_settings.get_security_map() and not s3_has_role(MAP_ADMIN):
+        auth.permission.fail()
 
     tablename = "%s_%s" % (module, resourcename)
     s3mgr.load(tablename)
@@ -2255,6 +2379,15 @@ def layer_js():
                                                          )
         return True
     response.s3.prep = prep
+
+    # Post-processor
+    def postp(r, output):
+        if r.interactive and r.method != "import":
+            if not r.component:
+                # Inject checkbox to enable layer in default config
+                inject_enable(output)
+        return output
+    response.s3.postp = postp
 
     output = s3_rest_controller(rheader=s3db.gis_rheader)
 
@@ -2372,38 +2505,33 @@ def display_feature():
                                                 table.parent,
                                                 table.lat,
                                                 table.lon,
+                                                #table.wkt,
                                                 limitby=(0, 1)).first()
 
-    config = gis.get_config()
+    if not feature:
+        session.error = T("Record not found!")
+        raise HTTP(404, body=s3mgr.xml.json_message(False, 404, session.error))
+    
+    # Centre on Feature
+    lat = feature.lat
+    lon = feature.lon
+    if (lat is None) or (lon is None):
+        if feature.parent:
+            # Skip the current record if we can
+            latlon = gis.get_latlon(feature.parent)
+        elif feature.id:
+            latlon = gis.get_latlon(feature.id)
+        if latlon:
+            lat = latlon["lat"]
+            lon = latlon["lon"]
+        else:
+            session.error = T("No location information defined!")
+            raise HTTP(404, body=s3mgr.xml.json_message(False, 404, session.error))
 
-    try:
-        # Centre on Feature
-        lat = feature.lat
-        lon = feature.lon
-        if (lat is None) or (lon is None):
-            if feature.parent:
-                # Skip the current record if we can
-                latlon = gis.get_latlon(feature.parent)
-            elif feature.id:
-                latlon = gis.get_latlon(feature.id)
-            else:
-                # nothing we can do!
-                raise
-            if latlon:
-                lat = latlon["lat"]
-                lon = latlon["lon"]
-            else:
-                # nothing we can do!
-                raise
-    except:
-        lat = config.lat
-        lon = config.lon
-
-    #if feature.parent:
+    # Default zoom +2 (same as a single zoom on a cluster)
+    # config = gis.get_config()
+    # zoom = config.zoom + 2
     bounds = gis.get_bounds(features=[feature])
-    #else:
-        # Default zoom +2 (same as a single zoom on a cluster)
-    #    zoom = config.zoom + 2
 
     map = gis.show_map(
         features = [{"lat"  : lat,
@@ -2412,9 +2540,11 @@ def display_feature():
         lon = lon,
         #zoom = zoom,
         bbox = bounds,
-        window = True,
+        window = False,
         closable = False,
-        collapsed = True
+        collapsed = True,
+        width=640,
+        height=480,
     )
 
     return dict(map=map)
@@ -3038,13 +3168,13 @@ def proxy():
                 try:
                     y = urllib2.urlopen(r)
                 except urllib2.URLError:
-                    raise(HTTP(400, "Unable to reach host %s" % r))
+                    raise(HTTP(504, "Unable to reach host %s" % r))
             else:
                 # GET
                 try:
                     y = urllib2.urlopen(url)
                 except urllib2.URLError:
-                    raise(HTTP(400, "Unable to reach host %s" % url))
+                    raise(HTTP(504, "Unable to reach host %s" % url))
 
             # Check for allowed content types
             i = y.info()

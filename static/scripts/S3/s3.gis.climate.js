@@ -1995,6 +1995,12 @@ ClimateDataMapPlugin = function (config) {
                 plugin.station_markers_layer = station_markers_layer
 
                 plugin.update_map_layer(initial_query_expression)
+                var example_data
+                if (places_data[place_id] == undefined) {
+                    example_data = {latitude:0, longitude: 0}
+                } else {
+                    example_data = places_data[place_id]
+                }
                 plugin.filter_box = new FilterBox({
                     updated: function (filter_function) {
                         plugin.filter = filter_function
@@ -2002,7 +2008,7 @@ ClimateDataMapPlugin = function (config) {
                             plugin.render_map_layer
                         )
                     },
-                    example: new Place(places_data[place_id]),
+                    example: new Place(example_data),
                     initial_filter: initial_filter,
                     plugin: plugin
                 })
@@ -2556,17 +2562,19 @@ ClimateDataMapPlugin = function (config) {
         variable_combo_box.years = []
         // when a dataset is selected, request the years.
         function update_years(dataset_name) {
-            $.ajax({
-                url: plugin.years_URL+'?dataset_name='+dataset_name,
-                dataType: 'json',
-                success: function (years) {
-                    variable_combo_box.years = years
-                    if (years.length) {
-                        from_year_combo_box.setValue(years[0])
-                        to_year_combo_box.setValue(years[years.length-1])
+            if (dataset_name != undefined) {
+                $.ajax({
+                    url: plugin.years_URL+'?dataset_name='+dataset_name,
+                    dataType: 'json',
+                    success: function (years) {
+                        variable_combo_box.years = years
+                        if (years.length) {
+                            from_year_combo_box.setValue(years[0])
+                            to_year_combo_box.setValue(years[years.length-1])
+                        }
                     }
-                }
-            })
+                })
+            }
         }
         variable_combo_box.on(
             'select',

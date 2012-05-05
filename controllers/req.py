@@ -51,14 +51,240 @@ def create():
 def req():
     """ REST Controller """
 
-    # Defined in the Model for use from Multiple Controllers for unified menus
-    return req_controller()
+    req_table = s3db.req_req
+
+    # Set the req_item site_id (Requested From), called from action buttons on req/req_item_inv_item/x page
+    if "req_item_id" in request.vars and "inv_item_id" in request.vars:
+        inv_item = s3db.inv_inv_item[request.vars.inv_item_id]
+        site_id = inv_item.site_id
+        item_id = inv_item.item_id
+        s3db.req_req_item[request.vars.req_item_id] = dict(site_id = site_id)
+        response.confirmation = T("%(item)s requested from %(site)s" % {"item":s3db.supply_item_represent(item_id, show_link = False),
+                                                                        "site":s3db.org_site_represent(site_id, show_link=False)
+                                                                        })
+
+    default_type = request.vars.default_type
+    if default_type:
+        type_field = req_table.type
+        type_field.default = int(default_type)
+        type_field.writable = False
+
+    def prep(r):
+
+        s3db.req_prep(r)
+
+        # Remove type from list_fields
+        list_fields = s3mgr.model.get_config("req_req",
+                                             "list_fields")
+        try:
+            list_fields.remove("type")
+        except:
+             # It has already been removed.
+             # This can happen if the req controller is called
+             # for a second time, such as when printing reports
+            pass
+        s3mgr.configure("req_req", list_fields=list_fields)
+
+        if r.interactive:
+            # Set Fields and Labels depending on type
+            type = ( r.record and r.record.type ) or \
+                   ( request.vars and request.vars.type )
+            if type:
+                type = int(type)
+                req_table.type.default = int(type)
+
+                # This prevents the type from being edited AFTER it is set
+                req_table.type.readable = False
+                req_table.type.writable = False
+
+                crud_strings = deployment_settings.get_req_req_crud_strings(type)
+                if crud_strings:
+                    s3.crud_strings["req_req"] = crud_strings
+
+                # Filter the query based on type
+                if response.s3.filter:
+                    response.s3.filter = response.s3.filter & \
+                                         (s3db.req_req.type == type)
+                else:
+                    response.s3.filter = (s3db.req_req.type == type)
+
+            # @ToDo: apply these changes via JS for the create form where type is edittable
+            if type == 1: # Item
+                req_table.date_recv.readable = True
+                req_table.date_recv.writable = True
+                req_table.date_recv.readable = True
+                req_table.date_recv.writable = True
+
+                req_table.purpose.label = T("What the Items will be used for")
+                req_table.site_id.label =T("Deliver To")
+                req_table.request_for_id.label = T("Deliver To")
+                req_table.recv_by_id.label = T("Delivered To")
+
+            if type == 3: # Person
+                req_table.date_required_until.readable = True
+                req_table.date_required_until.writable = True
+
+                req_table.purpose.label = T("Task Details")
+                req_table.site_id.label =  T("Report To")
+                req_table.request_for_id.label = T("Report To")
+                req_table.recv_by_id.label = T("Reported To")
+
+            if r.method != "update" and r.method != "read":
+                if not r.component:
+                    # Hide fields which don't make sense in a Create form
+                    # - includes one embedded in list_create
+                    # - list_fields over-rides, so still visible within list itself
+                    s3db.req_create_form_mods()
+                    s3mgr.configure(s3db.req_req,
+                                    create_next = URL(c="req",
+                                                      f="req",
+                                                      args=["[id]",
+                                                            "req_item"
+                                                           ]
+                                                     )
+                                   )
+                    # Get the default Facility for this user
+                    # @ToDo: Use site_id in User Profile (like current organisation_id)
+                    if deployment_settings.has_module("hrm"):
+                        hrtable = s3db.hrm_human_resource
+                        query = (hrtable.person_id == s3_logged_in_person())
+                        site = db(query).select(hrtable.site_id,
+                                                limitby=(0, 1)).first()
+                        if site:
+                            r.table.site_id.default = site.site_id
+
+                elif r.component.name == "document":
+                    s3.crud.submit_button = T("Add")
+                    table = r.component.table
+                    # @ToDo: Fix for Link Table
+                    #table.date.default = r.record.date
+                    #if r.record.site_id:
+                    #    stable = db.org_site
+                    #    query = (stable.id == r.record.site_id)
+                    #    site = db(query).select(stable.location_id,
+                    #                            stable.organisation_id,
+                    #                            limitby=(0, 1)).first()
+                    #    if site:
+                    #        table.location_id.default = site.location_id
+                    #        table.organisation_id.default = site.organisation_id
+
+                elif r.component.name == "req_item":
+                    table = r.component.table
+                    table.site_id.writable = table.site_id.readable = False
+                    s3db.req_hide_quantities(table)
+
+                elif r.component.name == "req_skill":
+                    s3db.req_hide_quantities(r.component.table)
+
+        if r.component and r.component.name == "commit":
+            table = r.component.table
+            # Allow commitments to be added when doing so as a component
+            s3mgr.configure(table,
+                            listadd = True)
+
+            type = r.record.type
+            if type == 1: # Items
+                # Limit site_id to facilities the user has permissions for
+                auth.permitted_facilities(table=r.table,
+                                          error_msg=T("You do not have permission for any facility to make a commitment."))
+                if r.interactive:
+                    # Redirect to the Items tab after creation
+                    s3mgr.configure(table,
+                                    create_next = URL(c="req", f="commit",
+                                                      args=["[id]", "commit_item"]),
+                                    update_next = URL(c="req", f="commit",
+                                                      args=["[id]", "commit_item"]))
+            else:
+                # Non-Item commits can have an Organisation
+                # Check if user is affiliated to an Organisation
+                if is_affiliated():
+                    # Limit organisation_id to organisations the user has permissions for
+                    auth.permitted_organisations(table=r.table,
+                                                 redirect_on_error=False)
+                    table.organisation_id.readable = True
+                    table.organisation_id.writable = True
+                else:
+                    # Unaffiliated people can't commit on behalf of others
+                    r.component.table.committer_id.writable = False
+                    r.component.table.committer_id.comment = None
+
+                # Non-Item commits shouldn't have a From Inventory
+                # @ToDo: Assets do?
+                table.site_id.readable = False
+                table.site_id.writable = False
+                if r.interactive and r.record.type == 3: # People
+                    # Redirect to the Persons tab after creation
+                    s3mgr.configure(table,
+                                    create_next = URL(c="req", f="commit",
+                                                      args=["[id]", "commit_person"]),
+                                    update_next = URL(c="req", f="commit",
+                                                      args=["[id]", "commit_person"]))
+        else:
+            # Limit site_id to facilities the user has permissions for
+            # @ToDo: Non-Item requests shouldn't be bound to a Facility?
+            auth.permitted_facilities(table=r.table,
+                                      error_msg=T("You do not have permission for any facility to make a request."))
+
+        return True
+    response.s3.prep = prep
+
+    # Post-process
+    def postp(r, output):
+
+        if r.interactive:
+            s3_action_buttons(r)
+            if not r.component:
+                if deployment_settings.get_req_use_commit():
+                    # This is appropriate to all
+                    response.s3.actions.append(
+                        dict(url = URL(c = "req",
+                                       f = "req",
+                                       args = ["[id]", "commit", "create"]),
+                             _class = "action-btn",
+                             label = str(T("Commit"))
+                            )
+                        )
+                # This is only appropriate for item requests
+                query = (r.table.type == 1)
+                rows = db(query).select(r.table.id)
+                restrict = [str(row.id) for row in rows]
+                response.s3.actions.append(
+                    dict(url = URL(c = "req",
+                                   f = "req",
+                                   args = ["[id]", "req_item"]),
+                         _class = "action-btn",
+                         label = str(T("View Items")),
+                         restrict = restrict
+                        )
+                    )
+            elif r.component.name == "req_item":
+                req_item_inv_item_btn = dict(url = URL(c = "req",
+                                                       f = "req_item_inv_item",
+                                                       args = ["[id]"]
+                                                      ),
+                                             _class = "action-btn",
+                                             label = str(T("Request from Facility")),
+                                            )
+                response.s3.actions.append(req_item_inv_item_btn)
+            elif r.component.name == "req_skill":
+                pass
+            else:
+                # We don't yet have other components
+                pass
+
+        return output
+    response.s3.postp = postp
+
+    output = s3_rest_controller("req", "req",
+                                rheader=eden.req.req_rheader)
+
+    return output
 
 # =============================================================================
 def req_item():
     """ REST Controller """
 
-    s3mgr.configure(tablename,
+    s3mgr.configure("req_req_item",
                     insertable=False)
 
     def prep(r):
@@ -74,6 +300,13 @@ def req_item():
 
     output = s3_rest_controller()
 
+    req_item_inv_item_btn = dict(url = URL(c = "req",
+                                           f = "req_item_inv_item",
+                                           args = ["[id]"]
+                                          ),
+                                _class = "action-btn",
+                                label = str(T("Request from Facility")),
+                               )
     if response.s3.actions:
         response.s3.actions += [req_item_inv_item_btn]
     else:
@@ -162,10 +395,6 @@ def req_item_inv_item():
     response.s3.filter = (itable.item_id == req_item.item_id)
     # Tweak CRUD String for this context
     s3.crud_strings["inv_inv_item"].msg_list_empty = T("No Inventories currently have this item in stock")
-    # Add Site to list_fields
-    list_fields = s3mgr.model.get_config("inv_inv_item", "list_fields")
-    list_fields.insert(1, "site_id")
-    s3mgr.configure("inv_inv_item", list_fields=list_fields)
 
     inv_items = s3_rest_controller("inv", "inv_item")
     output["items"] = inv_items["items"]
@@ -232,14 +461,13 @@ def commit():
             if r.record:
                 if r.record.type == 1: # Items
                     # Limit site_id to facilities the user has permissions for
-                    auth.permission.permitted_facilities(table=table,
-                                                         error_msg=T("You do not have permission for any facility to make a commitment.") )
+                    auth.permitted_facilities(table=table,
+                                              error_msg=T("You do not have permission for any facility to make a commitment.") )
 
                 else:
                     # Non-Item commits can have an Organisation
                     # Limit organisation_id to organisations the user has permissions for
-                    auth.permission.permitted_organisations(table=r.table,
-                                                            redirect_on_error=False)
+                    auth.permitted_organisations(table=r.table, redirect_on_error=False)
                     table.organisation_id.readable = True
                     table.organisation_id.writable = True
                     # Non-Item commits shouldn't have a From Inventory
@@ -311,19 +539,29 @@ def commit_rheader(r):
                                           ),
                                          ),
                                         )
-
-                send_btn = A( T("Send Commitment as Shipment"),
+                prepare_btn = A( T("Prepare Commitment"),
                               _href = URL(c = "inv",
-                                          f = "send_commit",
+                                          f = "prepare_commit",
                                           args = [record.id]
                                           ),
-                              _id = "send_commit",
+                              _id = "prepare_commit",
                               _class = "action-btn"
                               )
 
-                send_btn_confirm = SCRIPT("S3ConfirmClick('#send_commit', '%s')" %
-                                          T("Do you want to send these Committed items?") )
-                response.s3.rfooter = TAG[""](send_btn,send_btn_confirm)
+                response.s3.rfooter = TAG[""](prepare_btn)
+
+#                send_btn = A( T("Send Commitment as Shipment"),
+#                              _href = URL(c = "inv",
+#                                          f = "send_commit",
+#                                          args = [record.id]
+#                                          ),
+#                              _id = "send_commit",
+#                              _class = "action-btn"
+#                              )
+#
+#                send_btn_confirm = SCRIPT("S3ConfirmClick('#send_commit', '%s')" %
+#                                          T("Do you want to send these Committed items?") )
+#                response.s3.rfooter = TAG[""](send_btn,send_btn_confirm)
                 #rheader.append(send_btn)
                 #rheader.append(send_btn_confirm)
 
@@ -463,6 +701,12 @@ def send_req():
         vars: site_id
     """
 
+    ritable = s3db.req_req_item
+    iitable = s3db.inv_inv_item
+    sendtable = s3db.inv_send
+    tracktable = s3db.inv_track_item
+    siptable = s3db.supply_item_pack
+
     req_id = request.args[0]
     r_req = s3db.req_req[req_id]
     site_id = request.vars.get("site_id")
@@ -480,52 +724,89 @@ def send_req():
                      args = [req_id]))
 
     # Create a new send record
-    send_id = s3db.inv_send.insert(date = request.utcnow,
-                                   site_id = site_id,
-                                   to_site_id = r_req.site_id)
+    code = s3db.inv_get_shipping_code("WB",
+                                      site_id,
+                                      s3db.inv_send.send_ref
+                                     )
+    send_id = sendtable.insert(send_ref = code,
+                               req_ref = r_req.req_ref,
+                               sender_id = auth.s3_logged_in_person(),
+                               site_id = site_id,
+                               date = request.utcnow,
+                               recipient_id = r_req.requester_id,
+                               to_site_id = r_req.site_id,
+                               status = s3db.inv_ship_status["IN_PROCESS"],
+                              )
 
-    # Only select items which are in the warehouse
-    ritable = s3db.req_req_item
-    iitable = s3db.inv_inv_item
+    # Get the items for this request that have not been fulfilled (in transit)
     query = (ritable.req_id == req_id) & \
-            (ritable.quantity_fulfil < ritable.quantity) & \
-            (iitable.site_id == site_id) & \
-            (ritable.item_id == iitable.item_id) & \
-            (ritable.deleted == False)  & \
-            (iitable.deleted == False)
+            (ritable.quantity_transit < ritable.quantity) & \
+            (ritable.deleted == False)
     req_items = db(query).select(ritable.id,
                                  ritable.quantity,
+                                 ritable.quantity_transit,
+                                 ritable.item_id,
                                  ritable.item_pack_id,
-                                 iitable.id,
-                                 iitable.item_id,
-                                 iitable.quantity,
-                                 iitable.item_pack_id)
+                                )
 
-    istable = s3db.inv_send_item
-    for req_item in req_items:
-        req_item_quantity = req_item.req_req_item.quantity * \
-                            req_item.req_req_item.pack_quantity
-
-        inv_item_quantity = req_item.inv_inv_item.quantity * \
-                            req_item.inv_inv_item.pack_quantity
-
-        if inv_item_quantity > req_item_quantity:
-            send_item_quantity = req_item_quantity
-        else:
-            send_item_quantity = inv_item_quantity
-        send_item_quantity = send_item_quantity / req_item.req_req_item.pack_quantity
-
-        if send_item_quantity:
-            send_item_id = istable.insert(send_id = send_id,
-                                          inv_item_id = req_item.inv_inv_item.id,
-                                          req_item_id = req_item.req_req_item.id,
-                                          item_pack_id = req_item.req_req_item.item_pack_id,
-                                          quantity = send_item_quantity)
-
+    # loop through each request item and find matched in the site inventory
+    for req_i in req_items:
+        query = (iitable.item_id == req_i.item_id) & \
+                (iitable.site_id == site_id) & \
+                (iitable.deleted == False)
+        inv_items = db(query).select(iitable.id,
+                                     iitable.item_id,
+                                     iitable.quantity,
+                                     iitable.item_pack_id,
+                                     iitable.pack_value,
+                                     iitable.currency,
+                                     iitable.expiry_date,
+                                     iitable.bin,
+                                     iitable.owner_org_id,
+                                     iitable.supply_org_id,
+                                    )
+        # if their is a single match then set up a tracktable record
+        # get the request pack_quantity
+        req_p_qnty = siptable[req_i.item_pack_id].quantity
+        req_qnty = req_i.quantity
+        req_qnty_in_t = req_i.quantity_transit
+        req_qnty_wanted = (req_qnty - req_qnty_in_t) * req_p_qnty
+        # insert the track item records
+        # if their is more than one item match then set the quantity to 0
+        # and add the quantity requested in the comments
+        for inv_i in inv_items:
+            # get inv_item.pack_quantity
+            if len(inv_items) == 1:
+                inv_p_qnty = siptable[inv_i.item_pack_id].quantity
+                inv_qnty = inv_i.quantity * inv_p_qnty
+                if inv_qnty > req_qnty_wanted:
+                    send_item_quantity = req_qnty_wanted
+                else:
+                    send_item_quantity = inv_qnty
+                send_item_quantity = send_item_quantity / inv_p_qnty
+                comment = None
+            else:
+                send_item_quantity = 0
+                comment = "%d items needed to match total request" % req_qnty_wanted
+            tracktable.insert(send_id = send_id,
+                              send_inv_item_id = inv_i.id,
+                              item_id = inv_i.item_id,
+                              req_item_id = req_i.id,
+                              item_pack_id = inv_i.item_pack_id,
+                              quantity = 0,
+                              status = s3db.inv_tracking_status["IN_PROCESS"],
+                              pack_value = inv_i.pack_value,
+                              currency = inv_i.currency,
+                              bin = inv_i.bin,
+                              expiry_date = inv_i.expiry_date,
+                              owner_org_id = inv_i.owner_org_id,
+                              supply_org_id = inv_i.supply_org_id,
+                              comments = comment,
+                             )
     # Redirect to commit
     redirect(URL(c = "inv",
                  f = "send",
-                 args = [send_id, "send_item"]))
+                 args = [send_id, "track_item"]))
 
 # =============================================================================
 def commit_item_json():

@@ -106,7 +106,9 @@ if deployment_settings.has_module(module):
             msg_record_created = T("Assessment added"),
             msg_record_modified = T("Assessment updated"),
             msg_record_deleted = T("Assessment deleted"),
-            msg_list_empty = T("No Assessments currently registered"))
+            msg_list_empty = T("No Assessments currently registered"),
+            name_nice = T("Assessment"),
+            name_nice_plural = T("Assessments"))
 
         # assess_assess as component of org_organisation
         s3mgr.model.add_component(table, org_organisation="organisation_id")
@@ -142,17 +144,16 @@ if deployment_settings.has_module(module):
             msg_record_created = T("Baseline Type added"),
             msg_record_modified = T("Baseline Type updated"),
             msg_record_deleted = T("Baseline Type deleted"),
-            msg_list_empty = T("No Baseline Types currently registered"))
+            msg_list_empty = T("No Baseline Types currently registered"),
+            name_nice = T("Baseline Type"),
+            name_nice_plural = T("Baseline Types"))
 
         def baseline_type_comment():
+            # ToDo: Is this membership check required?
             if auth.has_membership(auth.id_group("'Administrator'")):
-                return DIV(A(ADD_BASELINE_TYPE,
-                             _class="colorbox",
-                             _href=URL(c="assess", f="baseline_type", args="create", vars=dict(format="popup")),
-                             _target="top",
-                             _title=ADD_BASELINE_TYPE
-                             )
-                           )
+                return S3AddResourceLink(c="assess",
+                                         f="baseline_type",
+                                         label=ADD_BASELINE_TYPE)
             else:
                 return None
 
@@ -201,7 +202,9 @@ if deployment_settings.has_module(module):
             msg_record_created = T("Baseline added"),
             msg_record_modified = T("Baseline updated"),
             msg_record_deleted = T("Baseline deleted"),
-            msg_list_empty = T("No Baselines currently registered"))
+            msg_list_empty = T("No Baselines currently registered"),
+            name_nice = T("Baseline"),
+            name_nice_plural = T("Baselines"))
 
         # Baseline as component of assessments
         s3mgr.model.add_component(table, assess_assess="assess_id")
@@ -243,7 +246,9 @@ if deployment_settings.has_module(module):
             msg_record_created = T("Assessment Summary added"),
             msg_record_modified = T("Assessment Summary updated"),
             msg_record_deleted = T("Assessment Summary deleted"),
-            msg_list_empty = T("No Assessment Summaries currently registered"))
+            msg_list_empty = T("No Assessment Summaries currently registered"),
+            name_nice = T("Assessment"),
+            name_nice_plural = T("Assessments"))
 
         # Summary as component of assessments
         s3mgr.model.add_component(table, assess_assess="assess_id")
@@ -292,7 +297,9 @@ if deployment_settings.has_module(module):
             msg_record_created = T("Section updated"),
             msg_record_modified = T("Section updated"),
             msg_record_deleted = T("Section deleted"),
-            msg_list_empty = T("No Sections currently registered"))
+            msg_list_empty = T("No Sections currently registered"),
+            name_nice = T("Search"),
+            name_nice_plural = T("Searches"))
 
         # -------------------------------------------------------------------------
         # Common options
@@ -458,7 +465,9 @@ if deployment_settings.has_module(module):
             msg_record_created = T("Rapid Assessment added"),
             msg_record_modified = T("Rapid Assessment updated"),
             msg_record_deleted = T("Rapid Assessment deleted"),
-            msg_list_empty = T("No Rapid Assessments currently registered"))
+            msg_list_empty = T("No Rapid Assessments currently registered"),
+            name_nice = T("Rapid Assessment"),
+            name_nice_plural = T("Rapid Assessments"))
 
         # -------------------------------------------------------------------------
         def rat_assessment_onaccept(form):
@@ -1853,7 +1862,9 @@ if deployment_settings.has_module(module):
         msg_record_created = T("Population Statistic added"),
         msg_record_modified = T("Population Statistic updated"),
         msg_record_deleted = T("Population Statistic deleted"),
-        msg_list_empty = T("No Population Statistics currently registered"))
+        msg_list_empty = T("No Population Statistics currently registered"),
+        name_nice = T("Population Statistic"),
+        name_nice_plural = T("Population Statistics"))
 
 else:
     def assess_id(**arguments):

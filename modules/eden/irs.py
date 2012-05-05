@@ -272,6 +272,24 @@ class S3IRSModel(S3Model):
                                    requires = IS_NULL_OR(IS_UTC_DATETIME())
                                   ),
                              location_id(),
+                             # Very basic Impact Assessment
+                             Field("affected", "integer",
+                                   label=T("Number of People Affected"),
+                                   represent = lambda val: val or T("unknown"),
+                                   ),
+                             Field("dead", "integer",
+                                   label=T("Number of People Dead"),
+                                   represent = lambda val: val or T("unknown"),
+                                   ),
+                             Field("injured", "integer",
+                                   label=T("Number of People Injured"),
+                                   represent = lambda val: val or T("unknown"),
+                                   ),
+                             # Probably too much to try & capture
+                             #Field("missing", "integer",
+                             #      label=T("Number of People Missing")),
+                             #Field("displaced", "integer",
+                             #      label=T("Number of People Displaced")),
                              Field("verified", "boolean",    # Ushahidi-compatibility
                                    # We don't want these visible in Create forms
                                    # (we override in Update forms in controller)
@@ -311,6 +329,7 @@ class S3IRSModel(S3Model):
             title_display = T("Incident Report Details"),
             title_list = LIST_INC_REPORTS,
             title_update = T("Edit Incident Report"),
+            title_upload = T("Import Incident Reports"),
             title_search = T("Search Incident Reports"),
             subtitle_create = T("Add New Incident Report"),
             subtitle_list = T("Incident Reports"),
@@ -345,7 +364,7 @@ class S3IRSModel(S3Model):
                     ),
                     S3SearchOptionsWidget(
                         name="incident_search_category",
-                        field=["category"],
+                        field="category",
                         label = T("Category"),
                         cols = 3,
                     ),
@@ -353,7 +372,7 @@ class S3IRSModel(S3Model):
                         name="incident_search_date",
                         method="range",
                         label=T("Date"),
-                        field=["datetime"]
+                        field="datetime"
                     ),
             ))
 
@@ -368,11 +387,9 @@ class S3IRSModel(S3Model):
         # Resource Configuration
         configure(tablename,
                   super_entity = ("sit_situation", "doc_entity"),
-                  # Open tabs after creation
-                  create_next = URL(args=["[id]", "update"]),
-                  update_next = URL(args=["[id]", "update"]),
                   search_method = ireport_search,
-                  report_filter=[
+                  report_options=Storage(
+                      search=[
                             S3SearchLocationHierarchyWidget(
                                 name="incident_search_L1",
                                 field="L1",
@@ -385,7 +402,7 @@ class S3IRSModel(S3Model):
                             ),
                             S3SearchOptionsWidget(
                                 name="incident_search_category",
-                                field=["category"],
+                                field="category",
                                 label = T("Category"),
                                 cols = 3,
                             ),
@@ -393,19 +410,23 @@ class S3IRSModel(S3Model):
                                 name="incident_search_date",
                                 method="range",
                                 label=T("Date"),
-                                field=["datetime"]
+                                field="datetime"
                             ),
-                        ],
-                  report_rows = report_fields,
-                  report_cols = report_fields,
-                  report_fact = report_fields,
-                  report_method=["count", "list"],
+                      ],
+                      rows=report_fields,
+                      cols=report_fields,
+                      facts=report_fields,
+                      methods=["count", "list"]
+                  ),
                   list_fields = ["id",
                                  "name",
                                  "category",
                                  "datetime",
                                  "location_id",
                                  #"organisation_id",
+                                 "affected",
+                                 "dead",
+                                 "injured",
                                  "verified",
                                  "message",
                                 ])
@@ -455,7 +476,7 @@ class S3IRSModel(S3Model):
                                      represent = lambda id: \
                                         (id and [db.irs_ireport[id].name] or [NONE])[0],
                                      label = T("Incident"),
-                                     ondelete = "RESTRICT")
+                                     ondelete = "CASCADE")
 
         # ---------------------------------------------------------------------
         # Custom Methods
@@ -474,7 +495,7 @@ class S3IRSModel(S3Model):
         if settings.has_module("fire"):
             create_next = URL(args=["[id]", "human_resource"])
         else:
-            create_next = URL(args=["[id]", "update"])
+            create_next = URL(args=["[id]", "image"])
 
         configure("irs_ireport",
                   create_onaccept=self.ireport_onaccept,
@@ -498,9 +519,9 @@ class S3IRSModel(S3Model):
             - used by events module
                     & legacy assess & impact modules
         """
-        dummy = S3ReusableField("ireport_id", "integer",
-                                readable=False, writable=False)
-        return Storage(irs_ireport_id = dummy)
+        ireport_id = S3ReusableField("ireport_id", "integer",
+                                     readable=False, writable=False)
+        return Storage(irs_ireport_id = ireport_id)
 
     # -------------------------------------------------------------------------
     @staticmethod
@@ -921,76 +942,76 @@ class S3IRSResponseModel(S3Model):
         # ---------------------------------------------------------------------
         # Staff assigned to an Incident
         #
-        if settings.has_module("hrm"):
-            tablename = "irs_ireport_human_resource"
-            table = self.define_table(tablename,
-                                      ireport_id(),
-                                      # Simple dropdown is faster for a small team
-                                      human_resource_id(widget=None),
-                                      Field("incident_commander", "boolean",
-                                            default = False,
-                                            label = T("Incident Commander"),
-                                            represent = lambda incident_commander: \
-                                                    (T("No"),
-                                                     T("Yes"))[incident_commander == True]),
-                                     *s3.meta_fields())
+        tablename = "irs_ireport_human_resource"
+        table = self.define_table(tablename,
+                                  ireport_id(),
+                                  # Simple dropdown is faster for a small team
+                                  human_resource_id(widget=None),
+                                  Field("incident_commander", "boolean",
+                                        default = False,
+                                        label = T("Incident Commander"),
+                                        represent = lambda incident_commander: \
+                                                (T("No"),
+                                                 T("Yes"))[incident_commander == True]),
+                                 *s3.meta_fields())
+
+        if not current.deployment_settings.has_module("vehicle"):
+            return None
 
         # ---------------------------------------------------------------------
         # Vehicles assigned to an Incident
         #
-        if settings.has_module("vehicle"):
-            asset_id = self.asset_asset_id
-            tablename = "irs_ireport_vehicle"
-            table = self.define_table(tablename,
-                                      ireport_id(),
-                                      asset_id(
-                                            label = T("Vehicle"),
-                                            requires=self.irs_vehicle_requires
-                                        ),
-                                      Field("datetime", "datetime",
-                                            label=T("Dispatch Time"),
-                                            widget = S3DateTimeWidget(future=0),
-                                            requires = IS_EMPTY_OR(IS_UTC_DATETIME(allow_future=False)),
-                                            default = request.utcnow),
-                                      self.super_link("site_id", "org_site"),
-                                      location_id(label=T("Destination")),
-                                      Field("closed",
-                                            # @ToDo: Close all assignments when Incident closed
-                                            readable=False,
-                                            writable=False),
-                                      s3.comments(),
-                                      *s3.meta_fields())
+        asset_id = self.asset_asset_id
+        tablename = "irs_ireport_vehicle"
+        table = self.define_table(tablename,
+                                  ireport_id(),
+                                  asset_id(
+                                        label = T("Vehicle"),
+                                        requires=self.irs_vehicle_requires
+                                    ),
+                                  Field("datetime", "datetime",
+                                        label=T("Dispatch Time"),
+                                        widget = S3DateTimeWidget(future=0),
+                                        requires = IS_EMPTY_OR(IS_UTC_DATETIME(allow_future=False)),
+                                        default = request.utcnow),
+                                  self.super_link("site_id", "org_site"),
+                                  location_id(label=T("Destination")),
+                                  Field("closed",
+                                        # @ToDo: Close all assignments when Incident closed
+                                        readable=False,
+                                        writable=False),
+                                  s3.comments(),
+                                  *s3.meta_fields())
 
-            # Field options
-            table.site_id.label = T("Fire Station")
-            table.site_id.readable = True
-            # Populated from fire_station_vehicle
-            #table.site_id.writable = True
+        # Field options
+        table.site_id.label = T("Fire Station")
+        table.site_id.readable = True
+        # Populated from fire_station_vehicle
+        #table.site_id.writable = True
 
-            table.virtualfields.append(irs_ireport_vehicle_virtual_fields())
+        table.virtualfields.append(irs_ireport_vehicle_virtual_fields())
 
-            # ---------------------------------------------------------------------
-            # Which Staff are assigned to which Vehicle?
-            #
-            if settings.has_module("hrm"):
-                hr_represent = self.hrm_hr_represent
-                tablename = "irs_ireport_vehicle_human_resource"
-                table = self.define_table(tablename,
-                                          ireport_id(),
-                                          # Simple dropdown is faster for a small team
-                                          human_resource_id(represent=hr_represent,
-                                                            requires = IS_ONE_OF(db,
-                                                                                 "hrm_human_resource.id",
-                                                                                 hr_represent,
-                                                                                 #orderby="pr_person.first_name"
-                                                                                 ),
-                                                            widget=None),
-                                          asset_id(label = T("Vehicle")),
-                                          Field("closed",
-                                                # @ToDo: Close all assignments when Incident closed
-                                                readable=False,
-                                                writable=False),
-                                          *s3.meta_fields())
+        # ---------------------------------------------------------------------
+        # Which Staff are assigned to which Vehicle?
+        #
+        hr_represent = self.hrm_hr_represent
+        tablename = "irs_ireport_vehicle_human_resource"
+        table = self.define_table(tablename,
+                                  ireport_id(),
+                                  # Simple dropdown is faster for a small team
+                                  human_resource_id(represent=hr_represent,
+                                                    requires = IS_ONE_OF(db,
+                                                                         "hrm_human_resource.id",
+                                                                         hr_represent,
+                                                                         #orderby="pr_person.first_name"
+                                                                         ),
+                                                    widget=None),
+                                  asset_id(label = T("Vehicle")),
+                                  Field("closed",
+                                        # @ToDo: Close all assignments when Incident closed
+                                        readable=False,
+                                        writable=False),
+                                  *s3.meta_fields())
 
         # ---------------------------------------------------------------------
         # Return model-global names to response.s3

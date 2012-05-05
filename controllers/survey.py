@@ -229,7 +229,7 @@ def templateSummary():
                 template_id = r.id
             form = s3.survey_build_template_summary(template_id)
             output["items"] = form
-            output["sortby"] = [[0,"asc"]]
+            output["sortby"] = [[0, "asc"]]
             output["title"] = crud_strings.title_analysis_summary
             output["subtitle"] = crud_strings.subtitle_analysis_summary
             return output
@@ -403,6 +403,9 @@ def export_all_responses():
     s3mgr.load("survey_series")
     s3mgr.load("survey_section")
     s3mgr.load("survey_complete")
+    # turn off lazy translation
+    # otherwise xlwt will crash if it comes across a T string
+    T.lazy = False
     s3 = response.s3
     try:
         import xlwt
@@ -467,7 +470,8 @@ def export_all_responses():
     sheet.horz_split_pos = 2
     book.save(output)
 
-
+    T.lazy = True
+    # turn lazy translation back on
     output.seek(0)
     response.headers["Content-Type"] = contenttype(contentType)
     response.headers["Content-disposition"] = "attachment; filename=\"%s\"" % filename

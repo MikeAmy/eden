@@ -27,24 +27,34 @@
     WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
     FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
     OTHER DEALINGS IN THE SOFTWARE.
-
 """
 
 __all__ = ["AuthS3",
            "S3Permission",
            "S3Audit",
-           "S3RoleManager"]
+           "S3RoleManager",
+           "FaceBookAccount",
+           "GooglePlusAccount",
+          ]
 
 import datetime
 import re
+import time
+import urllib
+from urllib import urlencode
+import urllib2
 
 from gluon import *
 from gluon.storage import Storage, Messages
 
 from gluon.dal import Field, Row, Query, Set, Table, Expression
 from gluon.sqlhtml import CheckboxesWidget, StringWidget
-from gluon.tools import Auth, callback
+from gluon.tools import Auth, callback, addrow
+from gluon.utils import web2py_uuid
+from gluon.validators import IS_SLUG
+from gluon.contrib import simplejson as json
 from gluon.contrib.simplejson.ordered_dict import OrderedDict
+from gluon.contrib.login_methods.oauth20_account import OAuthAccount
 
 from s3method import S3Method
 from s3validators import IS_ACL
@@ -66,38 +76,68 @@ else:
     _debug = lambda m: None
 
 # =============================================================================
-
 class AuthS3(Auth):
 
     """
         S3 extensions of the gluon.tools.Auth class
 
-            - override:
-                define_tables()
-                login()
-                register()
-                profile()
-                verify_email()
-                requires_membership()
+        - override:
+            - __init__
+            - define_tables
+            - login_bare
+            - set_cookie
+            - login
+            - register
+            - verify_email
+            - profile
+            - has_membership
+            - requires_membership
 
-            - add:
-                s3_has_role()
-                s3_has_permission()
-                s3_logged_in()
-                s3_accessible_query()
-                s3_impersonate()
-                s3_register() callback
-                s3_link_to_person()
-                s3_verify_email_onaccept()
-                s3_group_members()
-                s3_user_to_person()
-                s3_person_to_user()
-                person_id()
+        - S3 extension for user registration:
 
-            - language
-            - utc_offset
-            - organisation
-            - @ToDo: Facility
+            - s3_register
+            - s3_link_to_organisation
+            - s3_link_to_person
+            - s3_approver
+            - s3_verify_email_onaccept
+            - s3_register_staff
+
+        - S3 custom authentication methods:
+            - s3_impersonate
+            - s3_logged_in
+
+        - S3 user role management:
+            - get_system_roles
+            - s3_set_roles
+            - s3_create_role
+            - s3_delete_role
+            - s3_assign_role
+            - s3_retract_role
+            - s3_has_role
+            - s3_group_members
+
+        - S3 ACL management:
+            - s3_update_acls
+            - s3_update_acl
+
+        - S3 user identification helpers:
+            - s3_get_user_id
+            - s3_user_pe_id
+            - s3_logged_in_person
+            - s3_logged_in_human_resource
+
+        - S3 core authorization methods:
+            - s3_has_permission
+            - s3_accessible_query
+
+        - S3 variants of web2py authorization methods:
+            - s3_has_membership
+            - s3_requires_membership
+
+        - S3 record ownership methods:
+            - s3_make_session_owner
+            - s3_session_owns
+            - s3_set_record_owner
     """
 
     # Configuration of UIDs for system roles
@@ -113,6 +153,9 @@ class AuthS3(Auth):
 
         Auth.__init__(self, current.db)
 
+        deployment_settings = current.deployment_settings
+        system_name = deployment_settings.get_system_name()
+
         self.settings.lock_keys = False
         self.settings.username_field = False
         self.settings.lock_keys = True
@@ -122,17 +165,23 @@ class AuthS3(Auth):
         self.messages.email_verification_failed = "Unable to send verification email - either your email is invalid or our email server is down"
         self.messages.email_sent = "Verification Email sent - please check your email to validate. If you do not receive this email please check you junk email or spam filters"
         self.messages.email_verified = "Email verified - you can now login"
+        self.messages.welcome_email_subject = "Welcome to %(system_name)s" % \
+            dict(system_name=system_name)
+        self.messages.welcome_email = \
+            "Welcome to %(system_name)s - click on the link %(url)s to complete your profile" % \
+                dict(system_name = system_name,
+                     url = deployment_settings.get_base_public_url() + URL("default", "user", args=["profile"]))
         self.messages.duplicate_email = "This email address is already in use"
         self.messages.registration_disabled = "Registration Disabled!"
         self.messages.registration_verifying = "You haven't yet Verified your account - please check your email"
         self.messages.label_organisation_id = "Organization"
         self.messages.label_site_id = "Facility"
         self.messages.label_utc_offset = "UTC Offset"
-        self.messages.label_view_image = "View Image"
-        self.messages.label_no_image = "No Image"
+        self.messages.label_image = "Profile Image"
         self.messages.help_utc_offset = "The time difference between UTC and your timezone, specify as +HHMM for eastern or -HHMM for western timezones."
         self.messages.help_mobile_phone = "Entering a phone number is optional, but doing so allows you to subscribe to receive SMS messages."
         self.messages.help_organisation = "Entering an Organization is optional, but doing so directs you to the appropriate approver & means you automatically get the appropriate permissions."
+        self.messages.help_image = "You can either use %(gravatar)s or else upload a picture here. The picture will be resized to 50x50."
         #self.messages.logged_in = "Signed In"
         #self.messages.submit_button = "Signed In"
         #self.messages.logged_out = "Signed Out"
@@ -146,7 +195,7 @@ class AuthS3(Auth):
 
         # Site types (for OrgAuth)
         T = current.T
-        if current.deployment_settings.get_ui_camp():
+        if deployment_settings.get_ui_camp():
             shelter = T("Camp")
         else:
             shelter = T("Shelter")
@@ -211,13 +260,6 @@ class AuthS3(Auth):
                     Field("site_id", "integer",
                           writable=False,
                           label=messages.label_site_id),
-                    Field("image", "upload", autodelete=True,
-                          represent = lambda image: image and \
-                                        DIV(A(IMG(_src=URL(c="default", f="download",
-                                                           args=image),
-                                                  _height=60, _alt=self.messages.label_view_image),
-                                                  _href=URL(c="default", f="download",
-                                                            args=image))) or self.messages.label_no_image),
                     Field("registration_key", length=512,
                           writable=False, readable=False, default="",
                           label=messages.label_registration_key),
@@ -255,13 +297,6 @@ class AuthS3(Auth):
                     Field("site_id", "integer",
                           writable=False,
                           label=messages.label_site_id),
-                    Field("image", "upload", autodelete=True,
-                          represent = lambda image: image and \
-                                        DIV(A(IMG(_src=URL(c="default", f="download",
-                                                           args=image),
-                                                  _height=60, _alt=self.messages.label_view_image),
-                                                  _href=URL(c="default", f="download",
-                                                            args=image))) or self.messages.label_no_image),
                     Field("registration_key", length=512,
                           writable=False, readable=False, default="",
                           label=messages.label_registration_key),
@@ -359,6 +394,7 @@ class AuthS3(Auth):
                       label=messages.label_user_id),
                 Field("group_id", settings.table_group,
                       label=messages.label_group_id),
+                Field("pe_id", "integer"),
                 migrate = migrate,
                 fake_migrate=fake_migrate,
                 *(s3_uid()+s3_timestamp()+s3_deletion_status()))
@@ -376,7 +412,7 @@ class AuthS3(Auth):
         self.permission.define_table(migrate=migrate,
                                      fake_migrate=fake_migrate)
 
-        if security_policy not in (1, 2, 3, 4, 5, 6, 7) and \
+        if security_policy not in (1, 2, 3, 4, 5, 6) and \
            not settings.table_permission:
             # Permissions table (group<->permission)
             # NB This Web2Py table is deprecated / replaced in Eden by S3Permission
@@ -458,39 +494,9 @@ class AuthS3(Auth):
                                        last_visit=request.now,
                                        expiration=self.settings.expiration)
                 self.user = user
-                self.set_roles()
+                self.s3_set_roles()
                 return user
         return False
-
-    # -------------------------------------------------------------------------
-    def set_roles(self):
-        """
-            Update session roles and pe_id for the current user
-        """
-
-        if self.user:
-            db = current.db
-            session = current.session
-
-            table_user = self.settings.table_user
-            table_membership = self.settings.table_membership
-            user_id = self.user.id
-
-            # Add the Roles to session.s3
-            roles = []
-            query = (table_membership.deleted != True) & \
-                    (table_membership.user_id == user_id)
-            rows = db(query).select(table_membership.group_id)
-            session.s3.roles = [s.group_id for s in rows]
-
-            # Set pe_id for current user
-            ltable = current.s3db.pr_person_user
-            if ltable is not None:
-                query = (ltable.user_id == user_id)
-                row = db(query).select(ltable.pe_id, limitby=(0, 1)).first()
-                if row:
-                    session.auth.user["pe_id"] = row.pe_id
-        return
 
     # -------------------------------------------------------------------------
     def set_cookie(self):
@@ -503,7 +509,7 @@ class AuthS3(Auth):
         response = current.response
 
         response.cookies["registered"] = "yes"
-        response.cookies["registered"]["expires"] = 365 * 24 * 3600    # 1 year
+        response.cookies["registered"]["expires"] = 365 * 24 * 3600 # 1 year
         response.cookies["registered"]["path"] = "/"
 
     # -------------------------------------------------------------------------
@@ -520,7 +526,9 @@ class AuthS3(Auth):
 
         db = current.db
         table_user = self.settings.table_user
-        if "username" in table_user.fields:
+        if self.settings.login_userfield:
+            username = self.settings.login_userfield
+        elif "username" in table_user.fields:
             username = "username"
         else:
             username = "email"
@@ -534,18 +542,18 @@ class AuthS3(Auth):
             table_user[passfield].requires[-1].min_length = 0
         except:
             pass
-        if next == DEFAULT:
+        if next is DEFAULT:
             next = request.vars._next or self.settings.login_next
-        if onvalidation == DEFAULT:
+        if onvalidation is DEFAULT:
             onvalidation = self.settings.login_onvalidation
-        if onaccept == DEFAULT:
+        if onaccept is DEFAULT:
             onaccept = self.settings.login_onaccept
-        if log == DEFAULT:
+        if log is DEFAULT:
             log = self.messages.login_log
 
         user = None # default
 
-        # do we use our own login form, or from a central source?
+        # Do we use our own login form, or from a central source?
         if self.settings.login_form == self:
             form = SQLFORM(
                 table_user,
@@ -554,29 +562,67 @@ class AuthS3(Auth):
                 showid=self.settings.showid,
                 submit_button=self.messages.submit_button,
                 delete_label=self.messages.delete_label,
+                formstyle=self.settings.formstyle,
+                separator=self.settings.label_separator
                 )
+            if self.settings.remember_me_form:
+                # Add a new input checkbox "remember me for longer"
+                addrow(form,XML("&nbsp;"),
+                       DIV(XML("&nbsp;"),
+                           INPUT(_type='checkbox',
+                                 _class='checkbox',
+                                 _id="auth_user_remember",
+                                 _name="remember",
+                                 ),
+                           XML("&nbsp;&nbsp;"),
+                           LABEL(
+                            self.messages.label_remember_me,
+                            _for="auth_user_remember",
+                            )),"",
+                       self.settings.formstyle,
+                       'auth_user_remember__row')
+
+            captcha = self.settings.login_captcha or \
+                (self.settings.login_captcha!=False and self.settings.captcha)
+            if captcha:
+                addrow(form, captcha.label, captcha, captcha.comment,
+                       self.settings.formstyle,'captcha__row')
+
             accepted_form = False
             if form.accepts(request.vars, session,
                             formname="login", dbio=False,
                             onvalidation=onvalidation):
                 accepted_form = True
-                # check for username in db
+                if username == "email":
+                    # Check for Domains which can use Google's SMTP server for passwords
+                    # @ToDo: an equivalent email_domains for other email providers
+                    gmail_domains = current.deployment_settings.get_auth_gmail_domains()
+                    if gmail_domains:
+                        from gluon.contrib.login_methods.email_auth import email_auth
+                        domain = form.vars[username].split("@")[1]
+                        if domain in gmail_domains:
+                            self.settings.login_methods.append(
+                                email_auth("smtp.gmail.com:587", "@%s" % domain))
+                # Check for username in db
                 query = (table_user[username] == form.vars[username])
-                users = db(query).select()
-                if users:
+                user = db(query).select().first()
+                if user:
                     # user in db, check if registration pending or disabled
-                    temp_user = users[0]
+                    temp_user = user
                     if temp_user.registration_key == "pending":
                         response.warning = self.messages.registration_pending
                         return form
-                    elif temp_user.registration_key == "disabled":
+                    elif temp_user.registration_key in ("disabled", "blocked"):
                         response.error = self.messages.login_disabled
                         return form
-                    elif temp_user.registration_key:
+                    elif not temp_user.registration_key is None and \
+                             temp_user.registration_key.strip():
                         response.warning = \
                             self.messages.registration_verifying
                         return form
-                    # try alternate logins 1st as these have the current version of the password
+                    # Try alternate logins 1st as these have the
+                    # current version of the password
+                    user = None
                     for login_method in self.settings.login_methods:
                         if login_method != self and \
                                 login_method(request.vars[username],
@@ -587,37 +633,42 @@ class AuthS3(Auth):
                             user = self.get_or_create_user(form.vars)
                             break
                     if not user:
-                        # alternates have failed, maybe because service inaccessible
+                        # Alternates have failed, maybe because service inaccessible
                         if self.settings.login_methods[0] == self:
-                            # try logging in locally using cached credentials
+                            # Try logging in locally using cached credentials
                             if temp_user[passfield] == form.vars.get(passfield, ""):
-                                # success
+                                # Success
                                 user = temp_user
                 else:
-                    # user not in db
+                    # User not in db
                     if not self.settings.alternate_requires_registration:
-                        # we're allowed to auto-register users from external systems
+                        # We're allowed to auto-register users from external systems
                         for login_method in self.settings.login_methods:
                             if login_method != self and \
                                     login_method(request.vars[username],
                                                  request.vars[passfield]):
                                 if not self in self.settings.login_methods:
-                                    # do not store password in db
+                                    # Do not store password in db
                                     form.vars[passfield] = None
                                 user = self.get_or_create_user(form.vars)
                                 break
                 if not user:
-                    # invalid login
+                    self.log_event(self.settings.login_failed_log,
+                                   request.post_vars)
+                    # Invalid login
                     session.error = self.messages.invalid_login
                     redirect(self.url(args=request.args,
                                       vars=request.get_vars))
         else:
-            # use a central authentication server
+            # Use a central authentication server
             cas = self.settings.login_form
             cas_user = cas.get_user()
             if cas_user:
                 cas_user[passfield] = None
-                user = self.get_or_create_user(cas_user)
+                user = self.get_or_create_user(table_user._filter_fields(cas_user))
+                form = Storage()
+                form.vars = user
+                self.s3_register(form)
             elif hasattr(cas, "login_form"):
                 return cas.login_form()
             else:
@@ -625,17 +676,23 @@ class AuthS3(Auth):
                 next = "%s?_next=%s" % (URL(r=request), next)
                 redirect(cas.login_url(next))
 
-        # process authenticated users
+        # Process authenticated users
         if user:
             user = Storage(table_user._filter_fields(user, id=True))
             # If the user hasn't set a personal UTC offset,
             # then read the UTC offset from the form:
             if not user.utc_offset:
                 user.utc_offset = session.s3.utc_offset
-            session.auth = Storage(user=user, last_visit=request.now,
-                                   expiration=self.settings.expiration)
+            session.auth = Storage(
+                user=user,
+                last_visit=request.now,
+                expiration = request.vars.get("remember", False) and \
+                    self.settings.long_expiration or self.settings.expiration,
+                remember = request.vars.has_key("remember"),
+                hmac_key = web2py_uuid()
+                )
             self.user = user
-            self.set_roles()
+            self.s3_set_roles()
             # Read their language from the Profile
             language = user.language
             current.T.force(language)
@@ -648,7 +705,7 @@ class AuthS3(Auth):
         if log and self.user:
             self.log_event(log % self.user)
 
-        # how to continue
+        # How to continue
         if self.settings.login_form == self:
             if accepted_form:
                 if onaccept:
@@ -728,6 +785,7 @@ class AuthS3(Auth):
         else:
             user.organisation_id.readable = False
             user.organisation_id.writable = False
+        user.organisation_id.default = deployment_settings.get_auth_registration_organisation_id_default()
         # @ToDo: Option to request Facility during Registration
         user.site_id.readable = False
         labels, required = s3_mark_required(user)
@@ -759,6 +817,23 @@ class AuthS3(Auth):
                         SPAN("*", _class="req"),
                 "", _id=field_id + SQLFORM.ID_ROW_SUFFIX))
                 #form[0].insert(i + 1, row)
+        # add an opt in clause to receive emails depending on the deployment settings
+        if deployment_settings.get_auth_opt_in_to_email():
+            field_id = "%s_opt_in" % user._tablename
+            comment = DIV(DIV(_class="tooltip",
+                            _title="%s|%s" % ("Mailing list",
+                                              "By selecting this you agree that we may contact you.")))
+            checked = deployment_settings.get_auth_opt_in_default() and "selected"
+            form[0].insert(-1,
+                           TR(TD(LABEL("%s:" % "Receive updates",
+                                       _for="opt_in",
+                                       _id=field_id + SQLFORM.ID_LABEL_SUFFIX),
+                                 _class="w2p_fl"),
+                                 INPUT(_name="opt_in", _id=field_id, _type="checkbox", _checked=checked),
+                              TD(comment,
+                                 _class="w2p_fc"),
+                           _id=field_id + SQLFORM.ID_ROW_SUFFIX))
+
         # S3: Insert Mobile phone field into form
         if deployment_settings.get_auth_registration_requests_mobile_phone():
             field_id = "%s_mobile" % user._tablename
@@ -774,6 +849,27 @@ class AuthS3(Auth):
                                        _id=field_id + SQLFORM.ID_LABEL_SUFFIX),
                                  _class="w2p_fl"),
                                  INPUT(_name="mobile", _id=field_id),
+                              TD(comment,
+                                 _class="w2p_fc"),
+                           _id=field_id + SQLFORM.ID_ROW_SUFFIX))
+
+        # S3: Insert Photo widget into form
+        if deployment_settings.get_auth_registration_requests_image():
+            label = self.messages.label_image
+            comment = DIV(_class="stickytip",
+                          _title="%s|%s" % (label,
+                                            self.messages.help_image % \
+                                                dict(gravatar = A("Gravatar",
+                                                                  _target="top",
+                                                                  _href="http://gravatar.com"))))
+            field_id = "%s_image" % user._tablename
+            widget = SQLFORM.widgets["upload"].widget(current.s3db.pr_image.image, None)
+            form[0].insert(-1,
+                           TR(TD(LABEL("%s:" % label,
+                                       _for="image",
+                                       _id=field_id + SQLFORM.ID_LABEL_SUFFIX),
+                                 _class="w2p_fl"),
+                                 widget,
                               TD(comment,
                                  _class="w2p_fc"),
                            _id=field_id + SQLFORM.ID_ROW_SUFFIX))
@@ -806,10 +902,11 @@ class AuthS3(Auth):
                 # Ensure that we add to the correct Organization
                 approver, organisation_id = self.s3_approver(form.vars)
 
-                # @ToDo: Is it correct to override the organisation entered by the user?
-                #        Ideally (if the deployment_settings.auth.registration_requests_organisation = True
-                #        the org could be selected based on the email and the user could then override
-                form.vars.organisation = organisation_id
+                if organisation_id:
+                    # @ToDo: Is it correct to override the organisation entered by the user?
+                    #        Ideally (if the deployment_settings.auth.registration_requests_organisation = True
+                    #        the org could be selected based on the email and the user could then override
+                    form.vars.organisation = organisation_id
 
                 # Send the Verification email
                 if not settings.mailer or \
@@ -829,7 +926,8 @@ class AuthS3(Auth):
                 # Identify the Approver &
                 # ensure that we add to the correct Organization
                 approver, organisation_id = self.s3_approver(form.vars)
-                form.vars.organisation_id = organisation_id
+                if organisation_id:
+                    form.vars.organisation_id = organisation_id
 
                 if approver:
                     # Send the Authorisation email
@@ -849,6 +947,8 @@ class AuthS3(Auth):
                 # No verification or approval needed
                 approved = True
                 approver, organisation_id = self.s3_approver(form.vars)
+                if organisation_id:
+                    form.vars.organisation = organisation_id
                 form.vars.registration_key = ""
                 form.vars.approver = approver
                 settings.verify_email_onaccept(form.vars)
@@ -897,6 +997,52 @@ class AuthS3(Auth):
             redirect(next)
 
         return form
+
+    # -------------------------------------------------------------------------
+    def verify_email(self,
+                     next=DEFAULT,
+                     onaccept=DEFAULT,
+                     log=DEFAULT):
+        """
+            action user to verify the registration email, XXXXXXXXXXXXXXXX
+
+            .. method:: Auth.verify_email([next=DEFAULT [, onvalidation=DEFAULT
+                [, onaccept=DEFAULT [, log=DEFAULT]]]])
+        """
+
+        db = current.db
+
+        settings = self.settings
+        messages = self.messages
+        deployment_settings = current.deployment_settings
+
+        key = current.request.args[-1]
+        table_user = settings.table_user
+        user = db(table_user.registration_key == key).select().first()
+        if not user:
+            redirect(settings.verify_email_next)
+        # S3: Lookup the Approver
+        approver, organisation_id = self.s3_approver(user)
+        if settings.registration_requires_approval and approver:
+            user.update_record(registration_key = "pending")
+            current.session.flash = messages.registration_pending_approval
+        else:
+            user.update_record(registration_key = "")
+            current.session.flash = messages.email_verified
+        if log == DEFAULT:
+            log = messages.verify_email_log
+        if next == DEFAULT:
+            next = settings.verify_email_next
+        if onaccept == DEFAULT:
+            onaccept = settings.verify_email_onaccept
+        if log:
+            self.log_event(log % user)
+
+        if approver:
+            user.approver = approver
+            callback(onaccept, user)
+
+        redirect(next)
 
     # -------------------------------------------------------------------------
     def profile(
@@ -964,95 +1110,7 @@ class AuthS3(Auth):
         return form
 
     # -------------------------------------------------------------------------
-    def s3_lookup_org_role(self, organisation_id):
-        """
-            Lookup the Organisation Access Role from the ID of the Organisation
-        """
-
-        if not organisation_id:
-            return None
-
-        db = current.db
-        s3db = current.s3db
-        table = s3db.org_organisation
-        query = (table.id == organisation_id)
-        org = db(query).select(table.owned_by_organisation).first()
-        if org:
-            return org.owned_by_organisation
-
-        return None
-
-    # -------------------------------------------------------------------------
-    def s3_lookup_site_role(self, site_id):
-        """
-            Lookup the Facility Access Role from the ID of the Facility
-        """
-
-        if not site_id:
-            return None
-
-        db = current.db
-        s3db = current.s3db
-        table = s3db.org_site
-        query = (table.id == site_id)
-        site = db(query).select(table.instance_type).first()
-        if site:
-            instance_type = site.instance_type
-            itable = db[instance_type]
-            query = (itable.site_id == site_id)
-            _site = db(query).select(itable.owned_by_facility).first()
-            if _site:
-                return _site.owned_by_facility
-
-        return None
-
-    # -------------------------------------------------------------------------
-    def s3_impersonate(self, user_id):
-        """
-            S3 framework function
-
-            Designed to be used within tasks, which are run in a separate request
-            & hence don't have access to current.auth
-
-            @param user_id: auth.user.id
-        """
-
-        session = current.session
-        db = current.db
-
-        if not user_id:
-            # Anonymous
-            return None
-
-        table_user = self.settings.table_user
-        user = db(table_user.id == user_id).select(limitby=(0, 1)).first()
-
-        if not user:
-            # Invalid user ID
-            return False
-
-        roles = []
-        table_membership = self.settings.table_membership
-        memberships = db(table_membership.user_id == user.id).select(
-                                                    table_membership.group_id)
-        roles = [m.group_id for m in memberships]
-        if session.s3.system_roles.ANONYMOUS:
-            roles.append(session.s3.system_roles.ANONYMOUS)
-
-        session.s3.roles = roles
-
-        # Set the language from the Profile
-        language = user.language
-        current.T.force(language)
-        current.session.s3.language = language
-
-        user = Storage(table_user._filter_fields(user, id=True))
-
-        # Use this user
-        self.user = user
-
-        return user
-
+    # S3 User Registration Post-Processing
     # -------------------------------------------------------------------------
     def s3_register(self, form):
         """
@@ -1063,16 +1121,19 @@ class AuthS3(Auth):
             Whenever someone registers, it:
                 - adds them to the 'Authenticated' role
                 - adds their name to the Person Registry
+                - creates their profile picture
                 - creates an HRM record
                 - adds them to the Org_x Access role
+
+            @param form: the registration form
         """
 
         db = current.db
         manager = current.manager
         s3db = current.s3db
-        deployment_settings = current.deployment_settings
 
-        user_id = form.vars.id
+        vars = form.vars
+        user_id = vars.id
         if not user_id:
             return None
 
@@ -1080,63 +1141,71 @@ class AuthS3(Auth):
         authenticated = self.id_group("Authenticated")
         self.add_membership(authenticated, user_id)
 
-        # Link to organisation, lookup org role
-        organisation_id = self.s3_link_to_organisation(form.vars)
+        # Link to organisation, lookup the pe_id of the organisation
+        organisation_id = self.s3_link_to_organisation(vars)
         if organisation_id:
-            owned_by_organisation = self.s3_lookup_org_role(organisation_id)
+            otable = s3db.org_organisation
+            query = (otable.id == organisation_id)
+            org = db(query).select(otable.pe_id).first()
+            if org:
+                owned_by_entity = org.pe_id
         else:
-            owned_by_organisation = None
-
-        # For admin/user/create, lookup facility role
-        site_id = form.vars.get("site_id", None)
-        if site_id:
-            owned_by_facility = self.s3_lookup_site_role(site_id)
-        else:
-            owned_by_facility = None
+            owned_by_entity = None
 
         # Add to Person Registry and Email/Mobile to pr_contact
-        person_id = self.s3_link_to_person(form.vars, # user
-                                           owned_by_organisation,
-                                           owned_by_facility)
+        person_id = self.s3_link_to_person(vars, # user
+                                           owned_by_entity)
 
-        htable = s3db.table("hrm_human_resource")
+        # Insert the profile picture
+        if "image" in vars:
+            if hasattr(vars.image, "file"):
+                source_file = vars.image.file
+                original_filename = vars.image.filename
+                ptable = s3db.pr_person
+                query = (ptable.id == person_id)
+                pe_id = db(query).select(ptable.pe_id,
+                                         limitby=(0, 1)).first()
+                if pe_id:
+                    pe_id = pe_id.pe_id
+                    itable = s3db.pr_image
+                    field = itable.image
+                    newfilename = field.store(source_file,
+                                              original_filename,
+                                              field.uploadfolder)
+                    url = URL(c="default", f="download", args=newfilename)
+                    fields = dict(pe_id=pe_id,
+                                  profile=True,
+                                  image=newfilename,
+                                  url = url,
+                                  title=current.T("Profile Picture"))
+                    if isinstance(field.uploadfield, str):
+                        fields[field.uploadfield] = source_file.read()
+                    itable.insert(**fields)
+
+        # Create an HRM entry, if one doesn't already exist
+        htablename = "hrm_human_resource"
+        htable = s3db.table(htablename)
         if htable and organisation_id:
 
-            # Create an HRM entry, if one doesn't already exist
             query = (htable.person_id == person_id) & \
                     (htable.organisation_id == organisation_id)
             row = db(query).select(htable.id, limitby=(0, 1)).first()
 
             if not row:
-                id = htable.insert(person_id=person_id,
-                                   organisation_id=organisation_id,
-                                   owned_by_user=user_id,
-                                   owned_by_organisation=owned_by_organisation,
-                                   owned_by_facility=owned_by_facility)
-                record = Storage(id=id)
-                manager.model.update_super(htable, record)
-
-            if owned_by_organisation:
-                # Add user to the Org Access Role
-                table = self.settings.table_membership
-                query = (table.deleted != True) & \
-                        (table.user_id == user_id) & \
-                        (table.group_id == owned_by_organisation)
-                if not db(query).select(table.id,
-                                        limitby=(0, 1)).first():
-                    table.insert(user_id=user_id,
-                                 group_id=owned_by_organisation)
-
-            if owned_by_facility:
-                # Add user to the Site Access Role
-                table = self.settings.table_membership
-                query = (table.deleted != True) & \
-                        (table.user_id == user_id) & \
-                        (table.group_id == owned_by_facility)
-                if not db(query).select(table.id,
-                                        limitby=(0, 1)).first():
-                    table.insert(user_id=user_id,
-                                 group_id=owned_by_facility)
+                if current.deployment_settings.get_hrm_show_staff():
+                    type = 1 # Staff
+                else:
+                    type = 2 # Volunteer
+                record = Storage(person_id=person_id,
+                                 organisation_id=organisation_id,
+                                 type=type,
+                                 owned_by_user=user_id,
+                                 owned_by_entity=owned_by_entity)
+                record_id = htable.insert(**record)
+                if record_id:
+                    record["id"] = record_id
+                    manager.model.update_super(htable, record)
+                    manager.onaccept(htablename, record, method="create")
 
         # Return person_id for init scripts
         return person_id
@@ -1152,6 +1221,7 @@ class AuthS3(Auth):
         db = current.db
         s3db = current.s3db
         manager = current.manager
+        model = manager.model
 
         organisation_id = user.organisation_id
         if not organisation_id:
@@ -1160,20 +1230,25 @@ class AuthS3(Auth):
             acronym = user.get("organisation_acronym", None)
             if name:
                 # Create new organisation
-                organisation_id = otable.insert(name=name,
-                                                acronym=acronym)
-                # Update the super-entities
-                record = Storage(id=organisation_id)
-                manager.model.update_super(otable, record)
-                # Set record ownership
-                self.s3_set_record_owner(otable, organisation_id)
+                record = Storage(name=name,
+                                 acronym=acronym)
+                organisation_id = otable.insert(**record)
+
+                # Callbacks
+                if organisation_id:
+                    record["id"] = organisation_id
+                    model.update_super(otable, record)
+                    manager.onaccept(otable, record, method="create")
+                    self.s3_set_record_owner(otable, organisation_id)
+
+                # Update user
                 user.organisation_id = organisation_id
-                # Update user record
                 query = (utable.id == user_id)
                 db(query).update(organisation_id=organisation_id)
 
         if not organisation_id:
             return None
+
         # Create link (if it doesn't exist)
         user_id = user.id
         ltable = s3db.org_organisation_user
@@ -1184,19 +1259,18 @@ class AuthS3(Auth):
             if not row:
                 ltable.insert(user_id=user_id,
                               organisation_id=organisation_id)
+
         return organisation_id
 
     # -------------------------------------------------------------------------
     def s3_link_to_person(self,
                           user=None,
-                          owned_by_organisation=None,
-                          owned_by_facility=None):
+                          owned_by_entity=None):
         """
             Links user accounts to person registry entries
 
             @param user: the user record
-            @param owned_by_organisation: the role of the owner organisation
-            @param owned_by_facility: the role of the owner facility
+            @param owned_by_entity: the pe_id of the owner organisation
 
             Policy for linking to pre-existing person records:
 
@@ -1253,8 +1327,7 @@ class AuthS3(Auth):
             user = u[utn]
 
             owner = Storage(owned_by_user=user.id,
-                            owned_by_organisation=owned_by_organisation,
-                            owned_by_facility=owned_by_facility)
+                            owned_by_entity=owned_by_entity)
 
             if "email" in user:
 
@@ -1268,7 +1341,8 @@ class AuthS3(Auth):
                         (ctable.contact_method == "EMAIL") & \
                         (ctable.value.lower() == email)
                 person = db(query).select(ptable.id,
-                                          ptable.pe_id).first()
+                                          ptable.pe_id,
+                                          limitby=(0, 1)).first()
 
                 if person and \
                    not db(ltable.pe_id == person.pe_id).count():
@@ -1311,10 +1385,15 @@ class AuthS3(Auth):
                 if pe_id:
 
                     # Create a new person record
+                    if current.request.vars.get("opt_in", None):
+                        opt_in = current.deployment_settings.get_auth_opt_in_team_list()
+                    else:
+                        opt_in = ""
                     new_id = ptable.insert(pe_id = pe_id,
                                            track_id = track_id,
                                            first_name = first_name,
                                            last_name = last_name,
+                                           opt_in = opt_in,
                                            modified_by = user.id,
                                            **owner)
 
@@ -1345,6 +1424,20 @@ class AuthS3(Auth):
                                     value = mobile,
                                     **owner)
                         person_ids.append(new_id)
+
+                        # Add the user to each team if they have chosen to opt-in
+                        g_table = s3db["pr_group"]
+                        gm_table = s3db["pr_group_membership"]
+                        for team in opt_in:
+                            query = (g_table.name == team)
+                            team_rec = db(query).select(g_table.id, limitby=(0, 1)).first()
+                            # if the team doesn't exist then add it
+                            if team_rec == None:
+                                team_id = g_table.insert(name = team, group_type = 5)
+                            else:
+                                team_id = team_rec.id
+                            gm_table.insert(group_id = team_id,
+                                            person_id = new_id)
 
                     # Set pe_id if this is the current user
                     if self.user and self.user.id == user.id:
@@ -1394,52 +1487,6 @@ class AuthS3(Auth):
                     approver = record.approver
 
         return approver, organisation_id
-
-    # -------------------------------------------------------------------------
-    def verify_email(self,
-                     next=DEFAULT,
-                     onaccept=DEFAULT,
-                     log=DEFAULT):
-        """
-            action user to verify the registration email, XXXXXXXXXXXXXXXX
-
-            .. method:: Auth.verify_email([next=DEFAULT [, onvalidation=DEFAULT
-                [, onaccept=DEFAULT [, log=DEFAULT]]]])
-        """
-
-        db = current.db
-
-        settings = self.settings
-        messages = self.messages
-        deployment_settings = current.deployment_settings
-
-        key = current.request.args[-1]
-        table_user = settings.table_user
-        user = db(table_user.registration_key == key).select().first()
-        if not user:
-            redirect(settings.verify_email_next)
-        # S3: Lookup the Approver
-        approver, organisation_id = self.s3_approver(user)
-        if settings.registration_requires_approval and approver:
-            user.update_record(registration_key = "pending")
-            current.session.flash = messages.registration_pending_approval
-        else:
-            user.update_record(registration_key = "")
-            current.session.flash = messages.email_verified
-        if log == DEFAULT:
-            log = messages.verify_email_log
-        if next == DEFAULT:
-            next = settings.verify_email_next
-        if onaccept == DEFAULT:
-            onaccept = settings.verify_email_onaccept
-        if log:
-            self.log_event(log % user)
-
-        if approver:
-            user.approver = approver
-            callback(onaccept, user)
-
-        redirect(next)
 
     # -------------------------------------------------------------------------
     def s3_verify_email_onaccept(self, form):
@@ -1496,37 +1543,75 @@ class AuthS3(Auth):
         mtable = self.settings.table_membership
         utable = self.settings.table_user
 
-        # User own their own HRM records
+        # User owns their own HRM records
         query = (htable.person_id == person_id)
         db(query).update(owned_by_user=user_id)
 
-        query &= ((htable.status == 1) &
-                  (htable.deleted != True))
-        rows = db(query).select(htable.owned_by_organisation,
-                                htable.owned_by_facility)
-        org_roles = []
-        fac_roles = []
-        for row in rows:
-            org_role = row.owned_by_organisation
-            if org_role and org_role not in org_roles:
-                query = (mtable.deleted != True) & \
-                        (mtable.user_id == user_id) & \
-                        (mtable.group_id == org_role)
-                if not db(query).select(limitby=(0, 1)).first():
-                    org_roles.append(dict(user_id=user_id,
-                                          group_id=org_role))
-            fac_role = row.owned_by_facility
-            if fac_role and fac_role not in fac_roles:
-                query = (mtable.deleted != True) & \
-                        (mtable.user_id == user_id) & \
-                        (mtable.group_id == fac_role)
-                if not db(query).select(limitby=(0, 1)).first():
-                    fac_roles.append(dict(user_id=user_id,
-                                          group_id=fac_role))
-        if org_roles:
-            mtable.bulk_insert(org_roles)
-        if fac_roles:
-            mtable.bulk_insert(fac_roles)
+    # -------------------------------------------------------------------------
+    def s3_send_welcome_email(self, user):
+        """
+            Send a welcome mail to newly-registered users
+            - especially suitable for users from Facebook/Google who don't
+              verify their emails
+        """
+
+        if "name" in user:
+            user["first_name"] = user["name"]
+        if "family_name" in user:
+            # Facebook
+            user["last_name"] = user["family_name"]
+
+        subject = self.messages.welcome_email_subject
+        message = self.messages.welcome_email
+
+        self.settings.mailer.send(user["email"], subject=subject, message=message)
+
+    # -------------------------------------------------------------------------
+    # S3-specific authentication methods
+    # -------------------------------------------------------------------------
+    def s3_impersonate(self, user_id):
+        """
+            S3 framework function
+
+            Designed to be used within tasks, which are run in a separate request
+            & hence don't have access to current.auth
+
+            @param user_id: auth.user.id or auth.user.email
+        """
+
+        session = current.session
+        db = current.db
+
+        table_user = self.settings.table_user
+        query = None
+        if not user_id:
+            # Anonymous
+            self.user = None
+        elif isinstance(user_id, basestring) and not user_id.isdigit():
+            if self.settings.username_field:
+                query = (table_user.username == user_id)
+            else:
+                query = (table_user.email == user_id)
+        else:
+            query = (table_user.id == user_id)
+
+        if query is not None:
+            user = db(query).select(limitby=(0, 1)).first()
+            if not user:
+                # Invalid user ID
+                raise ValueError("User not found")
+            else:
+                self.user = Storage(table_user._filter_fields(user, id=True))
+
+        self.s3_set_roles()
+
+        if self.user:
+            # Set the language from the Profile
+            language = user.language
+            current.T.force(language)
+            current.session.s3.language = language
+
+        return self.user
 
     # -------------------------------------------------------------------------
     def s3_logged_in(self):
@@ -1538,7 +1623,6 @@ class AuthS3(Auth):
         if self.override:
             return True
 
-        session = current.session
         if not self.is_logged_in():
             basic = self.basic()
             try:
@@ -1559,9 +1643,6 @@ class AuthS3(Auth):
             Get the IDs of the session roles by their UIDs, and store them
             into the current session. To be run once per session, as these
             IDs should never change.
-
-            Caution: do NOT cache the result, otherwise a newly installed
-            system would be completely open during the caching period!
         """
 
         session = current.session
@@ -1573,18 +1654,211 @@ class AuthS3(Auth):
             pass
 
         db = current.db
-        rtable = self.settings.table_group
-        if rtable is not None:
+        gtable = self.settings.table_group
+        if gtable is not None:
             system_roles = self.S3_SYSTEM_ROLES
-            query = (rtable.deleted != True) & \
-                    rtable.uuid.belongs(system_roles.values())
-            rows = db(query).select(rtable.id, rtable.uuid)
+            query = (gtable.deleted != True) & \
+                     gtable.uuid.belongs(system_roles.values())
+            rows = db(query).select(gtable.id, gtable.uuid)
             sr = Storage([(role.uuid, role.id) for role in rows])
         else:
             sr = Storage([(uid, None) for uid in self.S3_SYSTEM_ROLES])
 
         session.s3.system_roles = sr
         return sr
+
+    # -------------------------------------------------------------------------
+    def s3_set_roles(self):
+        """ Update pe_id, roles and realms for the current user """
+
+        session = current.session
+
+        if "permissions" in current.response.s3:
+            del current.response.s3["permissions"]
+
+        system_roles = self.get_system_roles()
+        ANONYMOUS = system_roles.ANONYMOUS
+        if ANONYMOUS:
+            session.s3.roles = [ANONYMOUS]
+        else:
+            session.s3.roles = []
+
+        if self.user:
+            db = current.db
+            s3db = current.s3db
+
+            user_id = self.user.id
+
+            # Set pe_id for current user
+            ltable = s3db.table("pr_person_user")
+            if ltable is not None:
+                query = (ltable.user_id == user_id)
+                row = db(query).select(ltable.pe_id,
+                                       limitby=(0, 1),
+                                       cache=s3db.cache).first()
+                if row:
+                    self.user["pe_id"] = row.pe_id
+            else:
+                self.user["pe_id"] = None
+
+            # Get all current auth_memberships of the user
+            mtable = self.settings.table_membership
+            query = (mtable.deleted != True) & \
+                    (mtable.user_id == user_id)
+            rows = db(query).select(mtable.group_id, mtable.pe_id)
+
+            # Add all group_ids to session.s3.roles
+            session.s3.roles.extend(list(set([row.group_id for row in rows])))
+
+            # Realms:
+            # Permissions of a group apply only for records owned by any of
+            # the entities which belong to the realm of the group membership
+
+            if not self.permission.entity_realm:
+                # Group memberships have no realms (policy 5 and below)
+                self.user["realms"] = Storage([(row.group_id, None) for row in rows])
+                self.user["delegations"] = Storage()
+
+            else:
+                # Group memberships are limited to realms (policy 6 and above)
+                realms = {}
+                delegations = {}
+
+                # These roles can't be realm-restricted:
+                unrestrictable = [system_roles.ADMIN,
+                                  system_roles.ANONYMOUS,
+                                  system_roles.AUTHENTICATED]
+
+                default_realm = s3db.pr_realm(self.user["pe_id"])
+
+                # Store the realms:
+                for row in rows:
+                    group_id = row.group_id
+                    if group_id in realms and realms[group_id] is None:
+                        continue
+                    if group_id in unrestrictable:
+                        realms[group_id] = None
+                        continue
+                    if group_id not in realms:
+                        realms[group_id] = []
+                    realm = realms[group_id]
+                    pe_id = row.pe_id
+                    if pe_id is None:
+                        if default_realm:
+                            realm.extend([e for e in default_realm
+                                            if e not in realm])
+                        if not realm:
+                            del realms[group_id]
+                    elif pe_id is 0:
+                        # Site-wide
+                        realms[group_id] = None
+                    elif pe_id not in realm:
+                        realms[group_id].append(pe_id)
+
+                if self.permission.entity_hierarchy:
+                    # Realms include subsidiaries of the realm entities
+
+                    # Get all entities in realms
+                    all_entities = []
+                    append = all_entities.append
+                    for realm in realms.values():
+                        if realm is not None:
+                            for entity in realm:
+                                if entity not in all_entities:
+                                    append(entity)
+
+                    # Lookup all delegations to any OU ancestor of the user
+                    if self.permission.delegations and self.user.pe_id:
+
+                        ancestors = s3db.pr_get_ancestors(self.user.pe_id)
+
+                        dtable = s3db.pr_delegation
+                        rtable = s3db.pr_role
+                        atable = s3db.pr_affiliation
+
+                        dn = dtable._tablename
+                        rn = rtable._tablename
+                        an = atable._tablename
+
+                        query = (dtable.deleted != True) & \
+                                (atable.role_id == dtable.role_id) & \
+                                (atable.pe_id.belongs(ancestors)) & \
+                                (rtable.id == dtable.role_id)
+                        rows = db(query).select(rtable.pe_id,
+                                                dtable.group_id,
+                                                atable.pe_id)
+
+                        extensions = []
+                        partners = []
+                        for row in rows:
+                            extensions.append(row[rn].pe_id)
+                            partners.append(row[an].pe_id)
+                    else:
+                        rows = []
+                        extensions = []
+                        partners = []
+
+                    # Lookup the subsidiaries of all realms and extensions
+                    entities = all_entities + extensions + partners
+                    descendants = s3db.pr_descendants(entities)
+
+                    pmap = {}
+                    for p in partners:
+                        if p in all_entities:
+                            pmap[p] = [p]
+                        elif p in descendants:
+                            d = descendants[p]
+                            pmap[p] = [e for e in all_entities if e in d] or [p]
+
+                    # Add the subsidiaries to the realms
+                    for group_id in realms:
+                        realm = realms[group_id]
+                        if realm is None:
+                            continue
+                        append = realm.append
+                        for entity in list(realm):
+                            if entity in descendants:
+                                for subsidiary in descendants[entity]:
+                                    if subsidiary not in realm:
+                                        append(subsidiary)
+
+                    # Process the delegations
+                    if self.permission.delegations:
+                        for row in rows:
+
+                            # owner == delegates group_id to ==> partner
+                            owner = row[rn].pe_id
+                            partner = row[an].pe_id
+                            group_id = row[dn].group_id
+
+                            if group_id in delegations and \
+                               owner in delegations[group_id]:
+                                # Duplicate
+                                continue
+
+                            # Find the realm
+                            if group_id not in delegations:
+                                delegations[group_id] = Storage()
+                            groups = delegations[group_id]
+
+                            r = [owner]
+                            if owner in descendants:
+                                r.extend(descendants[owner])
+
+                            for p in pmap[partner]:
+                                if p not in groups:
+                                    groups[p] = []
+                                realm = groups[p]
+                                realm.extend(r)
+
+                self.user["realms"] = realms
+                self.user["delegations"] = delegations
+
+            if ANONYMOUS:
+                # Anonymous role has no realm
+                self.user["realms"][ANONYMOUS] = None
+
+        return
 
     # -------------------------------------------------------------------------
     def s3_create_role(self, role, description=None, *acls, **args):
@@ -1608,6 +1882,10 @@ class AuthS3(Auth):
         hidden = args.get("hidden", False)
         system = args.get("system", False)
         protected = args.get("protected", False)
+
+        if isinstance(description, dict):
+            acls = [description] + acls
+            description = None
 
         uid = args.get("uid", None)
         if uid:
@@ -1635,7 +1913,7 @@ class AuthS3(Auth):
                                    protected=protected)
         if role_id:
             for acl in acls:
-                self.s3_update_acl(role_id, **acl)
+                self.permission.update_acl(role_id, **acl)
 
         return role_id
 
@@ -1673,240 +1951,258 @@ class AuthS3(Auth):
             db(gquery).update(role=None, deleted=True)
 
     # -------------------------------------------------------------------------
-    def resolve_role_ids(self, roles):
+    def s3_assign_role(self, user_id, group_id, for_pe=None):
         """
-            Resolve role UIDs
-
-            @param roles: list of role IDs or UIDs (or mixed)
-        """
-
-        if not isinstance(roles, (list, tuple)):
-            roles = [roles]
-
-        role_ids = []
-        role_uids = []
-        for role_id in roles:
-            if isinstance(role_id, str) and not role_id.isdigit():
-                role_uids.append(role_id)
-            else:
-                _id = int(role_id)
-                if _id not in role_ids:
-                    role_ids.append(_id)
-        if role_uids:
-            rtable = self.settings.table_group
-            query = (rtable.deleted != True) & \
-                    (rtable.uuid.belongs(role_uids))
-            rows = db(query).select(rtable.id)
-            role_ids += [r.id for r in rows if r.id not in role_ids]
-
-        return role_ids
-
-    # -------------------------------------------------------------------------
-    def s3_assign_role(self, user_id, role_id):
-        """
-            Assigns a role to a user
+            Assigns a role to a user (add the user to a user group)
 
             @param user_id: the record ID of the user account
-            @param role_id: the record ID(s)/UID(s) of the role
+            @param group_id: the record ID(s)/UID(s) of the group
+            @param for_pe: the PE-ID to restrict the group membership
+                           to (will be ignored for system roles)
 
             @note: strings or lists of strings are assumed to be
-                   role UIDs
+                   group UIDs
         """
 
         db = current.db
-        rtable = self.settings.table_group
+        s3db = current.s3db
+
+        gtable = self.settings.table_group
         mtable = self.settings.table_membership
 
-        query = (rtable.deleted != True)
-        if isinstance(role_id, (list, tuple)):
-            if isinstance(role_id[0], str):
-                query &= (rtable.uuid.belongs(role_id))
+        # Find the group IDs
+        query = None
+        if isinstance(group_id, (list, tuple)):
+            if isinstance(group_id[0], str):
+                query &= (gtable.uuid.belongs(group_id))
             else:
-                roles = role_id
-        elif isinstance(role_id, str):
-            query &= (rtable.uuid == role_id)
+                group_ids = group_id
+        elif isinstance(group_id, str):
+            query &= (gtable.uuid == group_id)
         else:
-            roles = [role_id]
+            group_ids = [group_id]
         if query is not None:
-            roles = db(query).select(rtable.id)
-            roles = [r.id for r in roles]
+            query = (gtable.deleted != True) & query
+            groups = db(query).select(gtable.id)
+            group_ids = [g.id for g in groups]
 
+        # Find the assigned groups
         query = (mtable.deleted != True) & \
                 (mtable.user_id == user_id) & \
-                (mtable.group_id.belongs(roles))
+                (mtable.group_id.belongs(group_ids) & \
+                (mtable.pe_id == for_pe))
         assigned = db(query).select(mtable.group_id)
-        assigned_roles = [r.group_id for r in assigned]
+        assigned_groups = [g.group_id for g in assigned]
 
-        for role in roles:
-            if role not in assigned_roles:
-                mtable.insert(user_id=user_id, group_id=role)
+        # Add missing memberships
+        system_roles = map(str, self.get_system_roles().values())
+        for group_id in group_ids:
+            if group_id not in assigned_groups:
+                membership = {"user_id": user_id,
+                              "group_id": group_id}
+                if for_pe is not None and str(group_id) not in system_roles:
+                    membership["pe_id"] = for_pe
+                membership_id = mtable.insert(**membership)
+
+        # Update roles for current user if required
+        if self.user and str(user_id) == str(self.user.id):
+            self.s3_set_roles()
+
+        return
 
     # -------------------------------------------------------------------------
-    def s3_retract_role(self, user_id, role_id):
+    def s3_retract_role(self, user_id, group_id, for_pe=None):
         """
             Removes a role assignment from a user account
 
             @param user_id: the record ID of the user account
-            @param role_id: the record ID(s)/UID(s) of the role
+            @param group_id: the record ID(s)/UID(s) of the role
+            @param for_pe: only remove the group membership that is
+                           restricted to this PE (will be ignored for
+                           system roles), if an empty list is specified,
+                           all memberships in this group will be removed
 
             @note: strings or lists of strings are assumed to be
                    role UIDs
         """
 
-        if not role_id:
+        if not group_id:
             return
 
         db = current.db
-        rtable = self.settings.table_group
+        s3db = current.s3db
+
+        gtable = self.settings.table_group
         mtable = self.settings.table_membership
 
-        query = (rtable.deleted != True)
-        if isinstance(role_id, (list, tuple)):
-            if isinstance(role_id[0], str):
-                query &= (rtable.uuid.belongs(role_id))
+        # Find the group IDs
+        query = None
+        if isinstance(group_id, (list, tuple)):
+            if isinstance(group_id[0], str):
+                query &= (gtable.uuid.belongs(group_id))
             else:
-                roles = role_id
-        elif isinstance(role_id, str):
-            query &= (rtable.uuid == role_id)
+                group_ids = group_id
+        elif isinstance(group_id, str):
+            query &= (gtable.uuid == group_id)
         else:
-            roles = [role_id]
+            group_ids = [group_id]
         if query is not None:
-            roles = db(query).select(rtable.id)
-            roles = [r.id for r in roles]
+            query = (gtable.deleted != True) & query
+            groups = db(query).select(gtable.id)
+            group_ids = [g.id for g in groups]
 
+        # Get the assigned groups
         query = (mtable.deleted != True) & \
                 (mtable.user_id == user_id) & \
-                (mtable.group_id.belongs(roles))
-        db(query).update(deleted=True)
+                (mtable.group_id.belongs(group_ids))
+
+        system_roles = map(str, self.get_system_roles().values())
+        if for_pe != []:
+            query &= ((mtable.pe_id == for_pe) | \
+                      (mtable.group_id.belongs(system_roles)))
+        memberships = db(query).select()
+
+        # Archive the memberships
+        import gluon.contrib.simplejson as json
+        for m in memberships:
+            deleted_fk = {"user_id": m.user_id,
+                          "group_id": m.group_id}
+            if for_pe:
+                deleted_fk["pe_id"] = for_pe
+            deleted_fk = json.dumps(deleted_fk)
+            m.update_record(deleted=True,
+                            deleted_fk=deleted_fk,
+                            user_id=None,
+                            group_id=None)
+
+        # Update roles for current user if required
+        if self.user and str(user_id) == str(self.user.id):
+            self.s3_set_roles()
+
+        return
 
     # -------------------------------------------------------------------------
-    def s3_has_role(self, role):
+    def s3_has_role(self, role, for_pe=None):
         """
             Check whether the currently logged-in user has a role
 
             @param role: the record ID or UID of the role
         """
 
+        # Allow override
         if self.override:
+            return True
+
+        system_roles = self.get_system_roles()
+        if role == system_roles.ANONYMOUS:
+            # All users have the anonymous role
             return True
 
         db = current.db
         session = current.session
-        if not session.s3:
-            return False
 
         # Trigger HTTP basic auth
         self.s3_logged_in()
-        roles = session.s3.roles
-        if not roles:
+
+        # Get the realms
+        if not session.s3:
+            return False
+        if self.user:
+            realms = self.user.realms
+        else:
+            realms = Storage([(r, None) for r in session.s3.roles])
+        if not realms:
             return False
 
-        system_roles = session.s3.system_roles
-        if system_roles and system_roles.ADMIN in roles:
-            # Administrators have all roles
+        # Administrators have all roles
+        if system_roles.ADMIN in realms:
             return True
 
+        # Resolve role ID/UID
         if isinstance(role, str):
             if role.isdigit():
                 role = int(role)
             else:
-                rtable = self.settings.table_group
-                query = (rtable.deleted != True) & \
-                        (rtable.uuid == role)
-                row = db(query).select(rtable.id, limitby=(0, 1)).first()
+                gtable = self.settings.table_group
+                query = (gtable.deleted != True) & \
+                        (gtable.uuid == role)
+                row = db(query).select(gtable.id, limitby=(0, 1)).first()
                 if row:
                     role = row.id
                 else:
                     return False
 
-        return role in session.s3.roles
+        # Check the realm
+        if role in realms:
+            realm = realms[role]
+            if realm is None or \
+               for_pe is not None and not for_pe or \
+               for_pe in realm:
+                return True
+
+        return False
+
+    # -------------------------------------------------------------------------
+    def s3_group_members(self, group_id, for_pe=[]):
+        """
+            Get a list of members of a group
+
+            @param group_id: the group record ID
+            @param for_pe: show only group members for this PE
+
+            @returns: a list of the user_ids for members of a group
+        """
+
+        mtable = self.settings.table_membership
+
+        query = (mtable.deleted != True) & \
+                (mtable.group_id == group_id)
+        if for_pe is None:
+            query &= (mtable.pe_id == None)
+        elif for_pe:
+            query &= (mtable.pe_id == for_pe)
+        members = current.db(query).select(mtable.user_id)
+        return [m.user_id for m in members]
 
     # -------------------------------------------------------------------------
     # ACL management
     # -------------------------------------------------------------------------
     def s3_update_acls(self, role, *acls):
-        """
-            Wrapper for s3_update_acl to allow batch updating
-        """
+        """ Wrapper for permission.update_acl to allow batch updating """
 
         for acl in acls:
-            self.s3_update_acl(role, **acl)
+            self.permission.update_acl(role, **acl)
 
     # -------------------------------------------------------------------------
-    def s3_update_acl(self, role,
-                      c=None, f=None, t=None, oacl=None, uacl=None,
-                      organisation=None, facility=None):
-        """
-            Back-end method to update an ACL
-        """
-
-        ALL = "all"
-
-        all_organisations = organisation == ALL
-        if all_organisations:
-            organisation = None
-
-        all_facilities = facility == ALL
-        if all_facilities:
-            facility = None
-
-        table = self.permission.table
-        if not table:
-            # ACLs not relevant to this security policy
-            return None
-
-        if c is None and f is None and t is None:
-            return None
-
-        if t is not None:
-            c = f = None
-
-        if uacl is None:
-            uacl = self.permission.NONE
-        if oacl is None:
-            oacl = uacl
-
-        if role:
-            query = ((table.group_id == role) & \
-                     (table.controller == c) & \
-                     (table.function == f) & \
-                     (table.tablename == t))
-            record = current.db(query).select(table.id, limitby=(0, 1)).first()
-            acl = dict(deleted=False,
-                       group_id=role,
-                       controller=c,
-                       function=f,
-                       tablename=t,
-                       oacl=oacl,
-                       uacl=uacl,
-                       all_organisations=all_organisations,
-                       organisation=organisation,
-                       all_facilities=all_facilities,
-                       facility=facility)
-            if record:
-                success = record.update_record(**acl)
-            else:
-                success = table.insert(**acl)
-
-        return success
-
+    # User Identity
     # -------------------------------------------------------------------------
-    # Utilities
-    # -------------------------------------------------------------------------
-    def s3_group_members(self, group_id):
+    def s3_get_user_id(self, person_id):
         """
-            Get a list of members of a group
+            Get the user_id for a person_id
 
-            @param group_id: the group record ID
-            @returns: a list of the user_ids for members of a group
+            @param person_id: the pr_person record ID
         """
+        db = current.db
+        s3db = current.s3db
 
-        membership = self.settings.table_membership
-        query = (membership.deleted != True) & \
-                (membership.group_id == group_id)
-        members = current.db(query).select(membership.user_id)
-        return [member.user_id for member in members]
-
+        if isinstance(person_id, basestring) and not person_id.isdigit():
+            utable = self.settings.table_user
+            query = (utable.email == person_id)
+            user = db(query).select(utable.id,
+                                    limitby=(0, 1)).first()
+            if user:
+                return user.id
+        else:
+            ptable = s3db.table("pr_person")
+            ltable = s3db.table("pr_person_user")
+            if ptable and ltable:
+                query = (ptable.id == person_id) & \
+                        (ptable.pe_id == ltable.pe_id)
+                link = db(query).select(ltable.user_id,
+                                        limitby=(0, 1)).first()
+                if link:
+                    return link.user_id
+        return None
 
     # -------------------------------------------------------------------------
     def s3_user_pe_id(self, user_id):
@@ -1952,7 +2248,7 @@ class AuthS3(Auth):
     # -------------------------------------------------------------------------
     def s3_logged_in_human_resource(self):
         """
-            Get the person record ID for the current logged-in user
+            Get the first HR record ID for the current logged-in user
         """
 
         db = current.db
@@ -1976,13 +2272,20 @@ class AuthS3(Auth):
         return None
 
     # -------------------------------------------------------------------------
-    def s3_has_permission(self, method, table, record_id = 0):
+    # Core Authorization Methods
+    # -------------------------------------------------------------------------
+    def s3_has_permission(self, method, table, record_id=None, c=None, f=None):
         """
             S3 framework function to define whether a user can access a record
             in manner "method". Designed to be called from the RESTlike
             controller.
 
+            @param method: the access method as string, one of
+                           "create", "read", "update", "delete"
             @param table: the table or tablename
+            @param record_id: the record ID (if any)
+            @param c: the controller name (overrides current.request)
+            @param f: the function name (overrides current.request)
         """
 
         if self.override:
@@ -1991,12 +2294,16 @@ class AuthS3(Auth):
         db = current.db
         session = current.session
 
+        sr = self.get_system_roles()
+
         if not hasattr(table, "_tablename"):
             s3db = current.s3db
             table = s3db[table]
 
-        if session.s3.security_policy == 1:
-            # Simple policy
+        policy = session.s3.security_policy
+
+        # Simple policy
+        if policy == 1:
             # Anonymous users can Read.
             if method == "read":
                 authorised = True
@@ -2004,8 +2311,8 @@ class AuthS3(Auth):
                 # Authentication required for Create/Update/Delete.
                 authorised = self.s3_logged_in()
 
-        elif session.s3.security_policy == 2:
-            # Editor policy
+        # Editor policy
+        elif policy == 2:
             # Anonymous users can Read.
             if method == "read":
                 authorised = True
@@ -2017,7 +2324,7 @@ class AuthS3(Auth):
                 authorised = self.s3_logged_in()
             else:
                 # Editor role required for Update/Delete.
-                authorised = self.s3_has_role("Editor")
+                authorised = self.s3_has_role(sr.EDITOR)
                 if not authorised and self.user and "owned_by_user" in table:
                     # Creator of Record is allowed to Edit
                     query = (table.id == record_id)
@@ -2026,38 +2333,19 @@ class AuthS3(Auth):
                     if record and self.user.id == record.owned_by_user:
                         authorised = True
 
-        elif session.s3.security_policy == 3:
-            # Controller ACLs
-            self.permission.use_cacls = True
-            self.permission.use_facls = False
-            self.permission.use_tacls = False
-            authorised = self.permission.has_permission(table,
-                                                        record=record_id,
-                                                        method=method)
+        # Use S3Permission ACLs
+        elif policy in (3, 4, 5, 6, 7, 8):
+            authorised = self.permission.has_permission(method,
+                                                        c = c,
+                                                        f = f,
+                                                        t = table,
+                                                        record = record_id)
 
-        elif session.s3.security_policy == 4:
-            # Controller+Function ACLs
-            self.permission.use_cacls = True
-            self.permission.use_facls = True
-            self.permission.use_tacls = False
-            authorised = self.permission.has_permission(table,
-                                                        record=record_id,
-                                                        method=method)
-
-        elif session.s3.security_policy >= 5:
-            # Controller+Function+Table ACLs
-            self.permission.use_cacls = True
-            self.permission.use_facls = True
-            self.permission.use_tacls = True
-            authorised = self.permission.has_permission(table,
-                                                        record=record_id,
-                                                        method=method)
-
+        # Web2py default policy
         else:
-            # Full policy
             if self.s3_logged_in():
                 # Administrators are always authorised
-                if self.s3_has_role(1):
+                if self.s3_has_role(sr.ADMIN):
                     authorised = True
                 else:
                     # Require records in auth_permission to specify access
@@ -2067,14 +2355,19 @@ class AuthS3(Auth):
                 # No access for anonymous
                 authorised = False
 
-
         return authorised
 
     # -------------------------------------------------------------------------
-    def s3_accessible_query(self, method, table):
+    def s3_accessible_query(self, method, table, c=None, f=None):
         """
             Returns a query with all accessible records for the currently
             logged-in user
+
+            @param method: the access method as string, one of:
+                           "create", "read", "update" or "delete"
+            @param table: the table or table name
+            @param c: the controller name (overrides current.request)
+            @param f: the function name (overrides current.request)
 
             @note: This method does not work on GAE because it uses JOIN and IN
         """
@@ -2086,6 +2379,12 @@ class AuthS3(Auth):
         session = current.session
         T = current.T
 
+        sr = self.get_system_roles()
+
+        if not hasattr(table, "_tablename"):
+            s3db = current.s3db
+            table = s3db[table]
+
         policy = session.s3.security_policy
 
         if policy == 1:
@@ -2094,13 +2393,13 @@ class AuthS3(Auth):
         elif policy == 2:
             # "editor" security policy: show all records
             return table.id > 0
-        elif policy in (3, 4, 5, 6, 7):
+        elif policy in (3, 4, 5, 6, 7, 8):
             # ACLs: use S3Permission method
-            query = self.permission.accessible_query(table, method)
+            query = self.permission.accessible_query(method, table, c=c, f=f)
             return query
 
         # "Full" security policy
-        if self.s3_has_role(1):
+        if self.s3_has_role(sr.ADMIN):
             # Administrators can see all data
             return table.id > 0
 
@@ -2123,6 +2422,8 @@ class AuthS3(Auth):
 
 
     # -------------------------------------------------------------------------
+    # S3 Variants of web2py Authorization Methods
+    # -------------------------------------------------------------------------
     def s3_has_membership(self, group_id=None, user_id=None, role=None):
         """
             Checks if user is member of group_id or role
@@ -2132,6 +2433,7 @@ class AuthS3(Auth):
                 - Uses s3_has_role()
         """
 
+        # Allow override
         if self.override:
             return True
 
@@ -2183,7 +2485,9 @@ class AuthS3(Auth):
                     redirect("%s?_next=%s" % (self.settings.login_url,
                                               urllib.quote(next)))
 
-                if not self.s3_has_role(role) and not self.s3_has_role(1):
+                system_roles = self.get_system_roles()
+                ADMIN = system_roles.ADMIN
+                if not self.s3_has_role(role) and not self.s3_has_role(ADMIN):
                     current.session.error = self.messages.access_denied
                     next = self.settings.on_failed_authorization
                     redirect(next)
@@ -2200,6 +2504,8 @@ class AuthS3(Auth):
     requires_membership = s3_requires_membership
 
     # -------------------------------------------------------------------------
+    # Record Ownership
+    # -------------------------------------------------------------------------
     def s3_make_session_owner(self, table, record_id):
         """
             Makes the current session owner of a record
@@ -2210,7 +2516,6 @@ class AuthS3(Auth):
 
         if hasattr(table, "_tablename"):
             table = table._tablename
-
         if not self.user:
             session = current.session
             if "owned_records" not in session:
@@ -2220,6 +2525,7 @@ class AuthS3(Auth):
             if record_id not in records:
                 records.append(record_id)
             session.owned_records[table] = records
+        return
 
     # -------------------------------------------------------------------------
     def s3_session_owns(self, table, record_id):
@@ -2230,9 +2536,12 @@ class AuthS3(Auth):
             @param record_id: the record ID
         """
 
+        session = current.session
+        if "owned_records" not in session:
+            return False
         if hasattr(table, "_tablename"):
             table = table._tablename
-        if not self.user:
+        if record_id and not self.user:
             try:
                 records = current.session.owned_records.get(table, [])
             except:
@@ -2242,1231 +2551,196 @@ class AuthS3(Auth):
         return False
 
     # -------------------------------------------------------------------------
-    def s3_set_record_owner(self, table, record):
+    def s3_clear_session_ownership(self, table=None, record_id=None):
         """
-            Set the owner organisation and facility for a record
+            Removes session ownership for a record
 
-            @param table: the table or table name
-            @param record: the record (as row) or record ID
+            @param table: the table or table name (default: all tables)
+            @param record_id: the record ID (default: all records)
+        """
+
+        session = current.session
+        if "owned_records" not in session:
+            return
+        if table is not None:
+            if hasattr(table, "_tablename"):
+                table = table._tablename
+            if table in session.owned_records:
+                records = session.owned_records[table]
+                if record_id is not None:
+                    if str(record_id) in records:
+                        records.remove(str(record_id))
+                else:
+                    del session.owned_records[table]
+        else:
+            session.owned_records = Storage()
+        return
+
+    # -------------------------------------------------------------------------
+    def s3_update_record_owner(self, table, record, **fields):
+        """
+            Update the ownership for a record
+
+            @param table: the table
+            @param record: the record or record ID
+            @param fields: dict of {ownership_field:value}
+        """
+
+        db = current.db
+        ownership_fields = ("owned_by_user",
+                            "owned_by_group",
+                            "owned_by_entity")
+        pkey = table._id.name
+        if isinstance(record, (Row, dict)) and pkey in record:
+            record_id = record[pkey]
+        else:
+            record_id = record
+        data = Storage()
+        for key in fields:
+            if key in ownership_fields:
+                data[key] = fields[key]
+        if data:
+            return db(table._id == record_id).update(**data)
+        else:
+            return None
+
+    # -------------------------------------------------------------------------
+    def s3_set_record_owner(self, table, record, **fields):
+        """
+            Update the record owner, to be called from CRUD and Importer
+
+            @param table: the table (or table name)
+            @param record: the record (or record ID)
+            @keyword owned_by_user: the auth_user ID of the owner user
+            @keyword owned_by_group: the auth_group ID of the owner group
+            @keyword owned_by_entity: the pe_id of the owner entity, or a tuple
+                                      (instance_type, instance_id) to lookup the
+                                      pe_id from
         """
 
         db = current.db
         s3db = current.s3db
-        manager = current.manager
-
-        site_types = self.org_site_types
-
-        OWNED_BY_ORG = "owned_by_organisation"
-        OWNED_BY_FAC = "owned_by_facility"
-        ORG_ID = "organisation_id"
-        FAC_ID = "site_id"
-        ORG_PREFIX = "Org_%s"
-        FAC_PREFIX = "Fac_%s"
-        ORG_TABLENAME = "org_organisation"
-        FAC_TABLENAME = "org_site"
-        NAME = "name"
-
-        org_table = s3db[ORG_TABLENAME]
-        fac_table = s3db[FAC_TABLENAME]
-        grp_table = self.settings.table_group
-
-        # Get the table
-        if isinstance(table, str):
-            table = s3db[table]
-        tablename = table._tablename
-        _id = table._id.name
-
-        # Which fields are available?
-        fields = [table._id.name,
-                  NAME,
-                  ORG_ID,
-                  FAC_ID,
-                  OWNED_BY_ORG,
-                  OWNED_BY_FAC]
-        fields = [table[f] for f in fields if f in table.fields]
-
-        # Get the record
-        if not isinstance(record, Row):
-            record_id = record
-            record = db(table._id == record_id).select(limitby=(0, 1),
-                                                       *fields).first()
-        else:
-            if table._id.name in record:
-                record_id = record[table._id.name]
-            else:
-                record_id = None
-            missing = [f for f in fields if f not in record]
-            if missing:
-                if record_id:
-                    query = table._id == record_id
-                    record = db(query).select(limitby=(0, 1),
-                                              *fields).first()
-                else:
-                    record = None
-        if not record:
-            # Raise an exception here?
-            return
-
-        # Get the organisation ID
-        org_role = None
-        if tablename == ORG_TABLENAME:
-            organisation_id = record[_id]
-            if OWNED_BY_ORG in record:
-                org_role = record[OWNED_BY_ORG]
-            if not org_role:
-                # Create a new org_role
-                uuid = ORG_PREFIX % organisation_id
-                if NAME in table:
-                    name = record[NAME]
-                else:
-                    name = uuid
-                role = Storage(uuid=uuid,
-                               deleted=False,
-                               hidden=False,
-                               system=True,
-                               protected=True,
-                               role="%s (Organisation)" % name,
-                               description="All Staff of Organization %s" % name)
-                query = (grp_table.uuid == role.uuid) | \
-                        (grp_table.role == role.role)
-                record =  db(query).select(grp_table.id,
-                                           limitby=(0, 1)).first()
-                if not record:
-                    org_role = grp_table.insert(**role)
-                else:
-                    record.update_record(**role)
-                    org_role = record.id
-        elif ORG_ID in table:
-            organisation_id = record[ORG_ID]
-            # Get the org_role from the organisation
-            if organisation_id:
-                query = org_table.id == organisation_id
-                organisation = db(query).select(org_table[OWNED_BY_ORG],
-                                                limitby=(0, 1)).first()
-                if organisation:
-                    org_role = organisation[OWNED_BY_ORG]
-
-        # Get the facility ID
-        fac_role = None
-        if tablename in site_types:
-            site_id = record[FAC_ID]
-            if OWNED_BY_FAC in record:
-                fac_role = record[OWNED_BY_FAC]
-            if not fac_role:
-                # Create a new fac_role
-                uuid = FAC_PREFIX % site_id
-                if NAME in table:
-                    name = record[NAME]
-                else:
-                    name = uuid
-                role = Storage(uuid=uuid,
-                               deleted=False,
-                               hidden=False,
-                               system=True,
-                               protected=True,
-                               role="%s (Facility)" % name,
-                               description="All Staff of Facility %s" % name)
-                query = (grp_table.uuid == role.uuid) | \
-                        (grp_table.role == role.role)
-                record =  db(query).select(grp_table.id,
-                                           limitby=(0, 1)).first()
-                if not record:
-                    fac_role = grp_table.insert(**role)
-                else:
-                    record.update_record(**role)
-                    fac_role = record.id
-        elif FAC_ID in table:
-            # Get the fac_role from the site
-            site_id = record[FAC_ID]
-            if site_id:
-                query = fac_table[FAC_ID] == site_id
-                site = db(query).select(fac_table.instance_type,
-                                        fac_table.uuid,
-                                        limitby=(0, 1)).first()
-                if site:
-                    inst_table = s3db[site.instance_type]
-                    query = inst_table.uuid == site.uuid
-                    facility = db(query).select(inst_table[OWNED_BY_FAC],
-                                                limitby=(0, 1)).first()
-                    if facility:
-                        fac_role = facility[OWNED_BY_FAC]
-
-        # Update the record as necessary
-        data = Storage()
-        if org_role and OWNED_BY_ORG in table:
-            data[OWNED_BY_ORG] = org_role
-        if fac_role and OWNED_BY_FAC in table:
-            data[OWNED_BY_FAC] = fac_role
-        if data and hasattr(record, "update_record"):
-            record.update_record(**data)
-        elif data and record_id:
-            db(table._id == record_id).update(**data)
-
-        return
-
-# =============================================================================
-
-class S3Permission(object):
-    """
-        S3 Class to handle permissions
-
-        @author: Dominic König <dominic@aidiq.com>
-    """
-
-    TABLENAME = "s3_permission"
-
-    CREATE = 0x0001
-    READ = 0x0002
-    UPDATE = 0x0004
-    DELETE = 0x0008
-
-    ALL = CREATE | READ | UPDATE | DELETE
-    NONE = 0x0000 # must be 0!
-
-    PERMISSION_OPTS = OrderedDict([
-        #(NONE, "NONE"),
-        #(READ, "READ"),
-        #(CREATE|UPDATE|DELETE, "WRITE"),
-        [CREATE, "CREATE"],
-        [READ, "READ"],
-        [UPDATE, "UPDATE"],
-        [DELETE, "DELETE"]])
-
-    # Method string <-> required permission
-    METHODS = Storage({
-        "create": CREATE,
-        "import": CREATE,
-        "read": READ,
-        "report": READ,
-        "search": READ,
-        "update": UPDATE,
-        "delete": DELETE})
-
-    # Policy helpers
-    most_permissive = lambda self, acl: \
-                             reduce(lambda x, y: (x[0]|y[0], x[1]|y[1]),
-                                    acl, (self.NONE, self.NONE))
-    most_restrictive = lambda self, acl: \
-                              reduce(lambda x, y: (x[0]&y[0], x[1]&y[1]),
-                                     acl, (self.ALL, self.ALL))
-
-    # -------------------------------------------------------------------------
-    def __init__(self, auth, tablename=None):
-        """
-            Constructor, invoked by AuthS3.__init__
-
-            @param tablename: the name for the permissions table
-        """
-
-        # Instantiated once per request, but before Auth tables
-        # are defined and authentication is checked, thus no use
-        # to check permissions in the constructor
-
-        # Auth
-        self.auth = auth
-
-        # Deployment settings
-        settings = current.deployment_settings
-        self.policy = settings.get_security_policy()
-
-        # Which level of granularity do we want?
-        self.use_cacls = self.policy in (3, 4, 5, 6, 7) # Controller ACLs
-        self.use_facls = self.policy in (4, 5, 6, 7)    # Function ACLs
-        self.use_tacls = self.policy in (5, 6, 7)       # Table ACLs
-        self.org_roles = self.policy in (6, 7)          # OrgAuth
-        self.modules = settings.modules
-
-        # If a large number of roles in the system turnes into a bottleneck
-        # in policies 6 and 7, then we could reduce the number of roles in
-        # subsequent queries; this would though add another query (or even two
-        # more queries) to the request, so the hypothetic performance gain
-        # should first be confirmed by tests:
-        #if self.policy in (6, 7):
-            #gtable = auth.settings.table_group
-            #org_roles = current.db(gtable.uid.like("Org_%")).select(gtable.id)
-            #self.org_roles = [r.id for r in org_roles]
-        #else:
-            #self.org_roles = []
-        #if self.policy == 7:
-            #gtable = auth.settings.table_group
-            #fac_roles = current.db(gtable.uid.like("Fac_%")).select(gtable.id)
-            #self.fac_roles = [r.id for r in fac_roles]
-        #else:
-            #self.fac_roles = []
-
-        # Permissions table
-        self.tablename = tablename or self.TABLENAME
-        self.table = current.db.get(self.tablename, None)
-
-        # Error messages
-        T = current.T
-        self.INSUFFICIENT_PRIVILEGES = T("Insufficient Privileges")
-        self.AUTHENTICATION_REQUIRED = T("Authentication Required")
-
-        # Request information
-        request = current.request
-        self.controller = request.controller
-        self.function = request.function
-
-        # Request format
-        self.format = request.extension
-        if "format" in request.get_vars:
-            ext = request.get_vars.format
-            if isinstance(ext, list):
-                ext = ext[-1]
-            self.format = ext.lower() or self.format
-        else:
-            ext = [a for a in request.args if "." in a]
-            if ext:
-                self.format = ext[-1].rsplit(".", 1)[1].lower()
-        if request.function == "ticket" and \
-           request.controller == "admin":
-            # Error tickets need an override
-            self.format = "html"
-
-        # Page permission cache
-        self.page_acls = Storage()
-        self.table_acls = Storage()
-
-        # Pages which never require permission:
-        # Make sure that any data access via these pages uses
-        # accessible_query explicitly!
-        self.unrestricted_pages = ("default/index",
-                                   "default/user",
-                                   "default/contact",
-                                   "default/about")
-
-        # Default landing pages
-        _next = URL(args=request.args, vars=request.vars)
-        self.homepage = URL(c="default", f="index")
-        self.loginpage = URL(c="default", f="user", args="login",
-                             vars=dict(_next=_next))
-
-    # -------------------------------------------------------------------------
-    def define_table(self, migrate=True, fake_migrate=False):
-        """
-            Define permissions table, invoked by AuthS3.define_tables()
-        """
-
-        db = current.db
-
-        table_group = self.auth.settings.table_group
-        if table_group is None:
-            table_group = "integer" # fallback (doesn't work with requires)
-
-        if not self.table:
-            self.table = db.define_table(self.tablename,
-                            Field("group_id", table_group),
-                            Field("controller", length=64),
-                            Field("function", length=512),
-                            Field("tablename", length=512),
-                            Field("oacl", "integer", default=self.ALL),
-                            Field("uacl", "integer", default=self.READ),
-                            # Only apply to records owned by this
-                            # organisation role (policy 6 only):
-                            Field("all_organisations", "boolean",
-                                  default=False),
-                            Field("organisation",
-                                  table_group,
-                                  requires = IS_NULL_OR(IS_IN_DB(
-                                                db, table_group.id))),
-                            # Only apply to records owned by this
-                            # facility role (policy 7 only):
-                            Field("all_facilities", "boolean",
-                                  default=False),
-                            Field("facility",
-                                  table_group,
-                                  requires = IS_NULL_OR(IS_IN_DB(
-                                                db, table_group.id))),
-                            migrate=migrate,
-                            fake_migrate=fake_migrate,
-                            *(s3_uid()+s3_timestamp()+s3_deletion_status()))
-
-
-    # -------------------------------------------------------------------------
-    def __call__(self,
-                 c=None,
-                 f=None,
-                 table=None,
-                 record=None):
-        """
-            Get the ACL for the current user for a path
-
-            @param c: the controller name (falls back request.controller)
-            @param f: the function name (falls back to request.function)
-            @param table: the table
-            @param record: the record ID (or the Row if already loaded)
-
-            @note: if passing a Row, it must contain all available ownership
-                   fields (id, owned_by_user, owned_by_role), otherwise the
-                   record will be re-loaded by this function
-        """
-
-        _debug("auth.permission(c=%s, f=%s, table=%s, record=%s)" %
-                   (c, f, table, record))
-
-        t = self.table # Permissions table
-        auth = self.auth
-        sr = auth.get_system_roles()
-
-        if record == 0:
-            record = None
-
-        # Get user roles, check logged_in to trigger HTTPBasicAuth
-        if not auth.s3_logged_in():
-            roles = [sr.ANONYMOUS]
-        else:
-            roles = [sr.AUTHENTICATED]
-        if current.session.s3 is not None:
-            roles = current.session.s3.roles or roles
-        if not self.use_cacls:
-            # Fall back to simple authorization
-            _debug("Simple authorization")
-            if auth.s3_logged_in():
-                _debug("acl=%04x" % self.ALL)
-                return self.ALL
-            else:
-                _debug("acl=%04x" % self.READ)
-                return self.READ
-        if sr.ADMIN in roles:
-            _debug("Administrator, acl=%04x" % self.ALL)
-            return self.ALL
-
-        # Fall back to current request
-        c = c or self.controller
-        f = f or self.function
-
-        # Do we need to check the owner role (i.e. table+record given)?
-        is_owner = False
-        require_org = require_fac = None
-        if table is not None and record is not None:
-            owner_role, owner_user, owner_org, owner_fac = \
-                self.get_owners(table, record)
-            is_owner = self.is_owner(table, None,
-                                     owner_role=owner_role,
-                                     owner_user=owner_user,
-                                     owner_org=owner_org,
-                                     owner_fac=owner_fac)
-            if self.policy == 6:
-                require_org = owner_org
-                require_fac = None
-            elif self.policy == 7:
-                require_org = owner_org
-                require_fac = owner_fac
-
-        # Get the applicable ACLs
-        page_acl = self.page_acl(c=c, f=f,
-                                 require_org=require_org,
-                                 require_fac=require_fac)
-        if table is None or not self.use_tacls:
-            acl = page_acl
-        else:
-            if sr.EDITOR in roles:
-                table_acl = (self.ALL, self.ALL)
-            else:
-                table_acl = self.table_acl(table=table,
-                                           c=c,
-                                           default=page_acl,
-                                           require_org=require_org,
-                                           require_fac=require_fac)
-            acl = self.most_restrictive((page_acl, table_acl))
-
-        # Decide which ACL to use for this case
-        if acl[0] == self.NONE and acl[1] == self.NONE:
-            # No table access at all
-            acl = self.NONE
-        elif record is None:
-            # No record specified, return most permissive ACL
-            acl = (acl[0] & ~self.CREATE) | acl[1]
-        else:
-            # ACL based on ownership
-            acl = is_owner and (acl[0] | acl[1]) or acl[1]
-
-        _debug("acl=%04x" % acl)
-        return acl
-
-    # -------------------------------------------------------------------------
-    def page_acl(self, c=None, f=None,
-                 require_org=None,
-                 require_fac=None):
-        """
-            Get the ACL for a page
-
-            @param c: the controller (falls back to current request)
-            @param f: the function (falls back to current request)
-
-            @returns: tuple of (ACL for owned resources, ACL for all resources)
-        """
-
-        session = current.session
-        policy = self.policy
-        t = self.table
-        sr = self.auth.get_system_roles()
-        most_permissive = self.most_permissive
-
-        roles = []
-        if session.s3 is not None:
-            roles = session.s3.roles or []
-        if sr.ADMIN in roles:
-            # Admin always has rights
-            return (self.ALL, self.ALL)
-
-        c = c or self.controller
-        f = f or self.function
-
-        page = "%s/%s" % (c, f)
-        if page in self.unrestricted_pages:
-            page_acl = (self.ALL, self.ALL)
-        elif c not in self.modules or \
-             c in self.modules and not self.modules[c].restricted or \
-             not self.use_cacls:
-            # Controller is not restricted => simple authorization
-            if self.auth.s3_logged_in():
-                page_acl = (self.ALL, self.ALL)
-            else:
-                page_acl = (self.READ, self.READ)
-        else:
-            # Lookup cached result
-            page_acl = self.page_acls.get((page,
-                                           require_org,
-                                           require_fac), None)
-
-        if page_acl is None:
-            page_acl = (self.NONE, self.NONE) # default
-            q = ((t.deleted != True) & \
-                 (t.controller == c) & \
-                 ((t.function == f) | (t.function == None)))
-            if roles:
-                query = (t.group_id.belongs(roles)) & q
-            else:
-                query = (t.group_id == None) & q
-            # Additional restrictions in OrgAuth
-            if policy in (6, 7) and require_org:
-                field = t.organisation
-                query &= ((t.all_organisations == True) | \
-                          (field == require_org) | (field == None))
-            if policy == 7 and require_fac:
-                field = t.facility
-                query &= ((t.all_facilities == True) | \
-                          (field == require_fac) | (field == None))
-            rows = current.db(query).select()
-            if rows:
-                # ACLs found, check for function-specific
-                controller_acl = []
-                function_acl = []
-                for row in rows:
-                    if not row.function:
-                        controller_acl += [(row.oacl, row.uacl)]
-                    else:
-                        function_acl += [(row.oacl, row.uacl)]
-                # Function-specific ACL overrides Controller ACL
-                if function_acl and self.use_facls:
-                    page_acl = most_permissive(function_acl)
-                elif controller_acl:
-                    page_acl = most_permissive(controller_acl)
-
-            # Remember this result
-            self.page_acls.update({(page,
-                                    require_org,
-                                    require_fac): page_acl})
-
-        return page_acl
-
-    # -------------------------------------------------------------------------
-    def table_acl(self, table=None, c=None, default=None,
-                  require_org=None,
-                  require_fac=None):
-        """
-            Get the ACL for a table
-
-            @param table: the table
-            @param c: the controller (falls back to current request)
-            @param default: ACL to apply if no specific table ACL is found
-            @returns: tuple of (ACL for owned resources, ACL for all resources)
-        """
-        if table is None or not self.use_tacls:
-            return self.page_acl(c=c)
-
-        policy = self.policy
-        t = self.table
-        sr = self.auth.get_system_roles()
-
-        roles = []
-        if current.session.s3 is not None:
-            roles = current.session.s3.roles or []
-        if sr.ADMIN in roles:
-            # Admin always has rights
-            return (self.ALL, self.ALL)
-
-        c = c or self.controller
-
-        if default is None:
-            if self.auth.s3_logged_in():
-                default = (self.ALL, self.ALL)
-            else:
-                default = (self.READ, self.READ)
-
-        # Already loaded?
+        model = current.manager.model
+
+        # Ownership fields
+        OUSR = "owned_by_user"
+        OGRP = "owned_by_group"
+        OENT = "owned_by_entity"
+        ownership_fields = (OUSR, OGRP, OENT)
+
+        # Entity reference fields
+        EID = "pe_id"
+        OID = "organisation_id"
+        SID = "site_id"
+        GID = "group_id"
+        PID = "person_id"
+        entity_fields = (EID, OID, SID, GID, PID)
+
+        # Entity tables
+        otablename = "org_organisation"
+        stablename = "org_site"
+        gtablename = "pr_group"
+        ptablename = "pr_person"
+
+        # Find the table
         if hasattr(table, "_tablename"):
             tablename = table._tablename
         else:
             tablename = table
-        table_acl = self.table_acls.get((tablename,
-                                         require_org,
-                                         require_fac), None)
+            table = s3db.table(tablename)
+        if not table:
+            return
 
-        if table_acl is None:
-            q = ((t.deleted != True) & \
-                 (t.tablename == tablename) &
-                 ((t.controller == c) | (t.controller == None)))
-            if roles:
-                query = (t.group_id.belongs(roles)) & q
+        # Get the record ID
+        pkey = table._id.name
+        if isinstance(record, (Row, dict)):
+            if pkey not in record:
+                return
             else:
-                query = (t.group_id == None) & q
-            # Additional restrictions in OrgAuth
-            if policy in (6, 7) and require_org:
-                field = t.organisation
-                query &= ((t.all_organisations == True) | \
-                          (field == require_org) | (field == None))
-            if policy == 7 and require_fac:
-                field = t.facility
-                query &= ((t.all_facilities == True) | \
-                          (field == require_fac) | (field == None))
-            rows = current.db(query).select()
-            table_acl = [(r.oacl, r.uacl) for r in rows]
-            if table_acl:
-                # ACL found, apply most permissive role
-                table_acl = self.most_permissive(table_acl)
-            else:
-                # No ACL found for any of the roles, fall back to default
-                table_acl = default
-
-            # Remember this result
-            self.table_acls.update({(tablename,
-                                     require_org,
-                                     require_fac): table_acl})
-        return table_acl
-
-    # -------------------------------------------------------------------------
-    def get_owners(self, table, record):
-        """
-            Get the organisation/facility/group/user owning a record
-
-            @param table: the table
-            @param record: the record ID (or the Row, if already loaded)
-        """
-
-        owner_org = None
-        owner_fac = None
-        owner_role = None
-        owner_user = None
-
-        record_id = None
-
-        # Check which ownership fields the table defines
-        ownership_fields = ("owned_by_user",
-                            "owned_by_role",
-                            "owned_by_organisation",
-                            "owned_by_facility")
-        fields = [f for f in ownership_fields if f in table.fields]
-        if not fields:
-            # Ownership is not defined for this table
-            return (None, None, None, None)
-
-        if isinstance(record, Row):
-            # Check if all necessary fields are present
-            missing = [f for f in fields if f not in record]
-            if missing:
-                # Have to reload the record :(
-                if table._id.name in record:
-                    record_id = record[table._id.name]
-                record = None
+                record_id = record[pkey]
         else:
-            # Record ID given
             record_id = record
-            record = None
+            record = Storage()
 
-        if not record and record_id:
-            # Get the record
-            fs = [table[f] for f in fields] + [table.id]
-            query = (table._id == record_id)
-            record = current.db(query).select(limitby=(0, 1), *fs).first()
-        if not record:
-            # Record does not exist
-            return (None, None, None, None)
+        # Find the available fields
+        fields_in_table = [f for f in ownership_fields if f in table.fields]
+        if not fields_in_table:
+            return
+        fields_in_table += [f for f in entity_fields if f in table]
 
-        if "owned_by_role" in record:
-            owner_role = record["owned_by_role"]
-        if "owned_by_user" in record:
-            owner_user = record["owned_by_user"]
-        if "owned_by_organisation" in record:
-            owner_org = record["owned_by_organisation"]
-        if "owned_by_facility" in record:
-            owner_fac = record["owned_by_facility"]
-        return (owner_role, owner_user, owner_org, owner_fac)
-
-    # -------------------------------------------------------------------------
-    def is_owner(self, table, record,
-                 owner_role=None,
-                 owner_user=None,
-                 owner_org=None,
-                 owner_fac=None):
-        """
-            Establish the ownership of a record
-
-            @param table: the table
-            @param record: the record ID (or the Row if already loaded)
-            @param owner_role: owner_role of the record (if already known)
-            @param owner_user: owner_user of the record (if already known)
-            @param owner_org: owner_org of the record (if already known)
-            @param owner_fac: owner_fac of the record (if already known)
-
-            @note: if passing a Row, it must contain all available ownership
-                   fields (id, owned_by_user, owned_by_role), otherwise the
-                   record will be re-loaded by this function
-        """
-
-        user_id = None
-        roles = []
-        sr = self.auth.get_system_roles()
-
-        if self.auth.user is not None:
-            user_id = self.auth.user.id
-        if current.session.s3 is not None:
-            roles = current.session.s3.roles or []
-
-        if not user_id and not roles:
-            return False
-        elif sr.ADMIN in roles:
-            # Admin owns all records
-            return True
-        elif record:
-            owner_role, owner_user, owner_org, owner_fac = \
-                self.get_owners(table, record)
-
-        try:
-            record_id = record.id
-        except:
-            record_id = record
-        # Session ownership?
-        if not user_id:
-            if not owner_user and record_id and \
-               self.auth.s3_session_owns(table, record_id):
-                # Session owns record
-                return True
-            else:
-                return False
-
-        # Individual record ownership
-        if owner_user and owner_user == user_id:
-            return True
-
-        # OrgAuth?
-        if self.policy == 6 and owner_org:
-            # Must have the organisation's staff role
-            if owner_org not in roles:
-                return False
-        elif self.policy == 7:
-            # Must have both, the organisation's and the
-            # facilities staff role
-            if owner_org and owner_org not in roles:
-                return False
-            if owner_fac and owner_fac not in roles:
-                return False
-
-        # Owner?
-        if not owner_role and not owner_user:
-            # All authenticated users own this record
-            return True
-        elif owner_role and owner_role in roles:
-            # user has owner role
-            return True
+        # Get all available fields for the record
+        fields_missing = [f for f in fields_in_table if f not in record]
+        if fields_missing:
+            fields_to_load = [table._id]+[table[f] for f in fields_in_table]
+            query = table._id == record_id
+            row = db(query).select(limitby=(0, 1), *fields_to_load).first()
         else:
-            return False
+            row = record
+        if not row:
+            return
 
-    # -------------------------------------------------------------------------
-    def hidden_modules(self):
-        """
-            List of modules to hide from the main menu
-        """
+        # Prepare the udpate
+        data = Storage()
 
-        sr = self.auth.get_system_roles()
-
-        hidden_modules = []
-        if self.use_cacls:
-            restricted_modules = [m for m in self.modules
-                                    if self.modules[m].restricted]
-            roles = []
-            if current.session.s3 is not None:
-                roles = current.session.s3.roles or []
-            if sr.ADMIN in roles or sr.EDITOR in roles:
-                return []
-            if not roles:
-                hidden_modules = restricted_modules
+        # Find owned_by_user
+        if OUSR in fields_in_table:
+            if OUSR in fields:
+                data[OUSR] = fields[OUSR]
+            elif row[OUSR]:
+                pass
             else:
-                t = self.table
-                query = (t.deleted != True) & \
-                        (t.controller.belongs(restricted_modules)) & \
-                        (t.tablename == None)
-                if roles:
-                    query = query & (t.group_id.belongs(roles))
+                user_id = None
+                if PID in row:
+                    # Records which link to a person_id shall be owned by that person
+                    user_id = self.s3_get_user_id(row[PID])
+                if not user_id and self.s3_logged_in() and self.user:
+                    # Fallback to current user
+                    user_id = self.user.id
+                if user_id:
+                    data[OUSR] = user_id
+
+        # Find owned_by_group
+        if OGRP in fields_in_table:
+            # Check for type-specific handler to find the owner group
+            handler = model.get_config(tablename, "owner_group")
+            if handler:
+                if callable(handler):
+                    data[OGRP] = handler(table, row)
                 else:
-                    query = query & (t.group_id == None)
-                rows = current.db(query).select()
-                acls = dict()
-                for acl in rows:
-                    if acl.controller not in acls:
-                        acls[acl.controller] = self.NONE
-                    acls[acl.controller] |= acl.oacl | acl.uacl
-                hidden_modules = [m for m in restricted_modules
-                                    if m not in acls or not acls[m]]
-        return hidden_modules
+                    data[OGRP] = handler
+            # Otherwise, only set if explicitly specified
+            elif OGRP in fields:
+                data[OGRP] = fields[OGRP]
 
-    # -------------------------------------------------------------------------
-    def accessible_url(self,
-                       c=None,
-                       f=None,
-                       p=None,
-                       t=None,
-                       a=None,
-                       args=[],
-                       vars={},
-                       anchor="",
-                       extension=None,
-                       env=None):
-        """
-            Return a URL only if accessible by the user, otherwise False
-
-            @param c: the controller
-            @param f: the function
-            @param p: the permission (defaults to READ)
-            @param t: the tablename (defaults to <c>_<f>)
-            @param a: the application name
-            @param args: the URL arguments
-            @param vars: the URL variables
-            @param anchor: the anchor (#) of the URL
-            @param extension: the request format extension
-            @param env: the environment
-        """
-
-        required = self.METHODS
-        if p in required:
-            permission = required[p]
-        else:
-            permission = self.READ
-
-        if not c:
-            c = self.controller
-        if not f:
-            f = self.function
-        if t is None:
-            tablename = "%s_%s" % (c, f)
-        else:
-            tablename = t
-
-        # Hide disabled modules
-        if self.modules and c not in self.modules:
-            return False
-
-        permitted = True
-        if not self.auth.override:
-            if self.use_cacls:
-                acl = self(c=c, f=f, table=tablename)
-                if acl & permission != permission:
-                    permitted = False
-            else:
-                if permission != self.READ:
-                    permitted = self.auth.s3_logged_in()
-
-        if permitted:
-            return URL(a=a,
-                       c=c,
-                       f=f,
-                       args=args,
-                       vars=vars,
-                       anchor=anchor,
-                       extension=extension,
-                       env=env)
-        else:
-            return False
-
-    # -------------------------------------------------------------------------
-    def page_restricted(self, c=None, f=None):
-        """
-            Checks whether a page is restricted (=whether ACLs
-            are to be applied)
-
-            @param c: controller
-            @param f: function
-        """
-
-        page = "%s/%s" % (c, f)
-        if page in self.unrestricted_pages:
-            return False
-        elif c not in self.modules or \
-             c in self.modules and not self.modules[c].restricted:
-            return False
-
-        return True
-
-    # -------------------------------------------------------------------------
-    def applicable_acls(self, roles, racl, c=None, f=None, t=None):
-        """
-            Get the available ACLs for the particular situation
-
-            @param roles: the roles of the current user
-            @param racl: the required ACL
-            @param c: controller
-            @param f: function
-            @param t: tablename
-
-            @returns: None for no ACLs to apply (access granted), [] for
-                      no ACLs matching the required permissions (access
-                      denied), or a list of ACLs to apply.
-        """
-
-        db = current.db
-        table = self.table
-
-        if not self.use_cacls:
-            # We do not use ACLs at all
-            return None
-
-        c = c or self.controller
-        f = f or self.function
-        if self.page_restricted(c=c, f=f):
-            page_restricted = True
-        else:
-            page_restricted = False
-
-        # Get page ACLs
-        page_acls = None
-        if page_restricted:
-            # Base query
-            query = (table.deleted != True) & \
-                    (table.function == None)
-            if f and self.use_facls:
-                query = (query | (table.function == f))
-            query &= (table.controller == c)
-            # Do not use delegated ACLs except for policy 6 and 7
-            if self.policy not in (6, 7):
-                query &= ((table.organisation == None) & \
-                          (table.facility == None))
-            # Restrict to available roles
-            if roles:
-                query &= (table.group_id.belongs(roles))
-            else:
-                query &= (table.group_id == None)
-            page_acls = db(query).select(table.ALL)
-            if page_acls:
-                if f and self.use_facls:
-                    facl = [acl for acl in page_acls if acl.function != None]
-                    if facl:
-                        page_acls = facl
-                page_acls = [acl for acl in page_acls
-                                 if (acl.uacl & racl == racl or
-                                     acl.oacl & racl == racl)]
-            else:
-                # Page is restricted, but no permitting ACL
-                # available for this set of roles => no access
-                return []
-
-        # Get table ACLs
-        table_acls = []
-        if t and self.use_tacls:
-            # Base query
-            query = ((table.deleted != True) & \
-                     (table.controller == None) & \
-                     (table.function == None) &
-                     (table.tablename == t))
-            # Is the table restricted at all?
-            restricted = db(query).select(limitby=(0, 1)).first() is not None
-            # Do not use delegated ACLs except for policy 6 and 7
-            if self.policy not in (6, 7):
-                query &= ((table.organisation == None) & \
-                          (table.facility == None))
-            # Restrict to available roles
-            if roles:
-                query = (table.group_id.belongs(roles)) & query
-            else:
-                query = (table.group_id == None) & query
-            table_acls = db(query).select(table.ALL)
-            if restricted and table_acls:
-                # if the table is restricted and there are ACLs
-                # available for this set of roles, then deny access
-                # if none of the ACLs gives the required permissions
-                _debug("acls: %s" % table_acls)
-                default = []
-            else:
-                # otherwise, if the table is unrestricted or there are
-                # no restricting ACLs for this set of roles, then grant
-                # access as per page_acls
-                default = page_acls
-            # Find matches
-            table_acls = [acl for acl in table_acls
-                              if (acl.uacl & racl == racl or
-                                  acl.oacl & racl == racl)]
-            if table_acls:
-                # Found matching table ACLs, grant access
-                return table_acls
-            else:
-                # No matching table ACLs found
-                return default
-
-        # default:
-        return page_acls
-
-    # -------------------------------------------------------------------------
-    def accessible_query(self, table, *methods):
-        """
-            Query for records which the user is permitted to access
-            with methods
-
-            Example::
-                query = auth.permission.accessible_query(table,
-                                                         "read", "update")
-
-                - requests a query for records that can be both read and
-                  updated.
-
-            @param table: the DB table
-            @param methods: list of methods for which permission is
-                            required (AND), any combination of "create",
-                            "read", "update", "delete"
-        """
-
-        _debug("accessible_query(%s, %s)" % (table, methods))
-
-        session = current.session
-        policy = self.policy
-        required = self.METHODS
-        sr = self.auth.get_system_roles()
-
-        OWNED_BY_ORG = "owned_by_organisation"
-        OWNED_BY_FAC = "owned_by_facility"
-        OWNED_BY_USER = "owned_by_user"
-        OWNED_BY_ROLE = "owned_by_role"
-        ALL_ORGS = "all_organisations"
-        ALL_FACS = "all_facilities"
-
-        # Default queries
-        query = (table._id != None)
-        no_access = (table._id == None)
-
-        # Required ACL
-        racl = reduce(lambda a, b: a | b,
-                                   [required[m]
-                                    for m in methods if m in required],
-                                   self.NONE)
-        if not racl:
-            _debug("No permission specified, query=%s" % query)
-            return query
-
-        # User & Roles
-        user_id = None
-        if self.auth.user is not None:
-            user_id = self.auth.user.id
-        roles = []
-        if session.s3 is not None:
-            roles = session.s3.roles or []
-        if sr.ADMIN in roles or sr.EDITOR in roles:
-            _debug("Admin/Editor in Roles, query=%s" % query)
-            return query
-
-        # Org/Fac roles the user has
-        org_roles = []
-        fac_roles = []
-        all_orgs = all_facs = False
-        if policy in (6, 7):
-            org_roles = list(roles)
-        if policy == 7:
-            fac_roles = list(roles)
-
-        # Applicable ACLs
-        acls = self.applicable_acls(roles, racl, t=table)
-        permitted = False
-        ownership_required = True
-
-        if acls is None:
-            permitted = True
-            ownership_required = False
-
-        elif acls:
-            permitted = True
-            for acl in acls:
-                _debug("ACL: oacl=%04x uacl=%04x" % (acl.oacl, acl.uacl))
-                if acl.uacl & racl == racl:
-                    ownership_required = False
-                    _debug("uACL found - no ownership required")
-                if policy in (6, 7):
-                    org_role = acl.organisation
-                    if acl[ALL_ORGS]:
-                        all_orgs = True
-                    elif org_role and org_role not in org_roles:
-                        org_roles.append(org_role)
-                if policy == 7:
-                    fac_role = acl.facility
-                    if acl[ALL_FACS]:
-                        all_facs = True
-                    elif fac_role and fac_role not in fac_roles:
-                        fac_roles.append(fac_role)
-
-        if not permitted:
-            _debug("No access")
-            return no_access
-
-        _debug("ownership_required=%s" % ownership_required)
-
-        # Query fragments
-        if OWNED_BY_ORG in table:
-            has_org_role = ((table[OWNED_BY_ORG] == None) | \
-                            (table[OWNED_BY_ORG].belongs(org_roles)))
-        if OWNED_BY_FAC in table:
-            has_fac_role = ((table[OWNED_BY_FAC] == None) | \
-                            (table[OWNED_BY_FAC].belongs(fac_roles)))
-        if OWNED_BY_USER in table:
-            user_owns_record = (table[OWNED_BY_USER] == user_id)
-
-        # OrgAuth
-        q = None
-        if policy == 6 and OWNED_BY_ORG in table and not all_orgs:
-            q = has_org_role
-            if user_id and OWNED_BY_USER in table:
-                q |= user_owns_record
-        elif policy == 7:
-            if OWNED_BY_ORG in table and not all_orgs:
-                q = has_org_role
-            if OWNED_BY_FAC in table and not all_facs:
-                if q is not None:
-                    q &= has_fac_role
+        # Find owned_by_entity
+        if OENT in fields_in_table:
+            if OENT in fields:
+                data[OENT] = fields[OENT]
+            elif not row[OENT]:
+                # Check for type-specific handler to find the owner entity
+                handler = model.get_config(tablename, "owner_entity")
+                if callable(handler):
+                    owner_entity = handler(table, row)
+                    data[OENT] = owner_entity
+                # Otherwise, do a fallback cascade
                 else:
-                    q = has_fac_role
-            if q is not None and user_id and OWNED_BY_USER in table:
-                q |= user_owns_record
-        if q is not None:
-            query = q
-
-        if ownership_required:
-            if not user_id:
-                query = (table._id == None)
-                if OWNED_BY_USER in table:
-                    try:
-                        records = session.owned_records.get(table._tablename,
-                                                            None)
-                    except:
-                        pass
+                    get_pe_id = s3db.pr_get_pe_id
+                    if EID in row:
+                        # Person Entities own their own records and
+                        owner_entity = row[EID]
+                    elif OID in row:
+                        owner_entity = get_pe_id(otablename, row[OID])
+                    elif SID in row:
+                        owner_entity = get_pe_id(stablename, row[SID])
+                    elif GID in row:
+                        owner_entity = get_pe_id(gtablename, row[GID])
                     else:
-                        if records:
-                            query = (table._id.belongs(records))
-            else:
-                qowner = qrole = quser = None
-                if OWNED_BY_ROLE in table:
-                    qrole = (table.owned_by_role.belongs(roles))
-                if OWNED_BY_USER in table and user_id:
-                    quser = (table.owned_by_user == user_id)
+                        owner_entity = None
+                    if owner_entity:
+                        data["owned_by_entity"] = owner_entity
 
-                if qrole is not None:
-                    qowner = qrole
-
-                if quser is not None:
-                    if qowner is not None:
-                        qowner = (qowner | quser)
-                    else:
-                        qowner = quser
-                if qowner is not None:
-                    if query is not None:
-                        query = query & qowner
-                    else:
-                        query = qowner
-
-        # Fallback
-        if query is None:
-            query = (table._id > 0)
-        _debug("Access granted, query=%s" % query)
-        return query
-
-    # -------------------------------------------------------------------------
-    def ownership_required(self, table, *methods):
-        """
-            Check if record ownership is required for a method
-
-            @param table: the table
-            @param methods: methods to check (OR)
-
-            @status: deprecated, using applicable_acls instead
-        """
-
-        sr = self.auth.get_system_roles()
-
-        roles = []
-        if current.session.s3 is not None:
-            # No ownership required in policies without ACLs
-            if not self.use_cacls:
-                return False
-            roles = current.session.s3.roles or []
-
-        if sr.ADMIN in roles or sr.EDITOR in roles:
-            return False # Admins and Editors do not need to own a record
-
-        required = self.METHODS
-        racl = reduce(lambda a, b: a | b,
-                        [required[m] for m in methods if m in required],
-                        self.NONE)
-        if not racl:
-            return False
-
-        # Available ACLs
-        pacl = self.page_acl()
-        if not self.use_tacls:
-            acl = pacl
-        else:
-            tacl = self.table_acl(table)
-            acl = (tacl[0] & pacl[0], tacl[1] & pacl[1])
-
-        # Ownership required?
-        permitted = (acl[0] | acl[1]) & racl == racl
-        ownership_required = False
-        if not permitted:
-            pkey = table.fields[0]
-            query = (table[pkey] == None)
-        elif "owned_by_role" in table or "owned_by_user" in table:
-            ownership_required = permitted and acl[1] & racl != racl
-
-        return ownership_required
-
-    # -------------------------------------------------------------------------
-    def has_permission(self, table, record=None, method=None):
-        """
-            Check permission to access a record
-
-            @param table: the table
-            @param record: the record or record ID (None for any record)
-            @param method: the method (or tuple/list of methods),
-                           any of "create", "read", "update", "delete"
-
-            @note: when submitting a record, the record ID and the ownership
-                   fields (="owned_by_user", "owned_by_role") must be contained
-                   if available, otherwise the record will be re-loaded
-        """
-
-        _debug("has_permission(%s, %s, method=%s)" %
-                   (table, record, method))
-
-        required = self.METHODS
-
-        if not isinstance(method, (list, tuple)):
-            method = [method]
-
-        # Required ACL
-        racl = reduce(lambda a, b: a | b,
-                     [required[m] for m in method if m in required], self.NONE)
-
-        # Available ACL
-        aacl = self(table=table, record=record)
-
-        permitted = racl & aacl == racl
-        _debug("permitted=%s" % permitted)
-        return permitted
+        self.s3_update_record_owner(table, row, **data)
+        return
 
     # -------------------------------------------------------------------------
     def permitted_facilities(self,
@@ -3497,9 +2771,9 @@ class S3Permission(object):
 
         site_ids = []
         if facility_type is None:
-            site_types = self.auth.org_site_types
+            site_types = self.org_site_types
         else:
-            if facility_type not in self.auth.org_site_types:
+            if facility_type not in self.org_site_types:
                 return
             site_types = [s3db[facility_type]]
         for site_type in site_types:
@@ -3507,7 +2781,7 @@ class S3Permission(object):
                 ftable = s3db[site_type]
                 if not "site_id" in ftable.fields:
                     continue
-                query = self.auth.s3_accessible_query("update", ftable)
+                query = self.s3_accessible_query("update", ftable)
                 if "deleted" in ftable:
                     query &= (ftable.deleted != True)
                 rows = db(query).select(ftable.site_id)
@@ -3561,7 +2835,7 @@ class S3Permission(object):
             error_msg = ERROR
 
         org_table = s3db.org_organisation
-        query = self.auth.s3_accessible_query("update", org_table)
+        query = self.s3_accessible_query("update", org_table)
         query &= (org_table.deleted == False)
         rows = db(query).select(org_table.id)
         if rows:
@@ -3580,11 +2854,894 @@ class S3Permission(object):
 
         return []
 
+# =============================================================================
+class S3Permission(object):
+    """ S3 Class to handle permissions """
+
+    TABLENAME = "s3_permission"
+
+    CREATE = 0x0001
+    READ = 0x0002
+    UPDATE = 0x0004
+    DELETE = 0x0008
+
+    ALL = CREATE | READ | UPDATE | DELETE
+    NONE = 0x0000 # must be 0!
+
+    PERMISSION_OPTS = OrderedDict([
+        #(NONE, "NONE"),
+        #(READ, "READ"),
+        #(CREATE|UPDATE|DELETE, "WRITE"),
+        [CREATE, "CREATE"],
+        [READ, "READ"],
+        [UPDATE, "UPDATE"],
+        [DELETE, "DELETE"]])
+
+    # Method string <-> required permission
+    METHODS = Storage({
+        "create": CREATE,
+        "import": CREATE,
+        "read": READ,
+        "report": READ,
+        "search": READ,
+        "update": UPDATE,
+        "delete": DELETE})
+
+    # Lambda expressions for ACL handling
+    required_acl = lambda self, methods: \
+                          reduce(lambda a, b: a | b,
+                                 [self.METHODS[m]
+                                  for m in methods if m in self.METHODS],
+                                 self.NONE)
+    most_permissive = lambda self, acl: \
+                             reduce(lambda x, y: (x[0]|y[0], x[1]|y[1]),
+                                    acl, (self.NONE, self.NONE))
+    most_restrictive = lambda self, acl: \
+                              reduce(lambda x, y: (x[0]&y[0], x[1]&y[1]),
+                                     acl, (self.ALL, self.ALL))
+
+    # -------------------------------------------------------------------------
+    def __init__(self, auth, tablename=None):
+        """
+            Constructor, invoked by AuthS3.__init__
+
+            @param auth: the AuthS3 instance
+            @param tablename: the name for the permissions table
+        """
+
+        # Instantiated once per request, but before Auth tables
+        # are defined and authentication is checked, thus no use
+        # to check permissions in the constructor
+
+        # Store auth reference in self because current.auth is not
+        # available at this point yet, but needed in define_table.
+        self.auth = auth
+
+        settings = current.deployment_settings
+
+        # Policy: which level of granularity do we want?
+        self.policy = settings.get_security_policy()
+        # ACLs to control access per controller:
+        self.use_cacls = self.policy in (3, 4, 5, 6, 7 ,8)
+        # ACLs to control access per function within controllers:
+        self.use_facls = self.policy in (4, 5, 6, 7, 8)
+        # ACLs to control access per table:
+        self.use_tacls = self.policy in (5, 6, 7, 8)
+        # Authorization takes owner entity into account:
+        self.entity_realm = self.policy in (6, 7, 8)
+        # Permissions shared along the hierarchy of entities:
+        self.entity_hierarchy = self.policy in (7, 8)
+        # Permission sets can be delegated:
+        self.delegations = self.policy == 8
+
+        # Permissions table
+        self.tablename = tablename or self.TABLENAME
+        self.table = current.db.get(self.tablename, None)
+
+        # Error messages
+        T = current.T
+        self.INSUFFICIENT_PRIVILEGES = T("Insufficient Privileges")
+        self.AUTHENTICATION_REQUIRED = T("Authentication Required")
+
+        # Request information
+        request = current.request
+        self.controller = request.controller
+        self.function = request.function
+
+        # Request format
+        # @todo: move this into s3tools.py:
+        self.format = request.extension
+        if "format" in request.get_vars:
+            ext = request.get_vars.format
+            if isinstance(ext, list):
+                ext = ext[-1]
+            self.format = ext.lower() or self.format
+        else:
+            ext = [a for a in request.args if "." in a]
+            if ext:
+                self.format = ext[-1].rsplit(".", 1)[1].lower()
+
+        if request.function == "ticket" and \
+           request.controller == "admin":
+            # Error tickets need an override
+            self.format = "html"
+
+        # Page permission cache
+        self.page_acls = Storage()
+        self.table_acls = Storage()
+
+        # Pages which never require permission:
+        # Make sure that any data access via these pages uses
+        # accessible_query explicitly!
+        self.unrestricted_pages = ("default/index",
+                                   "default/user",
+                                   "default/contact",
+                                   "default/about")
+
+        # Default landing pages
+        _next = URL(args=request.args, vars=request.vars)
+        self.homepage = URL(c="default", f="index")
+        self.loginpage = URL(c="default", f="user", args="login",
+                             vars=dict(_next=_next))
+
+    # -------------------------------------------------------------------------
+    def define_table(self, migrate=True, fake_migrate=False):
+        """
+            Define permissions table, invoked by AuthS3.define_tables()
+        """
+
+        db = current.db
+
+        table_group = self.auth.settings.table_group
+        if table_group is None:
+            table_group = "integer" # fallback (doesn't work with requires)
+
+        if not self.table:
+            self.table = db.define_table(self.tablename,
+                            Field("group_id", table_group),
+                            Field("controller", length=64),
+                            Field("function", length=512),
+                            Field("tablename", length=512),
+                            Field("record", "integer"),
+                            Field("oacl", "integer", default=self.ALL),
+                            Field("uacl", "integer", default=self.READ),
+                            # apply this ACL only to records owned
+                            # by this entity
+                            Field("entity", "integer"),
+                            # apply this ACL to all record regardless
+                            # of the owner entity
+                            Field("unrestricted", "boolean",
+                                  default=False),
+                            migrate=migrate,
+                            fake_migrate=fake_migrate,
+                            *(s3_uid()+s3_timestamp()+s3_deletion_status()))
+
+    # -------------------------------------------------------------------------
+    # ACL Management
+    # -------------------------------------------------------------------------
+    def update_acl(self, group,
+                   c=None,
+                   f=None,
+                   t=None,
+                   record=None,
+                   oacl=None,
+                   uacl=None,
+                   entity=None,
+                   delete=False):
+        """
+            Update an ACL
+
+            @param group: the ID or UID of the auth_group this ACL applies to
+            @param c: the controller
+            @param f: the function
+            @param t: the tablename
+            @param record: the record (as ID or Row with ID)
+            @param oacl: the ACL for the owners of the specified record(s)
+            @param uacl: the ACL for all other users
+            @param entity: restrict this ACL to the records owned by this
+                           entity (pe_id), specify "any" for any entity
+            @param delete: delete the ACL instead of updating it
+        """
+
+        ANY = "any"
+
+        unrestricted = entity == ANY
+        if unrestricted:
+            entity = None
+
+        table = self.table
+        if not table:
+            # ACLs not relevant to this security policy
+            return None
+
+        if "permissions" in current.response.s3:
+            del current.response.s3["permissions"]
+
+        if c is None and f is None and t is None:
+            return None
+        if t is not None:
+            c = f = None
+        else:
+            record = None
+
+        if uacl is None:
+            uacl = self.NONE
+        if oacl is None:
+            oacl = uacl
+
+        if group:
+            group_id = None
+            acl = dict(group_id=group_id,
+                       deleted=False,
+                       controller=c,
+                       function=f,
+                       tablename=t,
+                       record=record,
+                       oacl=oacl,
+                       uacl=uacl,
+                       unrestricted=unrestricted,
+                       entity=entity)
+
+            if isinstance(group, basestring) and not group.isdigit():
+                gtable = self.auth.settings.table_group
+                query = (gtable.uuid == group) & \
+                        (table.group_id == gtable.id)
+            else:
+                query = (table.group_id == group)
+                group_id = group
+
+            query &= ((table.controller == c) & \
+                      (table.function == f) & \
+                      (table.tablename == t) & \
+                      (table.record == record) & \
+                      (table.unrestricted == unrestricted) & \
+                      (table.entity == entity))
+            record = current.db(query).select(table.id,
+                                              table.group_id,
+                                              limitby=(0, 1)).first()
+            if record:
+                if delete:
+                    acl = dict(
+                        group_id = None,
+                        deleted = True,
+                        deleted_fk = '{"group_id": %d}' % record.group_id
+                    )
+                else:
+                    acl["group_id"] = record.group_id
+                record.update_record(**acl)
+                success = record.id
+            elif group_id:
+                acl["group_id"] = group_id
+                success = table.insert(**acl)
+
+        return success
+
+    # -------------------------------------------------------------------------
+    def delete_acl(self, group,
+                   c=None,
+                   f=None,
+                   t=None,
+                   record=None,
+                   entity=None):
+        """
+            Delete an ACL
+            @param group: the ID or UID of the auth_group this ACL applies to
+            @param c: the controller
+            @param f: the function
+            @param t: the tablename
+            @param record: the record (as ID or Row with ID)
+            @param entity: restrict this ACL to the records owned by this
+                           entity (pe_id), specify "any" for any entity
+        """
+
+        return self.update_acl(group,
+                               c=c,
+                               f=f,
+                               t=t,
+                               record=record,
+                               entity=entity,
+                               delete=True)
+
+    # -------------------------------------------------------------------------
+    # Record Ownership
+    # -------------------------------------------------------------------------
+    def get_owners(self, table, record):
+        """
+            Get the entity/group/user owning a record
+
+            @param table: the table
+            @param record: the record ID (or the Row, if already loaded)
+
+            @note: if passing a Row, it must contain all available ownership
+                   fields (id, owned_by_user, owned_by_group, owned_by_entity),
+                   otherwise the record will be re-loaded by this function.
+
+            @returns: tuple of (owner_entity, owner_group, owner_user)
+        """
+
+        owner_entity = None
+        owner_group = None
+        owner_user = None
+
+        record_id = None
+
+        DEFAULT = (None, None, None)
+
+        # Load the table, if necessary
+        if table and not hasattr(table, "_tablename"):
+            table = current.s3db.table(table)
+        if not table:
+            return DEFAULT
+
+        # Check which ownership fields the table defines
+        ownership_fields = ("owned_by_entity",
+                            "owned_by_group",
+                            "owned_by_user")
+        fields = [f for f in ownership_fields if f in table.fields]
+        if not fields:
+            # Ownership is not defined for this table
+            return DEFAULT
+
+        if isinstance(record, Row):
+            # Check if all necessary fields are present
+            missing = [f for f in fields if f not in record]
+            if missing:
+                # Have to reload the record :(
+                if table._id.name in record:
+                    record_id = record[table._id.name]
+                record = None
+        else:
+            # Record ID given, must load the record anyway
+            record_id = record
+            record = None
+
+        if not record and record_id:
+            # Get the record
+            fs = [table[f] for f in fields] + [table.id]
+            query = (table._id == record_id)
+            record = current.db(query).select(limitby=(0, 1), *fs).first()
+        if not record:
+            # Record does not exist
+            return DEFAULT
+
+        if "owned_by_entity" in record:
+            owner_entity = record["owned_by_entity"]
+        if "owned_by_group" in record:
+            owner_group = record["owned_by_group"]
+        if "owned_by_user" in record:
+            owner_user = record["owned_by_user"]
+        return (owner_entity, owner_group, owner_user)
+
+    # -------------------------------------------------------------------------
+    def is_owner(self, table, record, owners=None):
+        """
+            Check whether the current user owns the record
+
+            @param table: the table or tablename
+            @param record: the record ID (or the Row if already loaded)
+            @param owners: override the actual record owners by a tuple
+                           (owner_entity, owner_group, owner_user)
+
+            @returns: True if the current user owns the record, else False
+        """
+
+        user_id = None
+        sr = self.auth.get_system_roles()
+
+        if self.auth.user is not None:
+            user_id = self.auth.user.id
+
+        session = current.session
+        roles = [sr.ANONYMOUS]
+        if session.s3 is not None:
+            roles = session.s3.roles or roles
+
+        if sr.ADMIN in roles:
+            # Admin owns all records
+            return True
+        elif owners is not None:
+            owner_entity, owner_group, owner_user = \
+                    owners
+        elif record:
+            owner_entity, owner_group, owner_user = \
+                    self.get_owners(table, record)
+        else:
+            # All users own no records
+            return True
+
+        # Session ownership?
+        if not user_id:
+            if isinstance(record, (Row, dict)):
+                record_id = record[table._id.name]
+            else:
+                record_id = record
+            if self.auth.s3_session_owns(table, record_id):
+                # Session owns record
+                return True
+            else:
+                return False
+
+        # Individual record ownership
+        if owner_user and owner_user == user_id:
+            return True
+
+        # Public record?
+        if not owner_entity and \
+           not owner_group and \
+           not owner_user:
+            return True
+
+        # OrgAuth:
+        # apply only group memberships with are valid for the owner entity
+        if self.entity_realm and owner_entity:
+            realms = self.auth.user.realms
+            roles = [sr.ANONYMOUS]
+            append = roles.append
+            for r in realms:
+                realm = realms[r]
+                if realm is None or owner_entity in realm:
+                    append(r)
+
+        # Ownership based on user role
+        if owner_group and owner_group in roles:
+            return True
+        else:
+            return False
+
+    # -------------------------------------------------------------------------
+    def owner_query(self, table, user, use_realm=True, no_realm=[]):
+        """
+            Returns a query to select the records in table owned by user
+
+            @param table: the table
+            @param user: the current auth.user (None for not authenticated)
+            @param use_realm: use realms
+            @param no_realm: don't include these entities in role realms
+            @returns: a web2py Query instance, or None if no query
+                      can be constructed
+        """
+
+        OUSR = "owned_by_user"
+        OGRP = "owned_by_group"
+        OENT = "owned_by_entity"
+
+        query = None
+        if user is None:
+            # Session ownership?
+            if hasattr(table, "_tablename"):
+                tablename = table._tablename
+            else:
+                tablename = table
+            session = current.session
+            if "owned_records" in session and \
+               tablename in session.owned_records:
+                query = (table._id.belongs(session.owned_records[tablename]))
+        else:
+            use_realm = use_realm and \
+                        OENT in table.fields and self.entity_realm
+
+            # Individual owner query
+            if OUSR in table.fields:
+                user_id = user.id
+                query = (table[OUSR] == user_id)
+
+            # Public record query
+            public = None
+            if OUSR in table.fields:
+                public = (table[OUSR] == None)
+            if OGRP in table.fields:
+                q = (table[OGRP] == None)
+                if public:
+                    public &= q
+                else:
+                    public = q
+            if use_realm:
+                q = (table[OENT] == None)
+                if public:
+                    public &= q
+                else:
+                    public = q
+
+            if query is not None and public is not None:
+                query |= public
+
+            # Group ownerships
+            if OGRP in table.fields:
+                any_entity = []
+                g = None
+                for group_id in user.realms:
+                    realm = user.realms[group_id]
+                    if realm is None or not use_realm:
+                        any_entity.append(group_id)
+                        continue
+                    realm = [e for e in realm if e not in no_realm]
+                    if realm:
+                        q = (table[OGRP] == group_id) & (table[OENT].belongs(realm))
+                        if g is None:
+                            g = q
+                        else:
+                            g |= q
+                if any_entity:
+                    q = (table[OGRP].belongs(any_entity))
+                    if g is None:
+                        g = q
+                    else:
+                        g |= q
+                if g is not None:
+                    if query is None:
+                        query = g
+                    else:
+                        query |= g
+
+        return query
+
+    # -------------------------------------------------------------------------
+    def realm_query(self, table, entities):
+        """
+            Returns a query to select the records owned by one of the
+            entities.
+
+            @param table: the table
+            @param entities: list of entities
+            @returns: a web2py Query instance, or None if no query
+                      can be constructed
+        """
+
+        ANY = "ANY"
+        OENT = "owned_by_entity"
+
+        if ANY in entities:
+            return None
+        elif not entities:
+            return None
+        elif OENT in table.fields:
+            if len(entities) == 1:
+                return (table[OENT] == entities[0])
+            else:
+                return (table[OENT].belongs(entities))
+        return None
+
+    # -------------------------------------------------------------------------
+    # Authorization
+    # -------------------------------------------------------------------------
+    def has_permission(self, method, c=None, f=None, t=None, record=None):
+        """
+            Check permission to access a record with method
+
+            @param method: the access method (string)
+            @param c: the controller name (falls back to current request)
+            @param f: the function name (falls back to current request)
+            @param t: the table or tablename
+            @param record: the record or record ID (None for any record)
+        """
+
+        if not isinstance(method, (list, tuple)):
+            method = [method]
+        if record == 0:
+            record = None
+        _debug("\nhas_permission('%s', c=%s, f=%s, t=%s, record=%s)" % \
+               (",".join(method), c, f, t, record))
+
+        # Auth override, system roles and login
+        auth = self.auth
+        if self.auth.override:
+            _debug("==> auth.override")
+            _debug("*** GRANTED ***")
+            return True
+        sr = auth.get_system_roles()
+        logged_in = auth.s3_logged_in()
+
+        # Required ACL
+        racl = self.required_acl(method)
+        _debug("==> racl: %04X" % racl)
+
+        # Get realms and delegations
+        if not logged_in:
+            realms = Storage({sr.ANONYMOUS:None})
+            delegations = Storage()
+        else:
+            realms = auth.user.realms
+            delegations = auth.user.delegations
+
+        # Administrators have all permissions
+        if sr.ADMIN in realms:
+            _debug("==> user is ADMIN")
+            _debug("*** GRANTED ***")
+            return True
+
+        if not self.use_cacls:
+            _debug("==> simple authorization")
+            # Fall back to simple authorization
+            if logged_in:
+                _debug("*** GRANTED ***")
+                return True
+            else:
+                permitted = racl == self.READ
+                if permitted:
+                    _debug("*** GRANTED ***")
+                else:
+                    _debug("*** DENIED ***")
+                return permitted
+
+        # Do we need to check the owner role (i.e. table+record given)?
+        if t is not None and record is not None:
+            owners = self.get_owners(t, record)
+            is_owner = self.is_owner(t, record, owners=owners)
+            entity = owners[0]
+        else:
+            is_owner = True
+            entity = None
+
+        # Fall back to current request
+        c = c or self.controller
+        f = f or self.function
+
+        response = current.response
+        key = "%s/%s/%s/%s/%s" % (method, c, f, t, record)
+        if "permissions" not in response.s3:
+            response.s3.permissions = Storage()
+        if key in response.s3.permissions:
+            permitted = response.s3.permissions[key]
+            if permitted is None:
+                pass
+            elif permitted:
+                _debug("*** GRANTED (cached) ***")
+            else:
+                _debug("*** DENIED (cached) ***")
+            return response.s3.permissions[key]
+
+        # Get the applicable ACLs
+        acls = self.applicable_acls(racl,
+                                    realms=realms,
+                                    delegations=delegations,
+                                    c=c,
+                                    f=f,
+                                    t=t,
+                                    entity=entity)
+
+        permitted = None
+        if acls is None:
+            _debug("==> no ACLs defined for this case")
+            permitted = True
+        elif not acls:
+            _debug("==> no applicable ACLs")
+            permitted = False
+        else:
+            if entity:
+                if entity in acls:
+                    uacl, oacl = acls[entity]
+                elif "ANY" in acls:
+                    uacl, oacl = acls["ANY"]
+                else:
+                    _debug("==> Owner entity outside realm")
+                    permitted = False
+            else:
+                uacl, oacl = self.most_permissive(acls.values())
+
+            _debug("==> uacl: %04X, oacl: %04X" % (uacl, oacl))
+
+            if permitted is None:
+                if uacl & racl == racl:
+                    permitted = True
+                elif oacl & racl == racl:
+                    if is_owner and record:
+                        _debug("==> User owns the record")
+                    elif record:
+                        _debug("==> User does not own the record")
+                    permitted = is_owner
+                else:
+                    permitted = False
+
+        if permitted is None:
+            raise RuntimeError("Cannot determine permission.")
+        elif permitted:
+            _debug("*** GRANTED ***")
+        else:
+            _debug("*** DENIED ***")
+
+        response.s3.permissions[key] = permitted
+
+        return permitted
+
+    # -------------------------------------------------------------------------
+    def accessible_query(self, method, table, c=None, f=None):
+        """
+            Returns a query to select the accessible records for method
+            in table.
+
+            @param method: the method as string or a list of methods (AND)
+            @param table: the database table or table name
+            @param c: controller name (falls back to current request)
+            @param f: function name (falls back to current request)
+        """
+
+        if not hasattr(table, "_tablename"):
+            tablename = table
+            table = current.s3db.table(tablename)
+            if not table:
+                raise AttributeError("undefined table %s" % tablename)
+
+        if not isinstance(method, (list, tuple)):
+            method = [method]
+        _debug("\naccessible_query(%s, '%s')" % (table, ",".join(method)))
+
+        # Defaults
+        ALL_RECORDS = (table._id > 0)
+        NO_RECORDS = (table._id == 0)
+
+        # Auth override, system roles and login
+        auth = self.auth
+        if self.auth.override:
+            _debug("==> auth.override")
+            _debug("*** ALL RECORDS ***")
+            return ALL_RECORDS
+        sr = auth.get_system_roles()
+        logged_in = auth.s3_logged_in()
+
+        # Required ACL
+        racl = self.required_acl(method)
+        _debug("==> racl: %04X" % racl)
+
+        # Get realms and delegations
+        user = auth.user
+        if not logged_in:
+            realms = Storage({sr.ANONYMOUS:None})
+            delegations = Storage()
+        else:
+            realms = user.realms
+            delegations = user.delegations
+
+        # Administrators have all permissions
+        if sr.ADMIN in realms:
+            _debug("==> user is ADMIN")
+            _debug("*** ALL RECORDS ***")
+            return ALL_RECORDS
+
+        if not self.use_cacls:
+            _debug("==> simple authorization")
+            # Fall back to simple authorization
+            if logged_in:
+                _debug("*** ALL RECORDS ***")
+                return ALL_RECORDS
+            else:
+                permitted = racl == self.READ
+                if permitted:
+                    _debug("*** ALL RECORDS ***")
+                    return ALL_RECORDS
+                else:
+                    _debug("*** ACCESS DENIED ***")
+                    return NO_RECORDS
+
+        # Fall back to current request
+        c = c or self.controller
+        f = f or self.function
+
+        # Get the applicable ACLs
+        acls = self.applicable_acls(racl,
+                                    realms=realms,
+                                    delegations=delegations,
+                                    c=c,
+                                    f=f,
+                                    t=table)
+
+        if acls is None:
+            _debug("==> no ACLs defined for this case")
+            _debug("*** ALL RECORDS ***")
+            return ALL_RECORDS
+        elif not acls:
+            _debug("==> no applicable ACLs")
+            _debug("*** NO RECORDS ***")
+            return NO_RECORDS
+
+        oacls = []
+        uacls = []
+        for entity in acls:
+            acl = acls[entity]
+            if acl[0] & racl == racl:
+                uacls.append(entity)
+            elif acl[1] & racl == racl and entity not in uacls:
+                oacls.append(entity)
+
+        query = None
+        no_realm = []
+        check_owner_acls = True
+
+        OENT = "owned_by_entity"
+
+        if "ANY" in uacls:
+            _debug("==> permitted for any records")
+            query = ALL_RECORDS
+            check_owner_acls = False
+
+        elif uacls:
+            query = self.realm_query(table, uacls)
+            if query is None:
+                _debug("==> permitted for any records")
+                query = ALL_RECORDS
+                check_owner_acls = False
+            else:
+                _debug("==> permitted for records owned by entities %s" % str(uacls))
+                no_realm = uacls
+
+        if check_owner_acls:
+
+            use_realm = "ANY" not in oacls
+            owner_query = self.owner_query(table, user, use_realm=use_realm, no_realm=no_realm)
+
+            if owner_query is not None:
+                _debug("==> permitted for owned records (limit to realms=%s)" % use_realm)
+                if query is not None:
+                    query |= owner_query
+                else:
+                    query = owner_query
+            elif use_realm:
+                _debug("==> permitted for any records owned by entities %s" % str(uacls+oacls))
+                query = self.realm_query(table, uacls+oacls)
+
+        # Fallback
+        if query is None:
+            query = NO_RECORDS
+
+        _debug("*** Accessible Query ***")
+        _debug(str(query))
+        return query
+
+    # -------------------------------------------------------------------------
+    def accessible_url(self,
+                       c=None,
+                       f=None,
+                       p=None,
+                       t=None,
+                       a=None,
+                       args=[],
+                       vars={},
+                       anchor="",
+                       extension=None,
+                       env=None):
+        """
+            Return a URL only if accessible by the user, otherwise False
+
+            @param c: the controller
+            @param f: the function
+            @param p: the permission (defaults to READ)
+            @param t: the tablename (defaults to <c>_<f>)
+            @param a: the application name
+            @param args: the URL arguments
+            @param vars: the URL variables
+            @param anchor: the anchor (#) of the URL
+            @param extension: the request format extension
+            @param env: the environment
+        """
+
+        # Hide disabled modules
+        settings = current.deployment_settings
+        if not settings.has_module(c):
+            return False
+
+        if t is None:
+            t = "%s_%s" % (c, f)
+            table = current.s3db.table(t)
+            if not table:
+                t = None
+        if not p:
+            p = "read"
+
+        permitted = self.has_permission(p, c=c, f=f, t=t)
+        if permitted:
+            return URL(a=a,
+                       c=c,
+                       f=f,
+                       args=args,
+                       vars=vars,
+                       anchor=anchor,
+                       extension=extension,
+                       env=env)
+        else:
+            return False
+
     # -------------------------------------------------------------------------
     def fail(self):
-        """
-            Action upon insufficient permissions
-        """
+        """ Action upon insufficient permissions """
 
         if self.format == "html":
             # HTML interactive request => flash message + redirect
@@ -3601,15 +3758,419 @@ class S3Permission(object):
             else:
                 raise HTTP(401, body=self.AUTHENTICATION_REQUIRED)
 
+    # -------------------------------------------------------------------------
+    # ACL Lookup
+    # -------------------------------------------------------------------------
+    def applicable_acls(self, racl,
+                        realms=None,
+                        delegations=None,
+                        c=None,
+                        f=None,
+                        t=None,
+                        entity=[]):
+        """
+            Find all applicable ACLs for the specified situation for
+            the specified realms and delegations
+
+            @param racl: the required ACL
+            @param realms: the realms
+            @param delegations: the delegations
+            @param c: the controller name, falls back to current request
+            @param f: the function name, falls back to current request
+            @param t: the tablename
+            @param entity: the owner entity
+
+            @returns: None for no ACLs defined (allow),
+                      [] for no ACLs applicable (deny),
+                      or list of applicable ACLs
+        """
+
+        db = current.db
+        table = self.table
+
+        gtable = self.auth.settings.table_group
+
+        if not self.use_cacls:
+            # We do not use ACLs at all (allow all)
+            return None
+        else:
+            acls = Storage()
+
+        c = c or self.controller
+        f = f or self.function
+        if self.page_restricted(c=c, f=f):
+            page_restricted = True
+        else:
+            page_restricted = False
+
+        # Get all roles
+        if realms:
+            roles = realms.keys()
+            if delegations:
+                roles += [d for d in delegations if d not in roles]
+        else:
+            # No roles available (deny all)
+            return acls
+
+        # Base query
+        query = (table.deleted != True) & \
+                (table.group_id.belongs(roles))
+
+        # Page ACLs
+        if page_restricted:
+            q = (table.function == None)
+            if f and self.use_facls:
+                q = (q | (table.function == f))
+            q &= (table.controller == c)
+        else:
+            q = None
+
+        # Table ACLs
+        table_restricted = False
+        if t and self.use_tacls:
+            tq = (table.controller == None) & \
+                 (table.function == None) & \
+                 (table.tablename == t)
+            if q:
+                q = q | tq
+            else:
+                q = tq
+            any_acl = db((table.deleted != True) & tq).select(limitby=(0, 1))
+            table_restricted = len(any_acl) > 0
+
+        # Retrieve the ACLs
+        if q:
+            query &= q
+        query &= (table.group_id == gtable.id)
+        rows = db(query).select(gtable.id, table.ALL)
+
+        # Cascade ACLs
+        ANY = "ANY"
+
+        ALL = (self.ALL, self.ALL)
+        NONE = (self.NONE, self.NONE)
+
+        atn = table._tablename
+        gtn = gtable._tablename
+
+        use_facls = self.use_facls
+        def rule_type(r):
+            if rule.controller is not None:
+                if rule.function is None:
+                    return "c"
+                elif use_facls:
+                    return "f"
+            elif rule.tablename is not None:
+                return "t"
+            return None
+
+        most_permissive = lambda x, y: (x[0] | y[0], x[1] | y[1])
+        most_restrictive = lambda x, y: (x[0] & y[0], x[1] & y[1])
+
+        # Realms
+        delegation_rows = []
+        append_delegation = delegation_rows.append
+        for row in rows:
+
+            # Get the assigning entities
+            group_id = row[gtn].id
+            if group_id in delegations:
+                append_delegation(row)
+            if group_id not in realms:
+                continue
+            elif self.entity_realm:
+                entities = realms[group_id]
+            else:
+                entities = None
+
+            # Get the rule type
+            rule = row[atn]
+            rtype = rule_type(rule)
+            if rtype is None:
+                continue
+
+            # Resolve the realm
+            if rule.unrestricted:
+                entities = [ANY]
+            elif entities is None:
+                if rule.entity is not None:
+                    entities = [rule.entity]
+                else:
+                    entities = [ANY]
+
+            # Merge the ACL
+            acl = (rule["uacl"], rule["oacl"])
+            for e in entities:
+                if e not in acls:
+                    acls[e] = Storage({rtype:acl})
+                elif rtype in acls[e]:
+                    acls[e][rtype] = most_permissive(acls[e][rtype], acl)
+                else:
+                    acls[e][rtype] = acl
+
+        if ANY in acls:
+            default = Storage(acls[ANY])
+        else:
+            default = None
+
+        # Delegations
+        if self.delegations:
+            for row in delegation_rows:
+
+                # Get the rule type
+                rule = row[atn]
+                rtype = rule_type(rule)
+                if rtype is None:
+                    continue
+
+                # Get the delegation realms
+                group_id = row[gtn].id
+                if group_id not in delegations:
+                    continue
+                else:
+                    drealms = delegations[group_id]
+
+                acl = (rule["uacl"], rule["oacl"])
+
+                # Resolve the delegation realms
+                # @todo: optimize
+                for receiver in drealms:
+                    drealm = drealms[receiver]
+
+                    # Skip irrelevant delegations
+                    if entity:
+                        if entity not in drealm:
+                            continue
+                        else:
+                            drealm = [entity]
+
+                    # What ACLs do we have for the receiver?
+                    if receiver in acls:
+                        dacls = Storage(acls[receiver])
+                    elif default is not None:
+                        dacls = default
+                    else:
+                        continue
+
+                    # Filter the delegated ACLs
+                    if rtype in dacls:
+                        dacls[rtype] = most_restrictive(dacls[rtype], acl)
+                    else:
+                        dacls[rtype] = acl
+
+                    # Add/extend the new realms (e=entity, t=rule type)
+                    # @todo: optimize
+                    for e in drealm:
+                        if e in acls:
+                            for t in ("c", "f", "t"):
+                                if t in acls[e]:
+                                    if t in dacls:
+                                        dacls[t] = most_restrictive(dacls[t], acls[e][t])
+                                    else:
+                                        dacls[t] = acls[e][t]
+                        acls[e] = dacls
+
+        acl = acls[ANY] or Storage()
+
+        # Default page ACL
+        if "c" in acl:
+            if "f" in acl:
+                default_page_acl = acl["f"]
+            else:
+                default_page_acl = acl["c"]
+        elif page_restricted:
+            default_page_acl = NONE
+        else:
+            default_page_acl = ALL
+
+        # Default table ACL
+        if "t" in acl:
+            default_table_acl = acl["t"]
+        elif table_restricted:
+            default_table_acl = default_page_acl
+        else:
+            default_table_acl = ALL
+
+        # Order by precedence
+        result = Storage()
+        for e in acls:
+            # Skip irrelevant ACLs
+            if entity and e != entity and e != ANY:
+                continue
+
+            acl = acls[e]
+
+            # Get the page ACL
+            if "c" in acl:
+                if "f" in acl:
+                    page_acl = acl["f"]
+                else:
+                    page_acl = acl["c"]
+            elif page_restricted:
+                page_acl = NONE
+            else:
+                page_acl = ALL
+            page_acl = most_permissive(default_page_acl, page_acl)
+
+            # Get the table ACL
+            if "t" in acl:
+                table_acl = acl["t"]
+            elif table_restricted:
+                table_acl = page_acl
+            else:
+                table_acl = ALL
+            table_acl = most_permissive(default_table_acl, table_acl)
+
+            # Merge
+            acl = most_restrictive(page_acl, table_acl)
+
+            # Include ACL if relevant
+            if acl[0] & racl == racl or acl[1] & racl == racl:
+                result[e] = acl
+
+        #for pe in result:
+            #print "ACL for PE %s: %04X %04X" % (pe, result[pe][0], result[pe][1])
+
+        return result
+
+    # -------------------------------------------------------------------------
+    # Utilities
+    # -------------------------------------------------------------------------
+    def page_restricted(self, c=None, f=None):
+        """
+            Checks whether a page is restricted (=whether ACLs
+            are to be applied)
+
+            @param c: controller name
+            @param f: function name
+        """
+
+        modules = current.deployment_settings.modules
+
+        page = "%s/%s" % (c, f)
+        if page in self.unrestricted_pages:
+            return False
+        elif c not in modules or \
+             c in modules and not modules[c].restricted:
+            return False
+        return True
+
+    # -------------------------------------------------------------------------
+    def hidden_modules(self):
+        """ List of modules to hide from the main menu """
+
+        sr = self.auth.get_system_roles()
+        modules = current.deployment_settings.modules
+
+        hidden_modules = []
+        if self.use_cacls:
+            restricted_modules = [m for m in modules
+                                    if modules[m].restricted]
+            roles = []
+            if current.session.s3 is not None:
+                roles = current.session.s3.roles or []
+            if sr.ADMIN in roles or sr.EDITOR in roles:
+                return []
+            if not roles:
+                hidden_modules = restricted_modules
+            else:
+                t = self.table
+                query = (t.deleted != True) & \
+                        (t.controller.belongs(restricted_modules)) & \
+                        (t.tablename == None)
+                if roles:
+                    query = query & (t.group_id.belongs(roles))
+                else:
+                    query = query & (t.group_id == None)
+                rows = current.db(query).select()
+                acls = dict()
+                for acl in rows:
+                    if acl.controller not in acls:
+                        acls[acl.controller] = self.NONE
+                    acls[acl.controller] |= acl.oacl | acl.uacl
+                hidden_modules = [m for m in restricted_modules
+                                    if m not in acls or not acls[m]]
+        return hidden_modules
+
+    # -------------------------------------------------------------------------
+    def ownership_required(self, method, table, c=None, f=None):
+        """
+            Checks whether ownership can be required to access records in
+            this table (this may not apply to every record in this table).
+
+            @param method: the method as string or a list of methods (AND)
+            @param table: the database table or table name
+            @param c: controller name (falls back to current request)
+            @param f: function name (falls back to current request)
+        """
+
+        if not self.use_cacls:
+            if self.policy in (1, 2):
+                return False
+            else:
+                return True
+
+        if not hasattr(table, "_tablename"):
+            tablename = table
+            table = current.s3db.table(tablename)
+            if not table:
+                raise AttributeError("undefined table %s" % tablename)
+
+        # If the table doesn't have any ownership fields, then no
+        if "owned_by_user" not in table.fields and \
+           "owned_by_group" not in table.fields and \
+           "owned_by_entity" not in table.fields:
+            return False
+
+        if not isinstance(method, (list, tuple)):
+            method = [method]
+
+        # Auth override, system roles and login
+        auth = self.auth
+        if self.auth.override or not self.use_cacls:
+            return False
+        sr = auth.get_system_roles()
+        logged_in = auth.s3_logged_in()
+
+        # Required ACL
+        racl = self.required_acl(method)
+
+        # Get realms and delegations
+        user = auth.user
+        if not logged_in:
+            realms = Storage({sr.ANONYMOUS:None})
+            delegations = Storage()
+        else:
+            realms = user.realms
+            delegations = user.delegations
+
+        # Admin always owns all records
+        if sr.ADMIN in realms:
+            return False
+
+        # Fall back to current request
+        c = c or self.controller
+        f = f or self.function
+
+        # Get the applicable ACLs
+        acls = self.applicable_acls(racl,
+                                    realms=realms,
+                                    delegations=delegations,
+                                    c=c,
+                                    f=f,
+                                    t=table)
+        acls = [entity for entity in acls if acls[entity][0] & racl == racl]
+
+        # If we have a UACL and it is not limited to any realm, then no
+        if "ANY" in acls or acls and "owned_by_entity" not in table.fields:
+            return False
+
+        # In all other cases: yes
+        return True
+
 # =============================================================================
-
 class S3Audit(object):
-
-    """
-        S3 Audit Trail Writer Class
-
-        @author: Dominic König <dominic@aidiq.com>
-    """
+    """ S3 Audit Trail Writer Class """
 
     def __init__(self,
                  tablename="s3_audit",
@@ -3745,7 +4306,6 @@ class S3Audit(object):
         return True
 
 # =============================================================================
-
 class S3RoleManager(S3Method):
     """
         REST Method to manage ACLs (Role Manager UI for administrators)
@@ -4688,4 +5248,314 @@ class S3RoleManager(S3Method):
         return output
 
 # =============================================================================
+class FaceBookAccount(OAuthAccount):
+    """ OAuth implementation for FaceBook """
 
+    AUTH_URL = "https://graph.facebook.com/oauth/authorize"
+    TOKEN_URL = "https://graph.facebook.com/oauth/access_token"
+
+    # -------------------------------------------------------------------------
+    def __init__(self):
+
+        from facebook import GraphAPI, GraphAPIError
+
+        self.GraphAPI = GraphAPI
+        self.GraphAPIError = GraphAPIError
+        g = dict(GraphAPI=GraphAPI,
+                 GraphAPIError=GraphAPIError,
+                 request=current.request,
+                 response=current.response,
+                 session=current.session,
+                 HTTP=HTTP)
+        client = current.auth.settings.facebook
+        OAuthAccount.__init__(self, g, client["id"], client["secret"],
+                              self.AUTH_URL, self.TOKEN_URL,
+                              scope="email,user_about_me,user_location,user_photos,user_relationships,user_birthday,user_website,create_event,user_events,publish_stream")
+        self.graph = None
+
+    # -------------------------------------------------------------------------
+    def login_url(self, next="/"):
+        """ Overriding to produce a different redirect_uri """
+
+        request = current.request
+        session = current.session
+        if not self.accessToken():
+            if not request.vars.code:
+                session.redirect_uri = "%s/%s/default/facebook/login" % \
+                    (current.deployment_settings.get_base_public_url(),
+                     request.application)
+                data = dict(redirect_uri=session.redirect_uri,
+                            response_type="code",
+                            client_id=self.client_id)
+                if self.args:
+                    data.update(self.args)
+                auth_request_url = self.auth_url + "?" + urlencode(data)
+                raise HTTP(307,
+                           "You are not authenticated: you are being redirected to the <a href='" + auth_request_url + "'> authentication server</a>",
+                           Location=auth_request_url)
+            else:
+                session.code = request.vars.code
+                self.accessToken()
+                #return session.code
+        return next
+
+    # -------------------------------------------------------------------------
+    def get_user(self):
+        """ Returns the user using the Graph API. """
+
+        db = current.db
+        auth = current.auth
+        session = current.session
+
+        if not self.accessToken():
+            return None
+
+        if not self.graph:
+            self.graph = self.GraphAPI((self.accessToken()))
+
+        user = None
+        try:
+            user = self.graph.get_object_c("me")
+        except self.GraphAPIError:
+            self.session.token = None
+            self.graph = None
+
+        if user:
+            # Check if a user with this email has already registered
+            #session.facebooklogin = True
+            table = auth.settings.table_user
+            query = (table.email == user["email"])
+            existent = db(query).select(table.id,
+                                        table.password,
+                                        limitby=(0, 1)).first()
+            if existent:
+                #session["%s_setpassword" % existent.id] = existent.password
+                _user = dict(first_name = user.get("first_name", ""),
+                             last_name = user.get("last_name", ""),
+                             facebookid = user["id"],
+                             facebook = user.get("username", user["id"]),
+                             email = user["email"],
+                             password = existent.password
+                            )
+                return _user
+            else:
+                # b = user["birthday"]
+                # birthday = "%s-%s-%s" % (b[-4:], b[0:2], b[-7:-5])
+                # if 'location' in user:
+                #     session.flocation = user['location']
+                #session["is_new_from"] = "facebook"
+                auth.s3_send_welcome_email(user)
+                # auth.initial_user_permission(user)  # Called on profile page
+                _user = dict(first_name = user.get("first_name", ""),
+                             last_name = user.get("last_name", ""),
+                             facebookid = user["id"],
+                             facebook = user.get("username", user["id"]),
+                             nickname = IS_SLUG()(user.get("username", "%(first_name)s-%(last_name)s" % user) + "-" + user['id'][:5])[0],
+                             email = user["email"],
+                             # birthdate = birthday,
+                             about = user.get("bio", ""),
+                             website = user.get("website", ""),
+                             # gender = user.get("gender", "Not specified").title(),
+                             photo_source = 3,
+                             tagline = user.get("link", ""),
+                             registration_type = 2,
+                            )
+                return _user
+
+# =============================================================================
+class GooglePlusAccount(OAuthAccount):
+    """
+        OAuth implementation for Google
+        https://code.google.com/apis/console/
+    """
+
+    AUTH_URL = "https://accounts.google.com/o/oauth2/auth"
+    TOKEN_URL = "https://accounts.google.com/o/oauth2/token"
+    API_URL = "https://www.googleapis.com/oauth2/v1/userinfo"
+
+    # -------------------------------------------------------------------------
+    def __init__(self):
+
+        request = current.request
+        settings = current.deployment_settings
+
+        g = dict(request=request,
+                 response=current.response,
+                 session=current.session,
+                 HTTP=HTTP)
+
+        client = current.auth.settings.google
+
+        self.globals = g
+        self.client = client
+        self.client_id = client["id"]
+        self.client_secret = client["secret"]
+        self.auth_url = self.AUTH_URL
+        self.args = dict(
+                scope = "https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile",
+                user_agent = "google-api-client-python-plus-cmdline/1.0",
+                xoauth_displayname = settings.get_system_name(),
+                response_type = "code",
+                redirect_uri = "%s/%s/default/google/login" % \
+                    (settings.get_base_public_url(),
+                     request.application),
+                approval_prompt = "force",
+                state = "google"
+            )
+        self.graph = None
+
+    # -------------------------------------------------------------------------
+    def __build_url_opener(self, uri):
+        """
+            Build the url opener for managing HTTP Basic Athentication
+        """
+        # Create an OpenerDirector with support
+        # for Basic HTTP Authentication...
+
+        auth_handler = urllib2.HTTPBasicAuthHandler()
+        auth_handler.add_password(None,
+                                  uri,
+                                  self.client_id,
+                                  self.client_secret)
+        opener = urllib2.build_opener(auth_handler)
+        return opener
+
+    # -------------------------------------------------------------------------
+    def accessToken(self):
+        """
+            Return the access token generated by the authenticating server.
+
+            If token is already in the session that one will be used.
+            Otherwise the token is fetched from the auth server.
+        """
+
+        session = current.session
+
+        if session.token and session.token.has_key("expires"):
+            expires = session.token["expires"]
+            # reuse token until expiration
+            if expires == 0 or expires > time.time():
+                return session.token["access_token"]
+        if session.code:
+            data = dict(client_id = self.client_id,
+                        client_secret = self.client_secret,
+                        redirect_uri = self.args["redirect_uri"],
+                        code = session.code,
+                        grant_type = "authorization_code",
+                        scope = "https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile")
+
+            # if self.args:
+            #     data.update(self.args)
+            open_url = None
+            opener = self.__build_url_opener(self.TOKEN_URL)
+            try:
+                open_url = opener.open(self.TOKEN_URL, urlencode(data))
+            except urllib2.HTTPError, e:
+                raise Exception(e.read())
+            finally:
+                del session.code # throw it away
+
+            if open_url:
+                try:
+                    session.token = json.loads(open_url.read())
+                    session.token["expires"] = int(session.token["expires_in"]) + \
+                        time.time()
+                finally:
+                    opener.close()
+                return session.token["access_token"]
+
+        session.token = None
+        return None
+
+    # -------------------------------------------------------------------------
+    def login_url(self, next="/"):
+        """ Overriding to produce a different redirect_uri """
+
+        request = current.request
+        session = current.session
+        if not self.accessToken():
+            if not request.vars.code:
+                session.redirect_uri = self.args["redirect_uri"]
+                data = dict(redirect_uri=session.redirect_uri,
+                            response_type="code",
+                            client_id=self.client_id)
+                if self.args:
+                    data.update(self.args)
+                auth_request_url = self.auth_url + "?" + urlencode(data)
+                raise HTTP(307,
+                           "You are not authenticated: you are being redirected to the <a href='" + auth_request_url + "'> authentication server</a>",
+                           Location=auth_request_url)
+            else:
+                session.code = request.vars.code
+                self.accessToken()
+                #return session.code
+        return next
+
+    # -------------------------------------------------------------------------
+    def get_user(self):
+        """ Returns the user using the Graph API. """
+
+        db = current.db
+        auth = current.auth
+        session = current.session
+
+        if not self.accessToken():
+            return None
+
+        user = None
+        try:
+            user = self.call_api()
+        except Exception, e:
+            session.token = None
+
+        if user:
+            # Check if a user with this email has already registered
+            #session.googlelogin = True
+            table = auth.settings.table_user
+            query = (table.email == user["email"])
+            existent = db(query).select(table.id,
+                                        table.password,
+                                        limitby=(0, 1)).first()
+            if existent:
+                #session["%s_setpassword" % existent.id] = existent.password
+                _user = dict(
+                            #first_name = user.get("given_name", user["name"]),
+                            #last_name = user.get("family_name", user["name"]),
+                            googleid = user["id"],
+                            email = user["email"],
+                            password = existent.password
+                            )
+                return _user
+            else:
+                # b = user["birthday"]
+                # birthday = "%s-%s-%s" % (b[-4:], b[0:2], b[-7:-5])
+                # if "location" in user:
+                #     session.flocation = user["location"]
+                #session["is_new_from"] = "google"
+                auth.s3_send_welcome_email(user)
+                _user = dict(
+                            first_name = user.get("given_name", user["name"].split()[0]),
+                            last_name = user.get("family_name", user["name"].split()[-1]),
+                            googleid = user["id"],
+                            nickname = "%(first_name)s-%(last_name)s-%(id)s" % dict(first_name=user["name"].split()[0].lower(), last_name=user["name"].split()[-1].lower(), id=user['id'][:5]),
+                            email = user["email"],
+                            # birthdate = birthday,
+                            website = user.get("link", ""),
+                            # gender = user.get("gender", "Not specified").title(),
+                            photo_source = 6 if user.get("picture", None) else 2,
+                            googlepicture = user.get("picture", ""),
+                            registration_type = 3,
+                            )
+                return _user
+
+    # -------------------------------------------------------------------------
+    def call_api(self):
+        api_return = urllib.urlopen("https://www.googleapis.com/oauth2/v1/userinfo?access_token=%s" % self.accessToken())
+        user = json.loads(api_return.read())
+        if user:
+            return user
+        else:
+            self.session.token = None
+            return None
+
+# END =========================================================================

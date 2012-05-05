@@ -28,12 +28,27 @@ $(document).ready(function() {
     function InvItemPackIDChange() {     
     	// Cancel previous request
       	try {S3.JSONRequest[$(this).attr('id')].abort()} catch(err) {};
-    	
+
         $('#TotalQuantity').remove();   
+        if ($('[name = "inv_item_id"]').length > 0) {
+            id = $('[name = "inv_item_id"]').val()
+        }
+        else if  ($('[name = "send_inv_item_id"]').length > 0) {
+            id = $('[name = "send_inv_item_id"]').val()
+        }
+// Following condition removed since it doesn't appear to be correct
+// the ajax call is looking for the number of items in stock, but
+// this is the supply catalogue id - not an id related to an inventory
+//        else if  ($('[name = "item_id"]').length > 0) {
+//            id = $('[name = "item_id"]').val()
+//        }
+        else
+            return;
+
+        var url = S3.Ap.concat('/inv/inv_item_quantity/' + id);
         if ($('#inv_quantity_ajax_throbber').length == 0 ) {
         	$('[name = "quantity"]').after('<div id="inv_quantity_ajax_throbber" class="ajax_throbber" style="float:right"/>'); 
         }
-        var url = S3.Ap.concat('/inv/inv_item_quantity/' + $('[name = "inv_item_id"]').val());
         
 	    // Save JSON Request by element id
         S3.JSONRequest[$(this).attr('id')] = $.getJSON(url, function(data) {
@@ -57,7 +72,7 @@ $(document).ready(function() {
             $('[name = "quantity"]').after(TotalQuantity);
         });
     };
-    $('#inv_send_item_item_pack_id').change(InvItemPackIDChange);
+    $('#inv_track_item_item_pack_id').change(InvItemPackIDChange);
 /**
     // Item ID Field
     // Assets don't use Packs, so skip
@@ -143,7 +158,7 @@ $(document).ready(function() {
 							RecvTable += data[0].id
 							
 						} else {
-							RecvURL = S3.Ap.concat('/', App, '/', ShipmentType, '/',  data[i].id, '/', ShipmentType, '_item');
+							RecvURL = S3.Ap.concat('/', App, '/', ShipmentType, '/',  data[i].id, '/track_item');
 							RecvTable += "<a href = '" + RecvURL + "'>"; 
 							if (data[i].date != null) {
 								RecvTable += data[i].date.substring(0, 10) + ' - '
@@ -252,6 +267,7 @@ $(document).ready(function() {
 	});
 	*/
 	/* Populate Site & Org Based on Person */
+	/* @ToDo: have this only select the correct site - and not disable the field
 	$('#asset_log_person_id').change( function() {
 		// Cancel previous request
 		try {S3.JSONRequest[$(this).attr('id')].abort()} catch(err) {};
@@ -305,5 +321,5 @@ $(document).ready(function() {
 			$('#dummy_asset_log_organisation_id').val('')
 												 .removeAttr('disabled');
 		}
-	});
+	});*/
 });

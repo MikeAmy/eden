@@ -15,6 +15,10 @@ if len(pop_list) > 0:
 
     # Add core data as long as at least one populate setting is on
 
+    if deployment_settings.get_auth_opt_in_to_email():
+        table = db["pr_group"]
+        for team in deployment_settings.get_auth_opt_in_team_list():
+            table.insert(name = team, group_type = 5)
     # Scheduled Tasks
     if deployment_settings.has_module("msg"):
         # Send Messages from Outbox
@@ -32,7 +36,25 @@ if len(pop_list) > 0:
                              timeout=300, # seconds
                              repeats=0    # unlimited
                             )
-
+        # Inbound email
+        # To schedule reading inbound email, uncomment and substitute the
+        # username from the task definition for example-username. This example
+        # shows reading email every 15 minutes. Add one task for each email
+        # source.
+        #s3task.schedule_task("process_inbound_email",
+        #                     vars={"username":"example-username"},
+        #                     period=900,  # seconds
+        #                     timeout=300, # seconds
+        #                     repeats=0    # unlimited
+        #                    )
+        
+        #Process the msg_log for unparsed messages.
+        #s3task.schedule_task("process_log",
+        #                    period=300,  # seconds
+        #                    timeout=300, # seconds
+        #                    repeats=0    # unlimited
+        #                     )
+        
     # Person Registry
     tablename = "pr_person"
     table = db[tablename]
@@ -64,18 +86,17 @@ if len(pop_list) > 0:
 
     # Messaging Module
     if deployment_settings.has_module("msg"):
-        table = db.msg_email_settings
+        # To read inbound email, set username (email address), password, etc.
+        # here. Insert multiple records for multiple email sources.
+        table = db.msg_inbound_email_settings
         if not db(table.id > 0).select(table.id, limitby=(0, 1)).first():
-            table.insert(
-                inbound_mail_server = "imap.gmail.com",
-                inbound_mail_type = "imap",
-                inbound_mail_ssl = True,
-                inbound_mail_port = 993,
-                inbound_mail_username = "username",
-                inbound_mail_password = "password",
-                inbound_mail_delete = False,
-                #outbound_mail_server = "mail:25",
-                #outbound_mail_from = "demo@sahanafoundation.org",
+            table.insert(server = "imap.gmail.com",
+                         protocol = "imap",
+                         use_ssl = True,
+                         port = 993,
+                         username = "example-username",
+                         password = "password",
+                         delete_from_server = False
             )
         # Need entries for the Settings/1/Update URLs to work
         table = db.msg_setting
@@ -116,7 +137,7 @@ if len(pop_list) > 0:
         query = (db.auth_group.uuid == sysroles.MAP_ADMIN)
         map_admin = db(query).select(db.auth_group.id,
                                      limitby=(0, 1)).first().id
-        db(table.level == "L0").update(owned_by_role=map_admin)
+        db(table.level == "L0").update(owned_by_group=map_admin)
     # Should work for our 3 supported databases: sqlite, MySQL & PostgreSQL
     field = "name"
     db.executesql("CREATE INDEX %s__idx on %s(%s);" % \

@@ -38,6 +38,7 @@ from gluon import *
 from gluon.dal import Row
 from gluon.storage import Storage
 from ..s3 import *
+from eden.layouts import S3AddResourceLink
 
 # @ToDo: Put the most common patterns at the top to optimise
 um_patterns = ["\sper\s?(.*)$",                         # CHOCOLATE, per 100g
@@ -132,17 +133,11 @@ class S3SupplyModel(S3Model):
                                                     sort=True)),
                     represent = self.supply_brand_represent,
                     label = T("Brand"),
-                    comment = DIV(A(ADD_BRAND,
-                                    _class="colorbox",
-                                    _href=URL(c="supply", f="brand",
-                                              args="create",
-                                              vars=dict(format="popup")),
-                                    _target="top",
-                                    _title=ADD_BRAND),
-                                  DIV( _class="tooltip",
-                                       _title="%s|%s" % (T("Brand"),
-                                                         T("The list of Brands are maintained by the Administrators.")))
-                              ),
+                    comment=S3AddResourceLink(c="supply",
+                                              f="brand",
+                                              label=ADD_BRAND,
+                                              title=T("Brand"),
+                                              tooltip=T("The list of Brands are maintained by the Administrators.")),
                     ondelete = "RESTRICT")
 
         # =====================================================================
@@ -189,17 +184,11 @@ class S3SupplyModel(S3Model):
                                               look_up_value = id) or NONE,
                     default = 1,
                     label = T("Catalog"),
-                    comment = DIV(A(ADD_CATALOG,
-                                    _class="colorbox",
-                                    _href=URL(c="supply", f="catalog",
-                                              args="create",
-                                              vars=dict(format="popup")),
-                                    _target="top",
-                                    _title=ADD_CATALOG),
-                                  DIV( _class="tooltip",
-                                       _title="%s|%s" % (T("Catalog"),
-                                                         T("The list of Catalogs are maintained by the Administrators.")))
-                              ),
+                    comment=S3AddResourceLink(c="supply",
+                                              f="catalog",
+                                              label=ADD_CATALOG,
+                                              title=T("Catalog"),
+                                              tooltip=T("The list of Catalogs are maintained by the Administrators.")),
                     ondelete = "RESTRICT")
 
         # Categories as component of Catalogs
@@ -221,7 +210,8 @@ class S3SupplyModel(S3Model):
                                    ondelete = "RESTRICT"),
                              Field("code", length=16,
                                    label = T("Code"),
-                                   required = True),
+                                   #required = True
+                                   ),
                              Field("name", length=128,
                                    label = T("Name")
                                    ),
@@ -263,17 +253,11 @@ class S3SupplyModel(S3Model):
                                                     "%(name)s",
                                                     sort=True))
 
-        item_category_comment = DIV(A(ADD_ITEM_CATEGORY,
-                                      _class="colorbox",
-                                      _href=URL(c="supply", f="item_category",
-                                                args="create",
-                                                vars=dict(format="popup")),
-                                      _target="top",
-                                      _title=ADD_ITEM_CATEGORY),
-                                    DIV( _class="tooltip",
-                                         _title="%s|%s" % (T("Item Category"),
-                                                           ADD_ITEM_CATEGORY)),
-                                    )
+        item_category_comment = S3AddResourceLink(c="supply",
+                                                  f="item_category",
+                                                  label=ADD_ITEM_CATEGORY,
+                                                  title=T("Item Category"),
+                                                  tooltip=ADD_ITEM_CATEGORY)
 
         table.parent_item_category_id.requires = item_category_requires
         table.parent_item_category_id.represent = self.item_category_represent
@@ -290,6 +274,18 @@ class S3SupplyModel(S3Model):
         # Categories as component of Categories
         add_component("supply_item_category",
                       supply_item_category="parent_item_category_id")
+
+        def supply_item_category_onvalidate(form):
+            """
+                Checks that either a Code OR a Name are entered
+            """
+            # If their is a tracking number check that it is unique within the org
+            if not (form.vars.code or form.vars.name):
+                form.errors.code = form.errors.name = T("An Item Category must have a Code OR a Name.")
+
+        self.configure(tablename,
+                       onvalidation = supply_item_category_onvalidate,
+                       )
 
         # =====================================================================
         # Item
@@ -334,22 +330,27 @@ class S3SupplyModel(S3Model):
                              Field("weight",
                                    "double",
                                    label = T("Weight (kg)"),
+                                   represent = lambda v, row=None: IS_FLOAT_AMOUNT.represent(v, precision=2)
                                    ),
                              Field("length",
                                    "double",
                                    label = T("Length (m)"),
+                                   represent = lambda v, row=None: IS_FLOAT_AMOUNT.represent(v, precision=2)
                                    ),
                              Field("width",
                                    "double",
                                    label = T("Width (m)"),
+                                   represent = lambda v, row=None: IS_FLOAT_AMOUNT.represent(v, precision=2)
                                    ),
                              Field("height",
                                    "double",
                                    label = T("Height (m)"),
+                                   represent = lambda v, row=None: IS_FLOAT_AMOUNT.represent(v, precision=2)
                                    ),
                              Field("volume",
                                    "double",
                                    label = T("Volume (m3)"),
+                                   represent = lambda v, row=None: IS_FLOAT_AMOUNT.represent(v, precision=2)
                                    ),
                              # These comments do *not* pull through to an Inventory's Items or a Request's Items
                              comments(),
@@ -391,29 +392,23 @@ class S3SupplyModel(S3Model):
                                          sort=True),
                     represent = self.supply_item_represent,
                     label = T("Item"),
-                    widget = S3SearchAutocompleteWidget(
-                                    get_fieldname = "item_id",
-                                    tablename = "supply_catalog_item",
-                                    represent = lambda id: \
-                                        self.supply_item_represent(id,
-                                                                   show_link=False,
-                                                                   # @ToDo: this doesn't work
-                                                                   show_um=False,
-                                                                   none_value=None),
-                                    ),
-                    comment = DIV(A(ADD_ITEM,
-                                    _class="colorbox",
-                                    _href=URL(c="supply", f="item",
-                                              args="create",
-                                              vars=dict(format="popup")),
-                                    _target="top",
-                                    _title=ADD_ITEM),
-                                  DIV( _class="tooltip",
-                                       _title="%s|%s" % (T("Item"),
-                                                         T("Type the name of an existing catalog item OR Click 'Add New Item' to add an item which is not in the catalog.")
-                                                         )
-                                      )
-                                  ),
+                    widget = S3AutocompleteWidget("supply", 
+                                         "item"),
+                    #widget = S3SearchAutocompleteWidget(
+                    #                get_fieldname = "item_id",
+                    #                tablename = "supply_catalog_item",
+                    #                represent = lambda id: \
+                    #                    self.supply_item_represent(id,
+                    #                                               show_link=False,
+                    #                                               # @ToDo: this doesn't work
+                    #                                               show_um=False,
+                    #                                               none_value=None),
+                    #                ),
+                    comment=S3AddResourceLink(c="supply",
+                                              f="item",
+                                              label=ADD_ITEM,
+                                              title=T("Item"),
+                                              tooltip=T("Type the name of an existing catalog item OR Click 'Add New Item' to add an item which is not in the catalog.")),
                     ondelete = "RESTRICT")
 
         # ---------------------------------------------------------------------
@@ -434,7 +429,7 @@ class S3SupplyModel(S3Model):
                         name="item_search_brand",
                         label=T("Brand"),
                         comment=T("Search for an item by brand."),
-                        field=["brand_id"],
+                        field="brand_id",
                         represent ="%(name)s",
                         cols = 3
                       ),
@@ -442,7 +437,7 @@ class S3SupplyModel(S3Model):
                         name="item_search_year",
                         label=T("Year"),
                         comment=T("Search for an item by Year of Manufacture."),
-                        field=["year"],
+                        field="year",
                         #represent ="%(name)s",
                         cols = 1
                       ),
@@ -553,7 +548,7 @@ $(document).ready(function() {
                          name="catalog_item_search_catalog",
                          label=T("Catalog"),
                          comment=T("Search for an item by catalog."),
-                         field=["catalog_id"],
+                         field="catalog_id",
                          represent ="%(name)s",
                          cols = 3
                        ),
@@ -561,7 +556,7 @@ $(document).ready(function() {
                          name="catalog_item_search_category",
                          label=T("Category"),
                          comment=T("Search for an item by category."),
-                         field=["item_category_id"],
+                         field="item_category_id",
                          represent = lambda id: \
                             self.item_category_represent(id, use_code=False),
                          cols = 3
@@ -570,7 +565,7 @@ $(document).ready(function() {
                          name="catalog_item_search_brand",
                          label=T("Brand"),
                          comment=T("Search for an item by brand."),
-                         field=["item_id$brand_id"],
+                         field="item_id$brand_id",
                          represent ="%(name)s",
                          cols = 3
                        ),
@@ -589,9 +584,9 @@ $(document).ready(function() {
                                                 if field.writable and
                                                 field.name != "id"]
 
-        self.configure("supply_item", deduplicate=self.item_duplicate)
-        self.configure("supply_catalog_item", deduplicate=self.item_duplicate)
-        self.configure("supply_item_category", deduplicate=self.item_duplicate)
+        configure("supply_item", deduplicate=self.item_duplicate)
+        configure("supply_catalog_item", deduplicate=self.item_duplicate)
+        configure("supply_item_category", deduplicate=self.item_duplicate)
 
         # =====================================================================
         # Item Pack
@@ -609,6 +604,7 @@ $(document).ready(function() {
                              Field("quantity", "double",
                                    notnull=True,
                                    label = T("Quantity"),
+                                   represent = lambda v, row=None: IS_FLOAT_AMOUNT.represent(v, precision=2)
                                    ),
                              comments(),
                              *meta_fields())
@@ -649,20 +645,11 @@ $(document).ready(function() {
                                          ),
                     represent = self.item_pack_represent,
                     label = T("Pack"),
-                    comment = DIV(DIV( _class="tooltip",
-                                       _title="%s|%s" % (T("Item Packs"),
-                                                         T("The way in which an item is normally distributed"))),
-                                  A( ADD_ITEM_PACK,
-                                     _class="colorbox",
-                                     _href=URL(c="supply", f="item_pack",
-                                               args="create",
-                                               vars=dict(format="popup")
-                                               ),
-                                     _target="top",
-                                     _id = "item_pack_add",
-                                     _style = "display: none",
-                                     ),
-                                  ),
+                    #comment=S3AddResourceLink(c="supply",
+                    #                          f="item_pack",
+                    #                          label=ADD_ITEM_PACK,
+                    #                          title=T("Item Packs"),
+                    #                          tooltip=T("The way in which an item is normally distributed")),
                     script = SCRIPT(
 """
 S3FilterFieldChange({
@@ -710,7 +697,8 @@ S3FilterFieldChange({
                                                        )
                                                ),
                                    default = 1,
-                                   notnull=True),
+                                   notnull=True,
+                                   represent = lambda v, row=None: IS_FLOAT_AMOUNT.represent(v, precision=2)),
                              supply_item_id("alt_item_id",
                                             notnull=True),
                              comments(),
@@ -826,7 +814,7 @@ S3FilterFieldChange({
                       S3SearchOptionsWidget(
                         name="item_entity_search_category",
                         label=T("Code Share"),
-                        field=["item_id$item_category_id"],
+                        field="item_id$item_category_id",
                         represent ="%(name)s",
                         comment=T("If none are selected, then all are searched."),
                         cols = 2
@@ -834,7 +822,7 @@ S3FilterFieldChange({
                       #S3SearchOptionsWidget(
                       #  name="item_entity_search_country",
                       #  label=T("Country"),
-                      #  field=["country"],
+                      #  field="country",
                       #  represent ="%(name)s",
                       #  comment=T("If none are selected, then all are searched."),
                       #  cols = 2
@@ -861,6 +849,28 @@ S3FilterFieldChange({
 
     # -------------------------------------------------------------------------
     @staticmethod
+    def defaults():
+        """ Return safe defaults for names in case the model is disabled """
+
+        supply_item_id = S3ReusableField("item_id", "integer",
+                                         writable=False,
+                                         readable=False)
+        item_id = S3ReusableField("item_entity_id", "integer",
+                                  writable=False,
+                                  readable=False)()
+        item_pack_id = S3ReusableField("item_pack_id", "integer",
+                                       writable=False,
+                                       readable=False)
+        supply_item_pack_virtualfields = None
+        return Storage(
+                supply_item_id = supply_item_id,
+                supply_item_entity_id = item_id,
+                supply_item_pack_id = item_pack_id,
+                supply_item_pack_virtualfields = supply_item_pack_virtualfields,
+                )
+
+    # -------------------------------------------------------------------------
+    @staticmethod
     def supply_item_add (quantity_1, pack_quantity_1,
                          quantity_2, pack_quantity_2):
         """
@@ -872,10 +882,11 @@ S3FilterFieldChange({
         """
         if pack_quantity_1 == pack_quantity_2:
             # Faster calculation
-            return quantity_1 + quantity_2
+            quantity = quantity_1 + quantity_2
         else:
-            return ((quantity_1 * pack_quantity_1) +
-                    (quantity_2 * pack_quantity_2)) / pack_quantity_1
+            quantity = ((quantity_1 * pack_quantity_1) +
+                        (quantity_2 * pack_quantity_2)) / pack_quantity_1
+        return quantity
 
     # -------------------------------------------------------------------------
     @staticmethod
@@ -1091,7 +1102,8 @@ S3FilterFieldChange({
             resource_duplicate("supply_item_category", job,
                                fields = ["catalog_id",
                                          "parent_item_category_id",
-                                         "code"])
+                                         "code",
+                                         "name"])
 
     # -------------------------------------------------------------------------
     @staticmethod
@@ -1107,6 +1119,7 @@ S3FilterFieldChange({
         resource_duplicate(tablename, job,
                            fields = ["name",
                                      "item_id",
+                                     "quantity",
                                     ])
 
     # -------------------------------------------------------------------------
@@ -1216,6 +1229,15 @@ def resource_duplicate(tablename, job, fields=None):
                     field_query = (table[field].lower() == value.lower())
                 except:
                     field_query = (table[field] == value)
+
+                # Hack for identifying Item duplicates basd on code
+                if tablename == "supply_item" and field == "code":
+                    _duplicate = db(field_query).select(table.id,
+                                          limitby=(0, 1)).first()
+                    if _duplicate:
+                        job.id = _duplicate.id
+                        job.method = job.METHOD.UPDATE
+                        return
 
             # if not value:
                 # # Workaround

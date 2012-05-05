@@ -126,7 +126,8 @@ class S3MainMenu:
         menu_lang = MM("Language", **attr)
         for language in s3.l10n_languages:
             menu_lang.append(MM(s3.l10n_languages[language], r=request,
-                             vars={"_language":language}))
+                                translate=False,
+                                vars={"_language":language}))
         return menu_lang
 
     # -------------------------------------------------------------------------
@@ -164,6 +165,7 @@ class S3MainMenu:
                 login_next = request.get_vars["_next"]
 
             menu_auth = MM("Login", c="default", f="user", m="login",
+                           _id="auth_menu_login",
                            vars=dict(_next=login_next), **attr)(
                             MM("Login", m="login",
                                vars=dict(_next=login_next),
@@ -175,8 +177,9 @@ class S3MainMenu:
                         )
         else:
             menu_auth = MM(auth.user.email, c="default", f="user",
-                           translate=False, link=False, **attr)(
-                            MM("Logout", m="logout"),
+                           translate=False, link=False, _id="auth_menu_email",
+                           **attr)(
+                            MM("Logout", m="logout", _id="auth_menu_logout"),
                             MM("User Profile", m="profile"),
                             MM("Personal Data", c="pr", f="person", m="update",
                                 vars={"person.pe_id" : auth.user.pe_id}),
@@ -212,7 +215,6 @@ class S3MainMenu:
                             MM("Settings", f="settings"),
                             MM("Users", f="user"),
                             MM("Database", c="appadmin", f="index"),
-                            MM("Import", f="import_file"),
                             MM("Synchronization", c="sync", f="index"),
                             MM("Tickets", f="errors"),
                         )
@@ -235,6 +237,7 @@ class S3MainMenu:
         s3db = current.s3db
         request = current.request
         session = current.session
+        s3 = current.response.s3
 
         # See if we need to switch config before we decide which
         # config item to mark as active:
@@ -246,7 +249,9 @@ class S3MainMenu:
                 # Manually-crafted URL?
                 pass
             else:
-                if config != session.s3.gis_config_id:
+                if s3.gis.config and s3.gis.config.id != config:
+                    # Set this as the current config
+                    # @ToDo: restore some awareness of this in session
                     config = gis.set_config(config)
                     if settings.has_module("event"):
                         # See if this config is associated with an Event
@@ -282,7 +287,7 @@ class S3MainMenu:
                         "id": "gis_menu_id_0",
                         # @ToDo: Show when default item is selected without having
                         # to do a DB query to read the value
-                        #"value": session.s3.gis_config_id == 0,
+                        #"value": s3.gis.config and s3.gis.config.id is 0,
                         "request_type": "load"
                        }, args=request.args, vars={"_config": 0}
                     )
@@ -291,8 +296,7 @@ class S3MainMenu:
                 gis_menu(
                     MM({"name": T(config.name),
                         "id": "gis_menu_id_%s" % config.id,
-                        # Currently not working on 1st request afterwards as being set after this (in zz_last.py)
-                        "value": session.s3.gis_config_id == config.id,
+                        "value": s3.gis.config and s3.gis.config.id == config.id,
                         "request_type": "load"
                        }, args=request.args, vars={"_config": config.id}
                     )
@@ -316,7 +320,6 @@ class S3MainMenu:
             MM("Data Prices", f="prices", restrict=[ADMIN]),
             MM("User manual", f="manual"),
             MM("Model descriptions", f="model_descriptions"),
-
         )
         return menu_climate
 
@@ -531,11 +534,29 @@ class S3OptionsMenu:
                         M("List All"),
                         # @ToDo Search by type, services, location, available space
                         #M("Search", m="search"),
+                        M("Import", m="import"),
                     ),
                     M(types, f="shelter_type", restrict=[ADMIN])(
                         M("List / Add Services", m="create"),
                         M("List / Add Types"),
                     )
+                )
+
+    # -------------------------------------------------------------------------
+    def cms(self):
+        """ CMS / Content Management System """
+
+        return M(c="cms")(
+                    M("Series", f="series")(
+                        M("New", m="create"),
+                        M("List All"),
+                        M("View as Pages", f="blog"),
+                    ),
+                    M("Posts", f="post")(
+                        M("New", m="create"),
+                        M("List All"),
+                        M("View as Pages", f="page"),
+                    ),
                 )
 
     # -------------------------------------------------------------------------
@@ -580,7 +601,6 @@ class S3OptionsMenu:
                     )
                 )
 
-
     # -------------------------------------------------------------------------
     def dvi(self):
         """ DVI / Disaster Victim Identification """
@@ -613,6 +633,18 @@ class S3OptionsMenu:
                         M("List All"),
                     ),
                     M("Dashboard", f="index"),
+                )
+
+    # -------------------------------------------------------------------------
+    def dvr(self):
+        """ DVR Menu """
+
+        return M(c="dvr")(
+                    M("Cases", f="case")(
+                        M("New", m="create"),
+                        M("List All"),
+                        #M("Search", m="search")
+                    ),
                 )
 
     # -------------------------------------------------------------------------
@@ -657,15 +689,68 @@ class S3OptionsMenu:
                 )
 
     # -------------------------------------------------------------------------
+    def flood(self):
+        """ FLOOD """
+
+        return M(c="flood")(
+                    M("Gauges", f="gauge")(
+                        M("New", m="create"),
+                        M("List All"),
+                        #M("Search", m="search"),
+                        M("Import", m="import"),
+                    ),
+                )
+
+    # -------------------------------------------------------------------------
     def gis(self):
         """ GIS / GIS Controllers """
 
-        session = current.session
-        MAP_ADMIN = session.s3.system_roles.MAP_ADMIN
+        auth = current.auth
+        db = current.db
+        s3db = current.s3db
+        s3 = current.session.s3
+        MAP_ADMIN = s3.system_roles.MAP_ADMIN
+
+        def config_menu(i):
+            if not auth.is_logged_in():
+                # Anonymous users can never cofnigure the Map
+                return False
+            if auth.s3_has_permission("create",
+                                      s3db.gis_config):
+                # If users can create configs then they can see the menu item
+                return True
+            # Look for this user's config
+            table = s3db.gis_config
+            query = (table.pe_id == auth.user.pe_id)
+            config = db(query).select(table.id,
+                                      limitby=(0, 1),
+                                      cache=s3db.cache).first()
+            if config:
+                return True
+
+        def config_args():
+            if not auth.user:
+                # Won't show anyway due to check
+                return []
+
+            if auth.s3_has_role(MAP_ADMIN):
+                # Full List
+                return []
+
+            # Look for this user's config
+            table = s3db.gis_config
+            query = (table.pe_id == auth.user.pe_id)
+            config = db(query).select(table.id,
+                                      limitby=(0, 1),
+                                      cache=s3db.cache).first()
+            if config:
+                # Link direct to the User's config
+                return [config.id, "layer_entity"]
+            # Link to the Create form
+            return ["create"]
 
         return M(c="gis")(
                     M("Fullscreen Map", f="map_viewing_client"),
-                    M("Configuration", f="config"),
                     # Currently not got geocoding support
                     #M("Bulk Uploader", c="doc", f="bulk_upload"),
                     M("Locations", f="location",
@@ -677,8 +762,16 @@ class S3OptionsMenu:
                         M("Import", m="import"),
                         #M("Geocode", f="geocode_manual"),
                     ),
+                    M("Population Report", f="location", m="report",
+                      vars=dict(rows="name",
+                                fact="population",
+                                aggregate="sum")),
+                    M("Configuration", f="config", args=config_args(),
+                      _id="gis_menu_config",
+                      check=config_menu),
                     M("Admin", restrict=[MAP_ADMIN])(
                         M("Hierarchy", f="hierarchy"),
+                        M("Layers", f="catalog"),
                         M("Markers", f="marker"),
                         M("Projections", f="projection"),
                         M("Symbology", f="symbology"),
@@ -707,22 +800,26 @@ class S3OptionsMenu:
     def hrm(self):
         """ HRM / Human Resources Management """
 
-        session = current.session
-        ADMIN = session.s3.system_roles.ADMIN
+        settings = current.deployment_settings
+        s3 = current.session.s3
+        ADMIN = s3.system_roles.ADMIN
 
         # Custom conditions for the check-hook, as lambdas in order
         # to have them checked only immediately before rendering:
-        manager_mode = lambda i: session.s3.hrm.mode is None
-        personal_mode = lambda i: session.s3.hrm.mode is not None
-        is_org_admin = lambda i: session.s3.hrm.orgs and True or \
-                                 ADMIN in session.s3.roles
+        manager_mode = lambda i: s3.hrm.mode is None
+        personal_mode = lambda i: s3.hrm.mode is not None
+        is_org_admin = lambda i: s3.hrm.orgs and True or \
+                                 ADMIN in s3.roles
+
+        show_staff = lambda i: settings.get_hrm_show_staff()
+        show_vols = lambda i: settings.get_hrm_show_vols()
 
         staff = dict(group="staff")
         volunteers = dict(group="volunteer")
 
         return M(c="hrm")(
                     M("Staff", f="human_resource",
-                      check=manager_mode, vars=staff)(
+                      check=[manager_mode, show_staff], vars=staff)(
                         M("New Staff Member", m="create",
                           vars=staff),
                         M("List All",
@@ -737,12 +834,11 @@ class S3OptionsMenu:
                                        aggregate="count")),
                         M("Report Expiring Contracts",
                           vars=dict(group="staff", expiring=1)),
-                        M("Import", m="import",
+                        M("Import", f="person", m="import",
                           vars=staff, p="create"),
-                        #M("Dashboard", f="index"),
                     ),
                     M("Volunteers", f="human_resource",
-                      check=manager_mode, vars=volunteers)(
+                      check=[manager_mode, show_vols], vars=volunteers)(
                         M("New Volunteer", m="create",
                           vars=volunteers),
                         M("List All",
@@ -755,7 +851,7 @@ class S3OptionsMenu:
                                        cols="L1",
                                        fact="person_id",
                                        aggregate="count")),
-                        M("Import", m="import",
+                        M("Import", f="person", m="import",
                           vars=volunteers, p="create"),
                     ),
                     M("Teams", f="group",
@@ -792,13 +888,13 @@ class S3OptionsMenu:
                       check=manager_mode)(
                         M("New Training Course", m="create"),
                         M("List All"),
-                        M("Course Certificates", f="course_certificate"),
+                        #M("Course Certificates", f="course_certificate"),
                     ),
                     M("Certificate Catalog", f="certificate",
                       check=manager_mode)(
                         M("New Certificate", m="create"),
                         M("List All"),
-                        M("Skill Equivalence", f="certificate_skill"),
+                        #M("Skill Equivalence", f="certificate_skill"),
                     ),
                     M("Profile", f="person",
                       check=personal_mode, vars=dict(mode="personal")),
@@ -817,6 +913,7 @@ class S3OptionsMenu:
         session = current.session
         ADMIN = session.s3.system_roles.ADMIN
 
+        current.s3db.inv_recv_crud_strings()
         crud_strings = current.response.s3.crud_strings
         inv_recv_list = crud_strings.inv_recv.subtitle_list
         inv_recv_search = crud_strings.inv_recv.title_search
@@ -829,9 +926,14 @@ class S3OptionsMenu:
                         M("Search", m="search"),
                         M("Import", m="import", p="create"),
                     ),
-                    M("Warehouse Stock", c="inv", f="warehouse")(
+                    M("Warehouse Stock", c="inv", f="inv_item")(
                         M("Search Warehouse Stock", f="inv_item", m="search"),
-                        M("Report", f="inv_item", m="report"),
+                        M("Adjust Stock Levels", f="adj"),
+                        M("Report", f="inv_item", m="report",
+                          vars=Storage(rows="item_id",
+                                       cols="site_id",
+                                       fact="quantity",
+                                       aggregate="sum")),
                         M("Import", f="inv_item", m="import", p="create"),
                     ),
                     M(inv_recv_list, c="inv", f="recv")(
@@ -891,6 +993,7 @@ class S3OptionsMenu:
                         M("List All"),
                         M("Open Incidents", vars={"open":1}),
                         M("Timeline", args="timeline"),
+                        M("Import", m="import"),
                         M("Search", m="search"),
                         M("Report", m="report",
                           vars=dict(rows="L1",
@@ -953,6 +1056,19 @@ class S3OptionsMenu:
                 )
 
     # -------------------------------------------------------------------------
+    def member(self):
+        """ Membership Management """
+
+        return M(c="member")(
+                    M("Members", f="membership")(
+                        M("New", m="create"),
+                        M("List All"),
+                        #M("Search", m="search"),
+                        M("Import", f="person", m="import"),
+                    ),
+                )
+
+    # -------------------------------------------------------------------------
     def mpr(self):
         """ MPR / Missing Person Registry """
 
@@ -989,6 +1105,7 @@ class S3OptionsMenu:
                         M("List/Add", f="group"),
                         M("Group Memberships", f="group_membership"),
                     ),
+                    M("Email InBox", f="email_inbox"),
                     M("Log", f="log"),
                     M("Outbox", f="outbox"),
                     M("Search Twitter Tags", f="twitter_search")(
@@ -1081,12 +1198,14 @@ class S3OptionsMenu:
         if settings.get_project_community_activity():
             activities_label = "Communities"
             list_activities_label = "List All Communities"
+            search_activities_label = "Search Communities"
             list_activity_contacts_label = "List All Community Contacts"
             search_activity_contacts_label = "Search Community Contacts"
             import_activities_label = "Import Project Communities"
         else:
             activities_label = "Activities"
             list_activities_label = "List All Activities"
+            search_activities_label = "Search Activities"
             # @ToDo: These should always be Community Contacts as that's what they are...however they shouldn't link to Activities...
             list_activity_contacts_label = "List All Activity Contacts"
             search_activity_contacts_label = "Search Activity Contacts"
@@ -1103,6 +1222,7 @@ class S3OptionsMenu:
                     ),
                     M(activities_label, f="activity")(
                         M(list_activities_label),
+                        M(search_activities_label, m="search"),
                         M(list_activity_contacts_label, f="activity_contact"),
                         M(search_activity_contacts_label, f="activity_contact",
                           m="search"),
@@ -1150,13 +1270,12 @@ class S3OptionsMenu:
                         M("List All Projects"),
                         M("Open Tasks for Project", vars={"tasks":1}),
                     ),
-                    #M("Tasks", f="task")(
-                        #M("Add New Task", m="create"),
+                    M("Tasks", f="task")(
+                        M("Add New Task", m="create"),
                         #M("List All Tasks"),
-                        #M("Search", m="search"),
-                    #),
+                        M("Search All Tasks", m="search"),
+                    ),
                     M("Daily Work", f="time")(
-                        M("All Tasks", f="task", m="search"),
                         M("My Logged Hours", vars={"mine":1}),
                         M("Last Week's Work", m="report",
                           vars=Storage(rows="person_id",
@@ -1189,7 +1308,14 @@ class S3OptionsMenu:
             project_menu(
                     M("Projects", f="project")(
                         M("List All Projects"),
-                    )
+                        M("Open Tasks for Project", vars={"tasks":1}),
+                    ),
+                    M("Tasks", f="task")(
+                        M("Add New Task", m="create"),
+                        M("List All Tasks"),
+                        M("Search", m="search"),
+                    ),
+
                 )
 
         return project_menu
@@ -1261,7 +1387,7 @@ class S3OptionsMenu:
         """
 
         return [
-            M("Email Settings", c="msg", f="email_settings",
+            M("Email Settings", c="msg", f="inbound_email_settings",
                 args=[1], m="update"),
             M("SMS Settings", c="msg", f="setting",
                 args=[1], m="update"),

@@ -565,7 +565,8 @@ def results(r, **attr):
                  num_voted=0,
                  chart="",
                  table_color="",
-                 grids=""
+                 grids="",
+                 summary=""
                 )
 
     problem = r.record
@@ -1010,6 +1011,7 @@ def comment_parse(comment, comments, solution_id=None):
             user = row[utable._tablename]
             username = s3_fullname(person)
             email = user.email.strip().lower()
+            import md5
             hash = md5.new(email).hexdigest()
             url = "http://www.gravatar.com/%s" % hash
             author = B(A(username, _href=url, _target="top"))

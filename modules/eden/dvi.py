@@ -29,17 +29,22 @@
     OTHER DEALINGS IN THE SOFTWARE.
 """
 
-__all__ = ["S3DVIModel", "dvi_rheader"]
+__all__ = ["S3DVIModel"]
 
 from gluon import *
 from gluon.storage import Storage
 from ..s3 import *
+from eden.layouts import S3AddResourceLink
 
 # =============================================================================
 class S3DVIModel(S3Model):
 
     names = ["dvi_recreq",
-             "dvi_body"]
+             "dvi_body",
+             "dvi_morgue",
+             "dvi_checklist",
+             "dvi_effects",
+             "dvi_identification"]
 
     def model(self):
 
@@ -87,6 +92,7 @@ class S3DVIModel(S3Model):
                                   Field("bodies_found", "integer",
                                         label = T("Bodies found"),
                                         requires = IS_INT_IN_RANGE(1, 99999),
+                                        represent = lambda v, row=None: IS_INT_AMOUNT.represent(v),
                                         default = 0,
                                         comment = DIV(_class="tooltip",
                                                       _title="%s|%s" % (T("Number of bodies found"),
@@ -94,6 +100,7 @@ class S3DVIModel(S3Model):
                                   Field("bodies_recovered", "integer",
                                         label = T("Bodies recovered"),
                                         requires = IS_NULL_OR(IS_INT_IN_RANGE(0, 99999)),
+                                        represent = lambda v, row=None: IS_INT_AMOUNT.represent(v),
                                         default = 0),
                                   Field("description", "text"),
                                   location_id(label=T("Location")),
@@ -425,14 +432,12 @@ class S3DVIModel(S3Model):
         c_comment = T("Type the first few characters of one of the Person's names.")
 
         ADD_PERSON = T("Add Person")
-        return DIV(A(ADD_PERSON,
-                        _class="colorbox",
-                        _href=URL(c="pr", f="person", args="create",
-                                vars=dict(format="popup", child=fieldname)),
-                        _target="top",
-                        _title=ADD_PERSON),
-                   DIV(DIV(_class="tooltip",
-                           _title="%s|%s" % (c_title, c_comment))))
+        return S3AddResourceLink(c="pr",
+                                 f="person",
+                                 vars=dict(child=fieldname),
+                                 label=ADD_PERSON,
+                                 title=c_title,
+                                 tooltip=c_comment)
 
     # -------------------------------------------------------------------------
     @staticmethod
@@ -448,51 +453,5 @@ class S3DVIModel(S3Model):
             return row.name
         else:
             return "-"
-
-# =============================================================================
-def dvi_rheader(r, tabs=[]):
-    """ Resource component page header """
-
-    T = current.T
-    s3 = current.response.s3
-
-    pr_gender_opts = s3.pr_gender_opts
-    pr_age_group_opts = s3.pr_age_group_opts
-
-    if r.name == "morgue":
-        rheader_tabs = s3_rheader_tabs(r, tabs)
-        morgue = r.record
-        if morgue:
-            rheader = DIV(TABLE(
-
-                TR(TH("%s: " % T("Morgue")),
-                    "%(name)s" % morgue)
-
-                ), rheader_tabs
-            )
-            return rheader
-
-    elif r.name == "body":
-        rheader_tabs = s3_rheader_tabs(r, tabs)
-        body = r.record
-        if body:
-            rheader = DIV(TABLE(
-                TR(TH("%s: " % T("ID Tag Number")),
-                    "%(pe_label)s" % body,
-                    TH(""),
-                    ""),
-                TR(TH("%s: " % T("Gender")),
-                    "%s" % pr_gender_opts[body.gender],
-                    TH(""),
-                    ""),
-                TR(TH("%s: " % T("Age Group")),
-                    "%s" % pr_age_group_opts[body.age_group],
-                    TH(""),
-                    ""),
-                ), rheader_tabs
-            )
-            return rheader
-
-    return None
 
 # END =========================================================================
