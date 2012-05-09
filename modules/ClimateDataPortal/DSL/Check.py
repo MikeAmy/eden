@@ -42,7 +42,7 @@ def Yearly_check_months(yearly, add_error):
     add_error("Yearly data sets cannot have Months specified, so remove the Months(...).")
 
 @check_months.implementation(Monthly)
-def Monthly_check_months(yearly, error, month_numbers):
+def Monthly_check_months(monthly, error, month_numbers):
     if (
         Months.options["PreviousDecember"] - 1 in month_numbers and 
         Months.options["December"] - 1 in month_numbers
@@ -209,41 +209,42 @@ def PowRoot_check(binop):
 def Aggregation_check(aggregation):
     aggregation.errors = set()
     def error(message):
-        aggregation.errors.append(message)
+        aggregation.errors.add(message)
     if not isinstance(aggregation.dataset_name, str):
         error("First argument should be the name of a data set enclosed in "
                 "parentheses. ")
+    if SampleTable.name_exists(aggregation.dataset_name, error):
+        aggregation.sample_table = SampleTable.with_name(aggregation.dataset_name)
+        date_mapper = aggregation.sample_table.date_mapper
     else:
-        if SampleTable.name_exists(aggregation.dataset_name, error):
-            aggregation.sample_table = SampleTable.with_name(aggregation.dataset_name)
-            allowed_specifications = (To, From, Months)
-            specification_errors = False
-            date_mapper = aggregation.sample_table.date_mapper
-            for specification in aggregation.specification:
-                if isinstance(specification, allowed_specifications):
-                    specification_errors |= bool(
-                        check(specification)(date_mapper)
-                    )
-                else:
-                    error(
-                        "%(specification)s cannot be used inside "
-                        "%(aggregation_name)s(...).\n"
-                        "Required arguments are table name: %(table_names)s.\n"
-                        "Optional arguments are %(possibilities)s." % dict(
-                            specification = specification,
-                            aggregation_name = aggregation.__class__.__name__,
-                            table_names = ", ".join(
-                                map(
-                                    '"%s %s"'.__mod__,
-                                    climate_sample_tables
-                                )
-                            ),
-                            possibilities = ", ".join(
-                                Class.__name__+"(...)" for Class in allowed_specifications
-                            )
+        # use monthly to check the other specs
+        date_mapper = SampleTable.default_date_mapper
+    allowed_specifications = (To, From, Months)
+    specification_errors = False
+    for specification in aggregation.specification:
+        if isinstance(specification, allowed_specifications):
+            specification_errors |= bool(
+                check(specification)(date_mapper)
+            )
+        else:
+            error(
+                "%(specification)s cannot be used inside "
+                "%(aggregation_name)s(...).\n"
+                "Required arguments are table name: %(table_names)s.\n"
+                "Optional arguments are %(possibilities)s." % dict(
+                    specification = specification,
+                    aggregation_name = aggregation.__class__.__name__,
+                    table_names = ", ".join(
+                        map(
+                            '"%s %s"'.__mod__,
+                            climate_sample_tables
                         )
+                    ),
+                    possibilities = ", ".join(
+                        Class.__name__+"(...)" for Class in allowed_specifications
                     )
-                    
+                )
+            )
     return aggregation.errors or specification_errors
 
 from .. import Units, WhateverUnitsAreNeeded
@@ -262,7 +263,7 @@ def Number_check(number):
     number.errors = set()
     number.units.check_number(
         number.value,
-        number.errors.append
+        number.errors.add
     )
     return number.errors
 
