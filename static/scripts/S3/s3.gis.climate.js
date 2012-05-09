@@ -3,6 +3,7 @@
 // This fixes a problem whereby the marker layer doesn't 
 // respond to click events
 
+// OpenLayers fixes:
 OpenLayers.Handler.Feature.prototype.activate = function() {
     var activated = false;
     if (OpenLayers.Handler.prototype.activate.apply(this, arguments)) {
@@ -17,7 +18,6 @@ OpenLayers.Handler.Feature.prototype.activate = function() {
     return activated;
 };
 
-// Workaround:
 // for some reason some features remain styled after being unselected
 // so just unselect all features. Takes longer but doesn't confuse the user.
 OpenLayers.Control.SelectFeature.prototype.unselectAll = function (options) {
@@ -33,6 +33,49 @@ OpenLayers.Control.SelectFeature.prototype.unselectAll = function (options) {
         }
     }
 }
+
+//selectCtrl.handlers.box.dragHandler.dragstart
+OpenLayers.Handler.Drag.prototype.dragstart = function (evt) {
+    var propagate = true;
+    this.dragging = false;
+    if (this.checkModifiers(evt) &&
+           (OpenLayers.Event.isLeftClick(evt) ||
+            OpenLayers.Event.isSingleTouch(evt))
+    ) {
+        this.started = true;
+        this.start = evt.xy;
+        this.last = evt.xy;
+        OpenLayers.Element.addClass(
+            this.map.viewPortDiv, "olDragDown"
+        );
+        this.down(evt);
+        this.callback("down", [evt.xy]);
+
+        //OpenLayers.Event.stop(evt);
+
+        if (!this.oldOnselectstart) {
+            this.oldOnselectstart = document.onselectstart ?
+                document.onselectstart : OpenLayers.Function.True;
+        }
+        document.onselectstart = OpenLayers.Function.False;
+
+        propagate = !this.stopDown;
+    } else {
+        this.started = false;
+        this.start = null;
+        this.last = null;
+    }
+    return true;
+}
+
+function apply_attributes(object, attributes) {
+    for (var name in attributes) {
+        if (attributes.hasOwnProperty(name)) {
+            object[name] = attributes[name]
+        }
+    }
+}
+    
 
 function each(array, fn) {
     if (!array) {
@@ -51,6 +94,8 @@ function each(array, fn) {
     }
 }
 
+
+// HTML nodes
 function walk(items, use_item) {
     if (
         items.constructor === Array
@@ -105,6 +150,8 @@ IMG = NodeGenerator('img')
 TEXTAREA = NodeGenerator('textarea')
 A = NodeGenerator('a')
 
+
+// human-readable numbers
 var power_pattern = new RegExp('\\^(-?\\d+)', 'g')
 function replace_power_with_sup(string) {
     return string.replace(
@@ -113,12 +160,16 @@ function replace_power_with_sup(string) {
     )
 }
 
+// Map widget classes
+
 var ColourKey = OpenLayers.Class(OpenLayers.Control, {
     CLASS_NAME: 'ColourKey',
     /* The colour key is implemented as an OpenLayers control
        so that it gets rendered on the printed map
        attributes:
-         plugin
+         plugin,
+         gradient (optional)
+         gradients 
     */
     destroy: function() {
         var colour_key = this
@@ -134,21 +185,32 @@ var ColourKey = OpenLayers.Class(OpenLayers.Control, {
         )
     },
     
+    on_change: function (use_limits_and_gradient) {
+        // provide a callback for when the limits change
+        // use_limits needs to accept min and max
+        this.use_limits_and_gradient = use_limits_and_gradient
+    },
+    
+    use_callback: function () {
+        if (colour_key.use_limits_and_gradient != null) {
+            colour_key.use_limits_and_gradient(
+                parseFloat(colour_key.$lower_limit.attr('value')),
+                parseFloat(colour_key.$upper_limit.attr('value')),
+                colour_key.gradient
+            )
+        }
+    },
+    
     activate: function() {
         var colour_key = this
         if (
             OpenLayers.Control.prototype.activate.apply(colour_key, arguments)
         ) {
-            // show colours
             colour_key.set_gradient(colour_key.gradients[0])
             // when the user changes limits, the map colours update instantly
-            colour_key.use_callback = function () {
-                if (!!colour_key.use_limits) {
-                    colour_key.with_limits(colour_key.use_limits)
-                }
-            }
-            colour_key.$lower_limit.change(colour_key.use_callback)
-            colour_key.$upper_limit.change(colour_key.use_callback)
+            var bound_use_callback = function () { colour_key.use_callback() }
+            colour_key.$lower_limit.change(bound_use_callback)
+            colour_key.$upper_limit.change(bound_use_callback)
             return true;
         } else {
             return false;
@@ -164,21 +226,6 @@ var ColourKey = OpenLayers.Class(OpenLayers.Control, {
         } else {
             return false;
         }
-    },
-    
-    with_limits: function (use_limits) {
-        // immediately use the limits
-        var colour_key = this
-        use_limits(
-            parseFloat(colour_key.$lower_limit.attr('value')),
-            parseFloat(colour_key.$upper_limit.attr('value'))
-        )
-    },
-    
-    on_change: function (use_limits) {
-        // provide a callback for when the limits change
-        // use_limits needs to accept min and max
-        this.use_limits = use_limits
     },
     
     update_from: function (
@@ -281,16 +328,18 @@ var ColourKey = OpenLayers.Class(OpenLayers.Control, {
         })
         colour_key.$upper_limit = INPUT({
             size:5, value:'Max',
-            style:'text-align:right; background-color:#222; border:1px solid #888; color:white;',
+            style: 'text-align:right; background-color:#222; border:1px solid #888; color:white;',
             title: 'maximum (click to edit)'
         })
         colour_key.$limit_lock = INPUT({
-            type:'checkbox',
-            name:'key-lock',
-            id:'key_lock'
+            type: 'checkbox',
+            name: 'key-lock',
+            id: 'key_lock'
         })
         colour_key.$limit_lock_label = $(
-            '<label for="key_lock" style="color:white; padding:0.5em;">Lock limits between queries</label>'
+            '<label for="key_lock" style="color:white; padding:0.5em;">'+
+                'Lock limits between queries'+
+            '</label>'
         )
         
         var gradient_images = []
@@ -599,6 +648,9 @@ var QueryBox = OpenLayers.Class(OpenLayers.Control, {
     }
 });
 
+
+// ---------------------
+
 function base64_encode(s) {
     var base64chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'.split("");
     var r = ''
@@ -637,6 +689,7 @@ function base64_encode(s) {
     }
     return r.substring(0, r.length - p.length) + p
 }
+
 function ColourGradient(
     rgb_values
 ) {
@@ -816,10 +869,13 @@ var black_to_white = new ColourGradient(linear_gradient([0,0,0], [1,1,1])),
     red_to_blue = new ColourGradient(linear_gradient([1,0,0], [0,0,1])),
     green_to_blue = new ColourGradient(linear_gradient([0,1,0], [0,0,1]))
 
+
+// ---------------------
+
 var FilterBox = OpenLayers.Class(OpenLayers.Control, {
     CLASS_NAME: 'FilterBox',
     // updated(filter_function): callback
-    // example: object with example attributes, should match places
+    // example: object with example attributes, should match features
     title: (
         'Enter filter expressions here to filter the map overlay. '+
         '"unfiltered" means the map overlay is not being filtered. '+
@@ -869,7 +925,7 @@ var FilterBox = OpenLayers.Class(OpenLayers.Control, {
         }
         else {
             try {
-                filter_function = filter_box.plugin.create_filter_function(
+                filter_function = create_filter_function(
                     $text_area.val()
                 )
                 // test it a bit
@@ -970,6 +1026,7 @@ var FilterBox = OpenLayers.Class(OpenLayers.Control, {
 
 
 // Shapes on the map
+
 function Vector(geometry, attributes, style) {
     style.strokeColor = 'none'
     style.fillOpacity = 0.8
@@ -993,25 +1050,9 @@ function LinearRing(point_list) {
     return new OpenLayers.Geometry.LinearRing(point_list)
 }
 
-function Place(data) {
-    var place = this
-    place.data = data
-    place.data.latitude = Math.round(place.data.latitude * 1000000) / 1000000
-    place.data.longitude = Math.round(place.data.longitude * 1000000) / 1000000
-    
-    place.spaces = []
-    var point = place.point = new OpenLayers.Geometry.Point(
-        data.longitude,
-        data.latitude
-    ).transform(
-        S3.gis.proj4326,
-        S3.gis.projection_current
-    )
-    var lonlat = place.lonlat = new OpenLayers.LonLat(
-        point.x,
-        point.y
-    )
-}
+
+// Station markers
+
 var station_marker_icon_size = new OpenLayers.Size(21,25)
 var station_marker_icon = new OpenLayers.Icon(
     'static/img/gis/openlayers/marker-blue.png',
@@ -1021,116 +1062,125 @@ var station_marker_icon = new OpenLayers.Icon(
         -station_marker_icon_size.h
     )
 )
-Place.prototype = {
-    within: function () {
-        for (var i = 0; i < arguments.length; i++) {
-            if (this.spaces.indexOf(arguments[i]) != -1) {
-                return true
-            }
+OpenLayers.Feature.Vector.prototype.within = function () {
+    var spaces = this.data.spaces
+    for (var i = 0; i < arguments.length; i++) {
+        if (spaces.indexOf(arguments[i]) != -1) {
+            return true
         }
-        return false
-    },
-    within_Nepal: function () {
-        return this.spaces.length > 0
-    },
-    generate_marker: function (use_marker) {
-        // only for stations
-        var place = this
-        if (place.data.station_id) {
-            var station_marker = new OpenLayers.Marker(
-                place.lonlat,
-                station_marker_icon.clone()
-            )
-            station_marker.place = place
-            var show_place_info_popup = function (event) { 
-                var marker = this
-                var place = marker.place
-                var info = [
-                    // popup is styled with div.olPopup
-                    '<div class="place_info_popup">',
-                ]
-                function add_attribute(attribute) {
-                    var value = place.data[attribute]
-                    if (!!value) {
-                        info.push(
-                            attribute.replace('_',' '),': ', value,
-                            '<br />'
-                        )
-                    }
-                }
-                add_attribute('station_id')
-                add_attribute('station_name')
-                add_attribute('latitude')
-                add_attribute('longitude')
-                add_attribute('elevation')
-                
-                info.push('</div>')
+    }
+    return false
+}
 
-                var popup = new OpenLayers.Popup(
-                    null,
-                    marker.lonlat,
-                    new OpenLayers.Size(170, 125),
-                    info.join(''),
-                    true
-                )
-                marker.popup = popup
-                map.addPopup(popup)
-                function remove_place_info_popup() {
-                    map.removePopup(marker.popup);
-                    marker.popup.destroy();
-                    marker.popup = null;
-                }
-                marker.events.register('mouseup', marker,
-                    remove_place_info_popup
-                )
-                marker.events.register('mouseout', marker,
-                    remove_place_info_popup
-                )
-                OpenLayers.Event.stop(event);
-            }
-            station_marker.events.register(
-                'mousedown',
-                station_marker,
-                show_place_info_popup
-            )
-            use_marker(station_marker)
-        }
-    },
-    add_space: function(space) {
-        this.spaces.push(space.name)
-    },
-    popup: function(feature, value, use_popup, event) {
-        var place = this
-        var info = [
-            // popup is styled with div.olPopup
-            '<div class="place_info_popup">',
-            '<div style="text-align:center; font-size:1.5em;">',
-                value,
-            '</div><br />'
-        ]
-        var data = place.data
-        for (var p in data) {
-            if (data.hasOwnProperty(p)) {
-                value = data[p]
+OpenLayers.Feature.Vector.prototype.within_Nepal = function () {
+    return this.data.spaces.length > 0
+}
+
+OpenLayers.Feature.Vector.prototype.generate_marker = function (use_marker) {
+    // only for stations
+    var feature = this
+    if (feature.data.station_id) {
+        var station_marker = new OpenLayers.Marker(
+            feature.lonlat,
+            station_marker_icon.clone()
+        )
+        station_marker.feature = feature
+        var show_feature_info_popup = function (event) { 
+            var marker = this
+            var feature = marker.feature
+            var info = [
+                // popup is styled with div.olPopup
+                '<div class="feature_info_popup">',
+            ]
+            function add_attribute(attribute) {
+                var value = feature.data[attribute]
                 if (!!value) {
                     info.push(
-                        p.replace('_',' '),': ', value,
+                        attribute.replace('_',' '),': ', value,
                         '<br />'
                     )
                 }
             }
+            add_attribute('station_id')
+            add_attribute('station_name')
+            add_attribute('latitude')
+            add_attribute('longitude')
+            add_attribute('elevation')
+            
+            info.push('</div>')
+
+            var popup = new OpenLayers.Popup(
+                null,
+                marker.lonlat,
+                new OpenLayers.Size(170, 125),
+                info.join(''),
+                true
+            )
+            marker.popup = popup
+            map.addPopup(popup)
+            function remove_feature_info_popup() {
+                map.removePopup(marker.popup);
+                marker.popup.destroy();
+                marker.popup = null;
+            }
+            marker.events.register('mouseup', marker,
+                remove_feature_info_popup
+            )
+            marker.events.register('mouseout', marker,
+                remove_feature_info_popup
+            )
+            OpenLayers.Event.stop(event);
         }
-        info.push('</div>')
-        OpenLayers.Popup.COLOR = ''
-        var popup = new OpenLayers.Popup(
-            null,
-            map.getLonLatFromPixel({x:event.layerX, y:event.layerY}),
-            new OpenLayers.Size(170, 150),
-            info.join(''),
-            true
+        station_marker.events.register(
+            'mousedown',
+            station_marker,
+            show_feature_info_popup
         )
-        use_popup(popup)
+        use_marker(station_marker)
     }
+}
+
+OpenLayers.Feature.Vector.prototype.add_space = function(
+    space
+) {
+    this.spaces.push(space.name)
+}
+OpenLayers.Feature.Vector.prototype.popup = function(
+    feature,
+    value,
+    use_popup,
+    event
+) {
+    var feature = this
+    var info = [
+        // popup is styled with div.olPopup
+        '<div class="feature_info_popup">',
+        '<div style="text-align:center; font-size:1.5em;">',
+            value,
+        '</div><br />'
+    ]
+    var data = feature.data
+    for (var p in data) {
+        if (data.hasOwnProperty(p)) {
+            value = data[p]
+            if (!!value) {
+                info.push(
+                    p.replace('_',' '),': ', value,
+                    '<br />'
+                )
+            }
+        }
+    }
+    info.push('</div>')
+    OpenLayers.Popup.COLOR = ''
+    var popup = new OpenLayers.Popup(
+        null,
+        map.getLonLatFromPixel({x:event.layerX, y:event.layerY}),
+        new OpenLayers.Size(170, 150),
+        info.join(''),
+        true
+    )
+    use_popup(popup)
 }
 
 
@@ -1459,7 +1509,7 @@ OpenLayers.Geometry.MultiPoint.prototype.atZoom = function (max_x_diff, max_y_di
     return geometry;
 }
 
-load_layer_and_locate_places_in_spaces = function (
+load_layer_and_locate_features_in_spaces = function (
     name, layer_URL, format, label_colour, label_size
 ) {
     var vector_layer = new VariableResolutionVectorLayer(
@@ -1566,18 +1616,18 @@ load_layer_and_locate_places_in_spaces = function (
                     )
                     each(linear_rings,
                         function (linear_ring) {
-                            plugin.when_places_loaded(
-                                function (places) {
+                            plugin.when_features_loaded(
+                                function (features) {
                                     var detector = new PointInLinearRingDetector(
                                         linear_ring
                                     )
-                                    for (p in places) {
-                                        if (places.hasOwnProperty(p)) {
-                                            var place = places[p]
+                                    for (p in features) {
+                                        if (features.hasOwnProperty(p)) {
+                                            var feature = features[p]
                                             detector.containsPoint(
-                                                place.point,
+                                                feature.point,
                                                 function () {
-                                                    place.add_space(linear_ring)
+                                                    feature.add_space(linear_ring)
                                                 }
                                             )
                                         }
@@ -1613,7 +1663,7 @@ var Logo = OpenLayers.Class(OpenLayers.Control, {
 })
 
 function load_world_map(plugin) {
-    if (!Ext.isIE || Ext.isIE9 || display_mode == 'print') { 
+    if (!Ext.isIE || Ext.isIE9 || plugin.display_mode == 'print') { 
         $.ajax({
             url: plugin.world_map_URL,
             format: 'json',
@@ -1684,11 +1734,9 @@ function load_world_map(plugin) {
                         }
                     }
                 )
-                plugin.when_places_loaded(
+                plugin.when_features_loaded(
                     function () {
-                        plugin.colour_key.with_limits(
-                            plugin.render_map_layer
-                        )
+                        plugin.colour_key.use_callback()
                     }
                 )
             },
@@ -1714,70 +1762,173 @@ function load_world_map(plugin) {
     )
 }
 
-ClimateDataMapPlugin = function (config) {
-    var plugin = this // let's be explicit!
-    window.plugin = plugin
-    plugin.data_type_option_names = config.data_type_option_names
-    plugin.parameter_names = config.parameter_names
-    plugin.aggregation_names = config.aggregation_names
-    plugin.year_min = config.year_min 
-    plugin.year_max = config.year_max
-
-    plugin.data_type_label = config.data_type_label
-    plugin.overlay_data_URL = config.overlay_data_URL
-    plugin.places_URL = config.places_URL
-    plugin.chart_URL = config.chart_URL
-    plugin.data_URL = config.data_URL
-    plugin.station_parameters_URL = config.station_parameters_URL
-    plugin.years_URL = config.years_URL
-    
-    plugin.chart_popup_URL = config.chart_popup_URL
-    plugin.request_image_URL = config.request_image_URL
-    plugin.download_data_URL = config.download_data_URL
-    plugin.download_timeseries_URL = config.download_timeseries_URL
-    
-    var display_mode = config.display_mode
-    plugin.set_status = function (html_message) {
-        $('#error_div').html(html_message)
-    }
-    if (config.expression) {
-        var initial_query_expression = decodeURI(
-            config.expression
-        )
-    }
-    else {
-        if (plugin.parameter_names.length > 0) {
-            var initial_query_expression = (
-                plugin.aggregation_names[0]+'('+
-                    '"'+ //form_values.data_type+' '+
-                    plugin.parameter_names[0].replace(
-                        new RegExp('\\+','g'),
-                        ' '
-                    )+'", '+
-                    'From('+plugin.year_min+'), '+
-                    'To('+plugin.year_max+')'+
-                ')'
+CompressibleJSON = new OpenLayers.Class(
+    OpenLayers.Format,
+    {
+        'CLASS_NAME': 'CompressibleJSON',
+        read: function (json) {
+            var rearranged_features_data = eval(json)
+            each(
+                rearranged_features_data,
+                function (features_by_attribute_group) {
+                    var attributes = features_by_attribute_group.attributes
+                    var compression = features_by_attribute_group.compression
+                    var features = features_by_attribute_group.features
+                    var id_index = attributes.indexOf('id')
+                    var id_attribute = features[id_index]
+                    var previous_id = 0
+                    each(id_attribute,
+                        function (id_offset, position) {
+                            var feature_id = id_offset + previous_id
+                            if (features_data[feature_id] == undefined) {
+                                features_data[feature_id] = {}
+                            }
+                            id_attribute[position] = previous_id = feature_id
+                        }
+                    )
+                    attributes.splice(id_index, 1)
+                    features.splice(id_index, 1)
+                    compression.splice(id_index, 1)
+                    each(
+                        attributes,
+                        function (attribute_name, index) {
+                            if (compression[index] == "similar_numbers") {
+                                var previous = 0
+                                each(
+                                    features[index],
+                                    function (value, position) {
+                                        var feature_id = id_attribute[position]
+                                        var feature_data = features_data[feature_id]
+                                        previous = feature_data[attribute_name] = previous + value 
+                                    }
+                                )
+                            }
+                            else {
+                                // no compression
+                                each(
+                                    features[index],
+                                    function (value, position) {
+                                        var feature_id = id_attribute[position]
+                                        var feature_data = features_data[feature_id]
+                                        feature_data[attribute_name] = value
+                                    }
+                                )
+                            }
+                        }
+                    )
+                }
             )
-        } else {
-            var initial_query_expression = ''
+            return rearranged_features_data
+            
+            var features = []
+            for (
+                var i = 0;
+                i < feature_ids.length;
+                i++
+            ) {
+                var feature_id = feature_ids[i]
+                var feature = plugin.features[feature_id]
+                var data = feature.data
+                var lat = data.latitude
+                var lon = data.longitude
+                var attributes = {}                
+            }            
         }
     }
-    var initial_filter = decodeURI(config.filter || 'unfiltered')
-    
-    delete config
-    
-    plugin.last_query_expression = null
-    
-    plugin.places = {}
-    plugin.spaces = []
-    
-    plugin.places_events = []
-    plugin.when_places_loaded = function (places_function) {
-        places_function(plugin.places)
-        plugin.places_events.push(places_function)
+)
+
+HoverControl = function(layer, features, title) {
+    // hovering over a feature pops up a box showing details
+    // subsequently moving to another feature pops up another box instantly
+    // not hovering for a while resets the hover delay
+    var hover_timeout = null,
+        hover_delay = 1000,
+        hover_delay_clear_timeout = null
+    function onFeatureSelect(feature) {
+        if (hover_delay_clear_timeout != null) {
+            clearTimeout(hover_delay_clear_timeout)
+            hover_delay_clear_timeout = null
+        }
+        if (hover_timeout == null) {
+            hover_timeout = setTimeout(
+                function () {
+                    hover_delay = 0
+                    var data = feature.data
+                    var feature = features[data.feature_id]
+                    if (!!feature) {
+                        feature.popup(
+                            feature,
+                            data.value,
+                            function (popup_box) {
+                                feature.popup_box = popup_box
+                                map.addPopup(popup_box)
+                                feature.unselect_timeout = setTimeout(
+                                    function () {
+                                        onFeatureUnselect(feature)
+                                    },
+                                    10000
+                                )
+                            },
+                            hover_control.handlers.feature.evt
+                        )
+                    }
+                },
+                hover_delay
+            )
+        }
     }
-    plugin.month_selector_ids = []
-    plugin.create_filter_function = function (filter_expression) {
+    function onFeatureUnselect(feature) {
+        if (hover_timeout != null) {
+            clearTimeout(hover_timeout)
+            hover_timeout = null
+        }
+        if (feature.popup_box && feature.popup_box.div) {
+            map.removePopup(feature.popup_box)
+            feature.popup_box.destroy()
+            feature.popup_box = null
+        }
+        if (feature.unselect_timeout) {
+            clearTimeout(feature.unselect_timeout)
+        }
+        clearTimeout(hover_delay_clear_timeout)
+        hover_delay_clear_timeout = setTimeout(
+            function () {
+                hover_delay = 1000
+            },
+            1000
+        )
+    }
+    var hover_control = new OpenLayers.Control.SelectFeature(
+        layer,
+        {
+            title: title,
+            hover: true,
+            onSelect: onFeatureSelect,
+            onUnselect: onFeatureUnselect
+        }
+    )
+    return hover_control
+}
+
+var tooltips = []
+function add_tooltip(config) {
+    tooltips.push(config)
+}
+
+function init_tooltips() {
+    each(tooltips,
+        function (config) {
+            new Ext.ToolTip(config)
+        }
+    )
+}
+
+function define_ClimateDataMapPlugin() {        
+    function climate_URL(plugin, url) {
+        return plugin.base_URL+url
+    }
+    
+    function create_filter_function(filter_expression) {
         var replacements = {
             '(\\W)and(\\W)': '$1&&$2',
             '(^|\\W)not(\\W)': '$1!$2',
@@ -1796,283 +1947,19 @@ ClimateDataMapPlugin = function (config) {
         var function_string = (
             'unfiltered = true\n'+
             'with (Math) {'+
-                'with (place) {' +
-                    'with (place.data) { '+
+                'with (feature) {' +
+                    'with (feature.data) { '+
                         'return '+ filter_expression +
                     '}'+
                 '}'+
             '}'
         )
         var filter_function = new Function(
-            'place',
+            'feature',
             'value',
             function_string
         )
         return filter_function
-    }
-    if (initial_filter) {
-        plugin.filter = plugin.create_filter_function(initial_filter)
-    }
-    
-    var tooltips = []
-    function add_tooltip(config) {
-        tooltips.push(config)
-    }
-
-    function init_tooltips() {
-        each(tooltips,
-            function (config) {
-                new Ext.ToolTip(config)
-            }
-        )
-        //Ext.QuickTips.init(); // done by gis
-    }
-
-    plugin.overlay_layer = new OpenLayers.Layer.Vector(
-        'Query result values',
-        {
-            isBaseLayer:false                                
-        }
-    )
-    plugin.setup = function () {
-        var overlay_layer = plugin.overlay_layer
-        map.addLayer(overlay_layer)
-        // hovering over a feature pops up a box showing details
-        // subsequently moving to another feature pops up another box instantly
-        // not hovering for a while resets the hover delay
-        var hover_timeout = null,
-            hover_delay = 1000,
-            hover_delay_clear_timeout = null
-        function onFeatureSelect(feature) {
-            if (hover_delay_clear_timeout != null) {
-                clearTimeout(hover_delay_clear_timeout)
-                hover_delay_clear_timeout = null
-            }
-            if (hover_timeout == null) {
-                hover_timeout = setTimeout(
-                    function () {
-                        hover_delay = 0
-                        var data = feature.data
-                        var place = plugin.places[data.place_id]
-                        if (!!place) {
-                            place.popup(
-                                feature,
-                                data.value,
-                                function (popup) {
-                                    feature.popup = popup
-                                    map.addPopup(popup)
-                                    feature.unselect_timeout = setTimeout(
-                                        function () {
-                                            onFeatureUnselect(feature)
-                                        },
-                                        10000
-                                    )
-                                },
-                                hover_control.handlers.feature.evt
-                            )
-                        }
-                    },
-                    hover_delay
-                )
-            }
-        }
-        function onFeatureUnselect(feature) {
-            if (hover_timeout != null) {
-                clearTimeout(hover_timeout)
-                hover_timeout = null
-            }
-            if (feature.popup && feature.popup.div) {
-                map.removePopup(feature.popup)
-                feature.popup.destroy()
-                feature.popup = null
-            }
-            if (feature.unselect_timeout) {
-                clearTimeout(feature.unselect_timeout)
-            }
-            clearTimeout(hover_delay_clear_timeout)
-            hover_delay_clear_timeout = setTimeout(
-                function () {
-                    hover_delay = 1000
-                },
-                1000
-            )
-        }
-        var hover_control = new OpenLayers.Control.SelectFeature(
-            overlay_layer,
-            {
-                title: 'Show detail by hovering over a square',
-                hover: true,
-                onSelect: onFeatureSelect,
-                onUnselect: onFeatureUnselect
-            }
-        )
-        map.addControl(hover_control)
-        hover_control.activate()
-        
-        $.ajax({
-            url: plugin.places_URL,
-            dataType: 'json',
-            success: function (rearranged_places_data) {
-                // add marker layer for places
-                var station_markers_layer = new OpenLayers.Layer.Markers(
-                    "Observation stations"
-                )
-                places_data = {}
-                each(
-                    rearranged_places_data,
-                    function (places_by_attribute_group) {
-                        var attributes = places_by_attribute_group.attributes
-                        var compression = places_by_attribute_group.compression
-                        var places = places_by_attribute_group.places
-                        var id_index = attributes.indexOf('id')
-                        var id_attribute = places[id_index]
-                        var previous_id = 0
-                        each(id_attribute,
-                            function (id_offset, position) {
-                                var place_id = id_offset + previous_id
-                                if (places_data[place_id] == undefined) {
-                                    places_data[place_id] = {}
-                                }
-                                id_attribute[position] = previous_id = place_id
-                            }
-                        )
-                        attributes.splice(id_index, 1)
-                        places.splice(id_index, 1)
-                        compression.splice(id_index, 1)
-                        each(
-                            attributes,
-                            function (attribute_name, index) {
-                                if (compression[index] == "similar_numbers") {
-                                    var previous = 0
-                                    each(
-                                        places[index],
-                                        function (value, position) {
-                                            var place_id = id_attribute[position]
-                                            var place_data = places_data[place_id]
-                                            previous = place_data[attribute_name] = previous + value 
-                                        }
-                                    )
-                                }
-                                else {
-                                    // no compression
-                                    each(
-                                        places[index],
-                                        function (value, position) {
-                                            var place_id = id_attribute[position]
-                                            var place_data = places_data[place_id]
-                                            place_data[attribute_name] = value
-                                        }
-                                    )
-                                }
-                            }
-                        )
-                    }
-                )
-                var new_places = []
-                for (var place_id in places_data) {
-                    if (places_data.hasOwnProperty(place_id)) {
-                        var place_data = places_data[place_id]
-                        // store place data
-                        var place = new Place(place_data)
-                        new_places.push(place)
-                        plugin.places[place_id] = place
-                        // add marker
-                        place.generate_marker(
-                            function (marker) { 
-                                station_markers_layer.addMarker(marker) 
-                            }
-                        )
-                    }
-                }
-                each(
-                    plugin.places_events,
-                    function (places_function) {
-                        places_function(new_places)
-                    }
-                )
-                station_markers_layer.setVisibility(false)
-                map.addLayer(station_markers_layer)
-                plugin.station_markers_layer = station_markers_layer
-
-                plugin.update_map_layer(initial_query_expression)
-                var example_data
-                if (places_data[place_id] == undefined) {
-                    example_data = {latitude:0, longitude: 0}
-                } else {
-                    example_data = places_data[place_id]
-                }
-                plugin.filter_box = new FilterBox({
-                    updated: function (filter_function) {
-                        plugin.filter = filter_function
-                        plugin.colour_key.with_limits(
-                            plugin.render_map_layer
-                        )
-                    },
-                    example: new Place(example_data),
-                    initial_filter: initial_filter,
-                    plugin: plugin
-                })
-                map.addControl(plugin.filter_box)
-                plugin.filter_box.activate()
-                plugin.logo = new Logo()
-                plugin.logo.activate()
-                map.addControl(plugin.logo)
-            },
-            error: function (jqXHR, textStatus, errorThrown) {
-                plugin.set_status(
-                    '<a target= "_blank" href="climate/places">Could not load place data!</a>'
-                )
-            }
-        })
-        var print_window = function() {
-            // this breaks event handling in the widgets, but that's ok for printing
-            var map_div = map.div
-            var $map_div = $(map_div)
-            $(map_div).remove()
-            var body = $('body')
-            body.remove()
-            var new_body = $('<body></body>')
-            new_body.css({position:'absolute', top:0, bottom:0, left:0, right:0})
-            new_body.append($map_div)
-            $('html').append(new_body)
-            $map_div.css('width', '100%')
-            $map_div.css('height', '100%')
-            map.updateSize()
-        }
-        
-        plugin.expand_to_full_window = function() {
-            // this makes the map use the full browser window,
-            // events still work, but it leaves a scroll bar
-            S3.gis.mapPanel.autoWidth = true
-            S3.gis.mapPanel.autoHeight = true
-            $(map.div).css({
-                position:'fixed',
-                top:0, bottom:0, left:0, right:0,
-                width:'100%', height:'100%',
-                zIndex: 10000
-            })
-            $('body').children().css('display', 'none')
-            $('div.fullpage').css('display', '')
-            $('html').css('overflow', 'hidden')
-            map.updateSize()
-        }
-
-        setTimeout(
-            function () {
-                //load_world_map()
-                load_layer_and_locate_places_in_spaces(
-                    "Nepal development regions",
-                    "/eden/static/data/Development_Region.geojson",
-                    new OpenLayers.Format.GeoJSON(),
-                    "black",
-                    "11px"
-                )
-                init_tooltips()
-            },
-            1000
-            // this is waiting for OpenLayers to render everything 
-            // and Ext to render all components
-        )
     }
     
     var conversion_functions = {
@@ -2085,13 +1972,59 @@ ClimateDataMapPlugin = function (config) {
         // Delta
         '\u0394 Kelvin': '&#916; &#176;C'
     }
+
+    var basic_months = [
+        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ]
+    var months = [''].concat(basic_months)    
+    var filter_months = ['PrevDec'].concat(basic_months)
+    delete basic_months
     
-    plugin.render_map_layer = function(min_value, max_value) {
+
+    function form_query_expression(ext_form) {
+        form_values = ext_form.getValues()
+        var month_names = []
+        each(
+            [0,1,2,3,4,5,6,7,8,9,10,11,12],
+            function (
+                month_number
+            ) {
+                if (
+                    form_values['month-'+month_number] == 'on'
+                ) {
+                    month_names.push(
+                        filter_months[month_number]
+                    )
+                }
+            }
+        )
+        return (
+            [
+                form_values.statistic,
+                '(',
+                    '"', form_values.parameter.replace(new RegExp('\\+','g'),' '), '", ',
+                    'From(',
+                        form_values.from_year ,
+                        (form_values.from_month?', '+form_values.from_month:''),
+                    '), ',
+                    'To(',
+                        form_values.to_year ,
+                        (form_values.to_month?', '+form_values.to_month:''),
+                    ')',
+                    (
+                        form_values.annual_aggregation ?
+                        (', Months('+month_names.join(', ')+')'):''
+                    ),
+                ')'
+            ].join('')
+        )
+    }
+    
+    function render_map_layer(plugin, min_value, max_value, colour_gradient) {
         plugin.overlay_layer.destroyFeatures()
-        // Law of Demeter violation:
-        var colour_gradient = plugin.colour_key.gradient
         var feature_data = plugin.feature_data
-        var place_ids = feature_data.keys
+        var feature_ids = feature_data.keys
         var values = feature_data.values
         var units = feature_data.units
         var grid_size = feature_data.grid_size
@@ -2101,28 +2034,28 @@ ClimateDataMapPlugin = function (config) {
         
         var range = max_value - min_value
         var features = []
-        var filter = plugin.filter || function () { return true }
+        var filter = plugin.filter_function || function () { return true }
         var exponent_pattern = new RegExp('e(-?\\d+)')
         for (
             var i = 0;
-            i < place_ids.length;
+            i < feature_ids.length;
             i++
         ) {
-            var place_id = place_ids[i]
-            var place = plugin.places[place_id]
-            if (place == undefined) {
-                // some places outside of nepal may be filtered out.
+            var feature_id = feature_ids[i]
+            var feature = plugin.features[feature_id]
+            if (feature == undefined) {
+                // some features may be filtered out by the server.
                 continue
             }
             var value = values[i]
-            if (place == undefined) {
+            if (feature == undefined) {
                 console.log(i)
-                console.log(place)
-                console.log(place_id)
+                console.log(feature)
+                console.log(feature_id)
             }
             var converted_value = converter(value)
             if (
-                filter(place, converted_value)
+                filter(feature, converted_value)
             ) {
                 if (range) {
                     var normalised_value = (converted_value - min_value) / range
@@ -2146,35 +2079,21 @@ ClimateDataMapPlugin = function (config) {
                         hexFF(colour_value[1]) + 
                         hexFF(colour_value[2])
                     )
-                    var data = place.data
+                    var data = feature.data
                     var lat = data.latitude
                     var lon = data.longitude
                     var attributes = {}
                     if (grid_size == 0) {
-                        /*
-                        var feature = plugin.places[data.station_id]
-                        if (!!feature) {
-                            feature = feature.clone()
-                            features.push(feature)
-                            feature.style = {
-                                fillColor: colour_string,
-                                pointRadius: 6,
-                                strokeWidth: 1
-                            }
-                            attributes = feature.attributes
-                        }
-                        else {*/
-                            features.push(
-                                Vector(
-                                    Point(lon, lat),
-                                    attributes,
-                                    {
-                                        fillColor: colour_string,
-                                        pointRadius: 6
-                                    }
-                                )
+                        features.push(
+                            Vector(
+                                Point(lon, lat),
+                                attributes,
+                                {
+                                    fillColor: colour_string,
+                                    pointRadius: 6
+                                }
                             )
-                        //}
+                        )
                     }
                     else {
                         var border = grid_size / 220
@@ -2232,7 +2151,7 @@ ClimateDataMapPlugin = function (config) {
                     }
                     attributes.value = attribute_string+' '+display_units
                     attributes.id = id
-                    attributes.place_id = place_id
+                    attributes.feature_id = feature_id
                 }                        
             }
         }
@@ -2244,7 +2163,7 @@ ClimateDataMapPlugin = function (config) {
                 S3.gis.proj4326
             )
             window.location.href = encodeURI([
-                plugin.request_image_URL,
+                climate_URL(plugin, 'request_image'),
                 '?expression=', plugin.last_query_expression ,
                 '&filter=', plugin.filter_box.$text_area.val() ,
                 '&width=', $(window).width() || 1024, 
@@ -2254,7 +2173,7 @@ ClimateDataMapPlugin = function (config) {
             ].join(''))
         }
         plugin.print_button.enable()
-        if (display_mode == 'print') {
+        if (plugin.display_mode == 'print') {
             //console.log('print requested')
             plugin.expand_to_full_window()
             setTimeout(
@@ -2328,12 +2247,8 @@ ClimateDataMapPlugin = function (config) {
         }
     }
     
-    plugin.update_query = function (query_expression) {
-        plugin.query_box.update(query_expression)
-        plugin.last_query_expression = query_expression
-    }
-    
-    plugin.update_map_layer = function (
+    var update_map_layer = function (
+        plugin,
         query_expression
     ) {
         if (query_expression != '') {
@@ -2342,14 +2257,12 @@ ClimateDataMapPlugin = function (config) {
             plugin.set_status('Updating...')
             plugin.query_box.update(query_expression)
             plugin.show_chart_button.disable()
-    //        console.log(plugin.overlay_data_URL)
             $.ajax({
-                url: plugin.overlay_data_URL,
+                url: climate_URL(plugin, 'climate_overlay_data'),
                 dataType: 'json',
                 data: {
                     query_expression: query_expression
                 },
-                //timeout: 1000 * 20, // timeout doesn't seem to work
                 success: function(feature_data, status_code) {
                     if (feature_data.values.length == 0) {
                         plugin.set_status(
@@ -2357,7 +2270,7 @@ ClimateDataMapPlugin = function (config) {
                             'Data might be unavailable for this time range. '+
                             'Gridded data runs from 1971 to 2009. '+
                             'For Observed data please refer to '+
-                            '<a href="'+plugin.station_parameters_URL+
+                            '<a href="'+climate_URL(plugin, 'station_parameter')+
                             '">Station Parameters</a>. '+
                             'Projected data depends on the dataset.'
                         )
@@ -2366,20 +2279,18 @@ ClimateDataMapPlugin = function (config) {
                         var units = feature_data.units
                         var converter = plugin.converter = (
                             conversion_functions[units] || 
-                            function (x) { 
-                                return x 
-                            }
+                            function (x) { return x }
                         )
                         var display_units = plugin.display_units = display_units_conversions[units] || units
                         var values = feature_data.values
-                        var place_ids = feature_data.keys
+                        var feature_ids = feature_data.keys
                         var usable_values = []
                         for (
                             var i = 0;
-                            i < place_ids.length;
+                            i < feature_ids.length;
                             i++
                         ) {
-                            if (plugin.places[place_ids[i]]) {
+                            if (plugin.features[feature_ids[i]]) {
                                 usable_values.push(values[i])
                             }
                         }
@@ -2388,8 +2299,11 @@ ClimateDataMapPlugin = function (config) {
                             converter(Math.max.apply(null, usable_values)), 
                             converter(Math.min.apply(null, usable_values))
                         )
-                        plugin.update_query(feature_data.understood_expression)
-                        // not right place for this:
+                        var understood_expression = feature_data.understood_expression
+                        plugin.query_box.update(understood_expression)
+                        plugin.last_query_expression = understood_expression
+
+                        // not right feature for this:
                         plugin.filter_box.resizer.resize(true)
                         plugin.set_status('')
                     }
@@ -2427,7 +2341,7 @@ ClimateDataMapPlugin = function (config) {
                         else {
                             plugin.set_status(
                                 '<a target= "_blank" href="'+
-                                    plugin.overlay_data_URL+'?'+
+                                    climate_URL(plugin, 'climate_overlay_data')+'?'+
                                     $.param(query_expression)+
                                 '">Error</a>'
                             )
@@ -2447,732 +2361,843 @@ ClimateDataMapPlugin = function (config) {
             )
         }
     }
-    var months = [
-        '', 'Jan', 'Feb', 'Mar', 'Apr', 'May',
-        'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-    ]
 
-    function SpecPanel(
-        panel_id, panel_title, collapsed
-    ) {
-        function make_combo_box(
-            data,
-            fieldLabel,
-            hiddenName,
-            combo_box_size
-        ) {
-            var options = []
-            each(
-                data,
-                function (option) {
-                    options.push([option, option])
-                }
-            )
-            var combo_box = new Ext.form.ComboBox({
-                id: panel_id+hiddenName,
-                fieldLabel: fieldLabel,
-                hiddenName: hiddenName,
-                store: new Ext.data.SimpleStore({
-                    fields: ['name', 'option'],
-                    data: options
-                }),
-                displayField: 'name',
-                typeAhead: true,
-                mode: 'local',
-                triggerAction: 'all',
-                emptyText:'',
-                selectOnFocus: true,
-                forceSelection: true
-            })
-            combo_box.setSize(combo_box_size)
-            if (!!options[0]) {
-                combo_box.setValue(options[0][0])
-            }
-            return combo_box
-        }
-
-        /*
-        var data_type_combo_box = make_combo_box(
-            plugin.data_type_option_names,
-            'Data type',
-            'data_type',
-            {
-                width: 115,
-                heigth: 25
-            }
-        )*/
-
-        var variable_combo_box = make_combo_box(
-            plugin.parameter_names,
-            'Parameter',
-            'parameter',
-            {
-                width: 310,
-                heigth: 25
-            }
-        )
-        // add tooltips to ease selection of datasets with long names
-        variable_combo_box.tpl = new Ext.XTemplate(
-            '<tpl for=".">'+
-                '<div ext:qtip="{name}" class="x-combo-list-item">'+
-                    '{name}'+
-                '</div>'+
-            '</tpl>'
-        )
+    ClimateDataMapPlugin = function (config) {
+        /* Public API:
+         constructor + args,
+         setup,
+         setupToolbar,
+         addToMapWindow
+        */        
+        var plugin = this
+        window.plugin = plugin
+        var identity = "@"+(Math.random() * Math.pow(2, 32)).toString(16)
+        plugin.toString = function () { return identity }
         
-        var statistic_combo_box = make_combo_box(
-            plugin.aggregation_names,
-            'Statistic',
-            'statistic',
-            {
-                width: 115,
-                heigth: 25
-            }
-        )
-        
-        function inclusive_range(start, end) {
-            var values = []
-            for (
-                var i = start;
-                i <= end;
-                i++
-            ) {
-                values.push(i)
-            }
-            return values
-        }
-        var years = inclusive_range(plugin.year_min, plugin.year_max)
-        
-        var from_year_combo_box = make_combo_box(
-            years,
-            null,
-            'from_year',
-            {width:60, height:25}
-        )
-        from_year_combo_box.setValue(plugin.year_min)
-        
-        var to_year_combo_box = make_combo_box(
-            years,
-            null,
-            'to_year',
-            {width:60, height:25}
-        )
-        to_year_combo_box.setValue(plugin.year_max)
-        
-        variable_combo_box.years = []
-        // when a dataset is selected, request the years.
-        function update_years(dataset_name) {
-            if (dataset_name != undefined) {
-                $.ajax({
-                    url: plugin.years_URL+'?dataset_name='+dataset_name,
-                    dataType: 'json',
-                    success: function (years) {
-                        variable_combo_box.years = years
-                        if (years.length) {
-                            from_year_combo_box.setValue(years[0])
-                            to_year_combo_box.setValue(years[years.length-1])
-                        }
-                    }
-                })
-            }
-        }
-        variable_combo_box.on(
-            'select',
-            function (a, value) {
-                update_years(value.json[0])
-            }
-        )
-        update_years(plugin.parameter_names[0])
-        // grey out (but don't disable) any years in the from and to year
-        // combo boxes if no data is available for those years
-        each(
-            [from_year_combo_box, to_year_combo_box],
-            function (combo_box) {
-                combo_box.on(
-                    'expand',
-                    function () {
-                        $(combo_box.list.dom).find(
-                            '.x-combo-list-item'
-                        ).each(
-                            function (i, option_div) {
-                                $option_div = $(option_div)
-                                $option_div.css('display', 'block')
-                                if (
-                                    variable_combo_box.years.indexOf(
-                                        parseInt($option_div.text())
-                                    ) == -1
-                                ) {
-                                    $option_div.css('display', 'none')
-                                }
-                            }
-                        )
-                    }
-                )
-            }
-        )
-        
-        var from_month_combo_box = make_combo_box(
-            months,
-            null,
-            'from_month',
-            {width:50, height:25}
-        )
-        plugin.month_selector_ids.push(from_month_combo_box.id)
-
-        var to_month_combo_box = make_combo_box(
-            months,
-            null,
-            'to_month',
-            {width:50, height:25}
-        )
-        add_tooltip({
-            target: to_year_combo_box.id,
-            html: 'If month is not specified, the end of the year will be used.'
-        })
-        add_tooltip({
-            target: to_month_combo_box.id,
-            html: 'If month is not specified, the end of the year will be used.'
-        })
-        plugin.month_selector_ids.push(to_month_combo_box.id)
-        
-        var month_letters = []
-        var month_checkboxes = []
-        // if none are picked, don't do annual aggregation
-        // if some are picked, aggregate those months
-        // if all are picked, aggregate for whole year
-        each('DJFMAMJJASOND',
-            function (
-                month_letter,
-                month_index
-            ) {
-                month_letters.push(
-                    {
-                        html: month_letter,
-                        border: false
-                    }
-                )
-                var name = 'month-'+month_index
-                month_checkboxes.push(
-                    new Ext.form.Checkbox({
-                        id: panel_id+'_'+name,
-                        name: name,
-                        checked: (month_index > 0)
-                    })
-                )
-            }
-        )
-        add_tooltip({
-            target: panel_id+'_month-0',
-            html: 'Include Previous December. Years will also start in Previous December and end in November.'
-        })
-        month_checkboxes[0].on('check', function(a, value) {
-            if (value && month_checkboxes[12].checked) {
-                month_checkboxes[12].setValue(false)
-            }
-        })
-        month_checkboxes[12].on('check', function(a, value) {
-            if (value && month_checkboxes[0].checked) {
-                month_checkboxes[0].setValue(false)
-            }
-        })
-        var month_filter = month_letters.concat(month_checkboxes)
-        var annual_aggregation_check_box_id = panel_id+'_annual_aggregation_checkbox'
-        var annual_aggregation_check_box = new Ext.form.Checkbox({
-            id: annual_aggregation_check_box_id,
-            name: 'annual_aggregation',
-            checked: true,
-            fieldLabel: 'Annual aggregation'
-        })
-        plugin.month_selector_ids.push(annual_aggregation_check_box_id)
-        add_tooltip({
-            target: panel_id+'_annual_aggregation_checkbox',
-            html: 'Aggregate monthly values into yearly values. Only affects charts.'
-        })
-        var month_checkboxes_id = panel_id+'_month_checkboxes'
-        annual_aggregation_check_box.on('check', function(a, value) {
-            var month_checkboxes = $('#'+month_checkboxes_id)
-            if (value) {
-                month_checkboxes.show(300)
-            }
-            else {
-                month_checkboxes.hide(300)
-            }
-        })
-        plugin.month_selector_ids.push(month_checkboxes_id)
-
-        var form_panel = new Ext.FormPanel({
-            id: panel_id,
-            title: panel_title,
-            collapsible: true,
-            collapseMode: 'mini',
-            collapsed: collapsed,
-            labelWidth: 55,
-            items: [{
-                region: 'center',
-                items: [
-                    new Ext.form.FieldSet({
-                        style: 'margin: 0px; border: none;',
-                        items: [
-                            //data_type_combo_box,
-                            variable_combo_box,
-                            statistic_combo_box,
-                            annual_aggregation_check_box,
-                            // month filter checkboxes
-                            {
-                                id: month_checkboxes_id,
-                                border: false,
-                                layout: {
-                                    type: 'table',
-                                    columns: (month_filter.length / 2)
-                                },
-                                defaults: {
-                                    width: '15px',
-                                    height: '1.3em',
-                                    style: 'margin: 0.1em;'
-                                },
-                                items: month_filter
-                            },
-                            new Ext.form.CompositeField(
-                                {
-                                    fieldLabel: 'From',
-                                    items:[
-                                        from_year_combo_box,
-                                        from_month_combo_box
-                                    ]
-                                }
-                            ),
-                            new Ext.form.CompositeField(
-                                {
-                                    fieldLabel: 'To',
-                                    items:[
-                                        to_year_combo_box,
-                                        to_month_combo_box
-                                    ]
-                                }
-                            )
-                        ]
-                    })
-                ]
-            }]
-        })
-        add_tooltip({
-            target: month_checkboxes_id,
-            html: 'Select months that will be used in the aggregation.'
-        })
-        return form_panel
-    }
-    var filter_months = [
-        'PrevDec', 'Jan', 'Feb', 'Mar', 'Apr', 'May',
-        'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-    ]
-
-    function form_query_expression(ext_form) {
-        form_values = ext_form.getValues()
-        var month_names = []
-        each(
-            [0,1,2,3,4,5,6,7,8,9,10,11,12],
-            function (
-                month_number
-            ) {
-                if (
-                    form_values['month-'+month_number] == 'on'
-                ) {
-                    month_names.push(
-                        filter_months[month_number]
+        // initialisation
+        var constructor_parameters = [
+            'year_min','year_max','base_URL','aggregation_names','parameter_names'
+        ]
+        for (var key in config) {
+            if (config.hasOwnProperty(key)) {
+                if (constructor_parameters.indexOf(key) == -1) {
+                    console.log(
+                        'Unused parameter:'+key+
+                        ' = '+config[key]
                     )
-                }
-            }
-        )
-        return (
-            [
-                form_values.statistic,
-                '(',
-                    '"', form_values.parameter.replace(new RegExp('\\+','g'),' '), '", ',
-                    'From(',
-                        form_values.from_year ,
-                        (form_values.from_month?', '+form_values.from_month:''),
-                    '), ',
-                    'To(',
-                        form_values.to_year ,
-                        (form_values.to_month?', '+form_values.to_month:''),
-                    ')',
-                    (
-                        form_values.annual_aggregation ?
-                        (', Months('+month_names.join(', ')+')'):''
-                    ),
-                ')'
-            ].join('')
-        )
-    }
-
-    plugin.addToMapWindow = function (items) {
-        // create the panels
-        var climate_data_panel = SpecPanel(
-            'climate_data_panel',
-            'Select data: (A)',
-            false
-        )
-        // This button does the simplest "show me data" overlay
-        plugin.update_map_layer_from_form = function () {
-            plugin.update_map_layer(
-                form_query_expression(climate_data_panel.getForm())
-            )
-        }
-        var update_map_layer_button = new Ext.Button({
-            text: 'Show on map (A)',
-            disabled: false,
-            handler: plugin.update_map_layer_from_form
-        });
-        climate_data_panel.addButton(update_map_layer_button)
-        items.push(climate_data_panel)
-        
-        var comparison_panel = SpecPanel(
-            'comparison_panel',
-            'Compare with data (B)',
-            true
-        )
-        // This button does the comparison overlay
-        plugin.update_map_layer_from_comparison = function () {
-            plugin.update_map_layer(
-                
-                form_query_expression(comparison_panel.getForm()) + ' - ' +
-                form_query_expression(climate_data_panel.getForm())
-            )
-        }
-        var update_map_layer_comparison_button = new Ext.Button({
-            text: 'Compare on map (B - A)',
-            disabled: false,
-            handler: plugin.update_map_layer_from_comparison
-        });
-        comparison_panel.addButton(update_map_layer_comparison_button)
-        items.push(comparison_panel)
-        
-        
-        var quick_filter_data_store = plugin.quick_filter_data_store = new Ext.data.SimpleStore({
-            fields: ['name', 'option']
-        })
-        var quick_filter_combo_box = new Ext.form.ComboBox({
-            fieldLabel: 'Region',
-            hiddenName: 'region',
-            store: quick_filter_data_store,
-            displayField: 'name',
-            typeAhead: true,
-            mode: 'local',
-            triggerAction: 'all',
-            emptyText: '',
-            selectOnFocus: true,
-            forceSelection: true
-        })
-        var quick_filter_panel = new Ext.Panel({
-            id: 'quick_filter_panel',
-            title: 'Region filter',
-            collapsible: true,
-            collapseMode: 'mini',
-            collapsed: false,
-            items: [
-                quick_filter_combo_box
-            ]
-        })
-        quick_filter_combo_box.on(
-            'select',
-            function (combo_box, record, index) {
-                plugin.filter_box.set_filter('within("'+record.data.name+'")')
-            }
-        )
-        items.push(quick_filter_panel)
-        
-        
-        var show_chart_button = new Ext.Button({
-            text: 'Show chart for selected places',
-            disabled: true,
-            handler: function() {
-                // create URL
-                var place_ids = []
-                var place_names = []
-                each(
-                    plugin.overlay_layer.selectedFeatures,
-                    function (feature) {
-                        var place_id = feature.attributes.place_id
-                        place_ids.push(place_id)
-                        var place = plugin.places[place_id]
-                        var place_data = place.data
-                        if (place_data.station_name != undefined) {
-                            place_names.push(place_data.station_name)
-                        }
-                        else {
-                            place_names.push(
-                                '('+place_data.latitude+','+place_data.longitude+')'
-                            )
-                        }
-                    }
-                )
-                place_names.sort()
-                plugin.last_query_expression
-                var query_expression = plugin.last_query_expression
-                var spec = JSON.stringify({
-                    place_ids: place_ids,
-                    query_expression: query_expression
-                })
-                
-                var chart_name = [
-                    query_expression.replace(
-                        new RegExp('[",]', 'g'), ''
-                    ).replace(
-                        new RegExp('[()]', 'g'), ' '
-                    ),
-                    'for '+place_names.join(', ')
-                ].join(' ').replace(
-                    new RegExp('\\s+', 'g'), ' '
-                )
-
-                // get hold of a chart manager instance
-                if (
-                    !plugin.chart_window ||
-                    typeof plugin.chart_window.chart_manager == 'undefined'
-                ) {
-                    var chart_window = plugin.chart_window = window.open(
-                        plugin.chart_popup_URL,
-                        'chart',
-                        'width=660,height=600,toolbar=0,resizable=0'
-                    )
-                    chart_window.onload = function () {
-                        chart_window.chart_manager = new chart_window.ChartManager(plugin.chart_URL)
-                        chart_window.chart_manager.addChartSpec(
-                            spec,
-
-                            chart_name
-                        )
-                    }
-                    chart_window.onbeforeunload = function () {
-                        delete plugin.chart_window
-                    }
                 } else {
-                    // some duplication here:
-                    plugin.chart_window.chart_manager.addChartSpec(spec, chart_name)
+                    plugin[key] = config[key]
                 }
+                delete config[key]
+            } else {
+                throw new TypeError(key+' not supplied')
             }
-        })
-        plugin.show_chart_button = show_chart_button
-         
-        items.push(show_chart_button)
- 
-        var download_data_button = new Ext.Button({
-            text: 'Download CSV map data for selected places',
-            disabled: false,
-            handler: function() {
-                var place_ids = []
-                //var place_names = []
-                each(
-                    plugin.overlay_layer.selectedFeatures, 
-                    function (feature) {
-                        var place_id = feature.attributes.place_id
-                        place_ids.push(place_id)
-                        /*
-                        var place = plugin.places[place_id]
-                        var place_data = place.data
-                        if (place_data.station_name != undefined) {
-                            place_names.push(place_data.station_name)
-                        }
-                        else {
-                            place_names.push(
-                                '('+place_data.latitude+','+place_data.longitude+')'
-                            )
-                        }*/
-                    }
-                )
-                //place_names.sort()
-                var spec = JSON.stringify({
-                    place_ids: place_ids,
-                    query_expression: plugin.last_query_expression
-                })
-                window.location.href = plugin.download_data_URL+'?spec='+encodeURI(spec)
-            }
-        })
-        plugin.download_data_button = download_data_button
-        items.push(download_data_button)
-
-        var download_time_series_button = new Ext.Button({
-            text: 'Download CSV time series for selected places',
-            disabled: false,
-            handler: function() {
-                var place_ids = []
-                each(
-                    plugin.overlay_layer.selectedFeatures, 
-                    function (feature) {
-                        var place_id = feature.attributes.place_id
-                        place_ids.push(place_id)
-                    }
-                )
-                var spec = JSON.stringify({
-                    place_ids: place_ids,
-                    query_expression: plugin.last_query_expression
-                })
-                window.location.href = plugin.download_time_series_URL+'?spec='+encodeURI(spec)
-            }
-        })
-        plugin.download_time_series_button = download_time_series_button
-        items.push(download_time_series_button)
-
-        var print_button = new Ext.Button({
-            text: 'Download printable map image',
-            disabled: false,
-            handler: function() {
-                // make the map use the full window
-                // plugin.full_window()
-                // add a button on the map "Download image"
-                plugin.request_image()
-                print_button.disable()
-            }
-        })
-        plugin.print_button = print_button
-        print_button.disable()
-        items.push(print_button)
+        }        
         
-        items.push({
-            autoEl: {
-                    tag: 'div',
-                    id: 'error_div'
-                }                
+        if (plugin.expression) {
+            var initial_query_expression = decodeURI(plugin.expression)
+        }
+        else {
+            if (plugin.parameter_names.length > 0) {
+                var initial_query_expression = (
+                    plugin.aggregation_names[0]+'('+
+                        '"'+ //form_values.data_type+' '+
+                        plugin.parameter_names[0].replace(
+                            new RegExp('\\+','g'),
+                            ' '
+                        )+'", '+
+                        'From('+plugin.year_min+'), '+
+                        'To('+plugin.year_max+')'+
+                    ')'
+                )
+            } else {
+                var initial_query_expression = ''
             }
-        )
+        }
+        var initial_filter = decodeURI(plugin.filter || 'unfiltered')
+        if (initial_filter) {
+            plugin.filter_function = create_filter_function(initial_filter)
+        }
+        delete initial_filter
+        delete config
+
+        // private methods to be moved into classes    
         plugin.set_status = function (html_message) {
             $('#error_div').html(html_message)
         }
         
-        plugin.colour_key = new ColourKey({
-            gradients: [
-                course_colour_steps,
-                smooth_blue_green_red,
-                blue_green_red_cosines,
-                black_to_white,
-                blue_to_yellow,
-                red_to_green,
-                red_to_blue,
-                green_to_blue
-            ]
-        })
-        plugin.colour_key.on_change(plugin.render_map_layer)
-        map.addControl(plugin.colour_key)
-        plugin.colour_key.activate()
+        plugin.last_query_expression = null
 
-        plugin.query_box = new QueryBox({
-            updated: plugin.update_map_layer
-        })
-        map.addControl(plugin.query_box)
-                
-        plugin.query_box.activate()
-        
-        // with a lot of data, things can get slow, animations make it worse
-        map.panDuration = 0
-    }
-    
-    function apply_attributes(object, attributes) {
-        for (var name in attributes) {
-            if (attributes.hasOwnProperty(name)) {
-                object[name] = attributes[name]
-            }
+        // regional filtering
+        plugin.spaces = []
+
+        // change to a layer
+        plugin.features = {}
+        plugin.features_events = []
+        plugin.when_features_loaded = function (features_function) {
+            features_function(plugin.features)
+            plugin.features_events.push(features_function)
         }
-    }
-    
-    plugin.setupToolbar = function (toolbar) {
-        var SelectDragHandler = OpenLayers.Class(OpenLayers.Handler.Drag, {
-            // Ensure that we propagate clicks (so we can still use other controls)
-            down: function() {
-                OpenLayers.Handler.Drag.prototype.down.apply(arguments)
-                //OpenLayers.Event.stop(evt);
-                return true;
-            },
-            CLASS_NAME: 'SelectHandler'
-        });
-        // selection of overlay squares
-        OpenLayers.Feature.Vector.style['default']['strokeWidth'] = '2'
-        var selectCtrl = new OpenLayers.Control.SelectFeature(
-            plugin.overlay_layer,
+        
+        plugin.month_selector_ids = []
+        plugin.overlay_layer = new OpenLayers.Layer.Vector(
+            'Query result values',
             {
-                clickout: true,
-                toggle: false,
-                toggleKey: 'altKey',
-                multiple: false,
-                multipleKey: 'shiftKey',
-                hover: false,
-                box: true,
-                onSelect: function (feature) {
-                    apply_attributes(
-                        feature.style,
-                        {
-                            strokeColor: 'black',
-                            strokeDashstyle: 'dash',
-                            strokeWidth: 1
+                projection: "EPSG:4326",
+                protocol: new OpenLayers.Protocol.HTTP({
+                    url: climate_URL(plugin, 'features'),
+                    format: new OpenLayers.Format.GeoJSON()
+                }),
+                strategies: [
+                    new OpenLayers.Strategy.BBOX({
+                        resFactor: 1
+                    })
+                ],
+                //styleMap: new OpenLayers.StyleMap(style)
+                isBaseLayer: false                                
+            }
+        )
+    }
+    ClimateDataMapPlugin.prototype = {
+        setup: function () {
+            var plugin = this
+            var layer = plugin.overlay_layer
+            map.addLayer(layer)
+            
+            var hover_control = HoverControl(
+                layer,
+                plugin.features,
+                'Show detail by hovering over a square'
+            )
+            map.addControl(hover_control)
+            hover_control.activate()
+            
+            $.ajax({
+                url: climate_URL(plugin, 'features'),
+                dataType: 'json',
+                success: function (rearranged_features_data) {
+                    // add marker layer for features
+                    var station_markers_layer = new OpenLayers.Layer.Markers(
+                        "Observation stations"
+                    )
+                    features_data = {}
+                    // use feature layer
+                    
+                    var new_features = []
+                    for (var feature_id in features_data) {
+                        if (features_data.hasOwnProperty(feature_id)) {
+                            var feature_data = features_data[feature_id]
+                            // store feature data
+                            var feature = new Place(feature_data)
+                            new_features.push(feature)
+                            plugin.features[feature_id] = feature
+                            // add marker
+                            feature.generate_marker(
+                                function (marker) { 
+                                    station_markers_layer.addMarker(marker) 
+                                }
+                            )
+                        }
+                    }
+                    each(
+                        plugin.features_events,
+                        function (features_function) {
+                            features_function(new_features)
                         }
                     )
-                    plugin.overlay_layer.drawFeature(feature)
-                    plugin.show_chart_button.enable()
+                    station_markers_layer.setVisibility(false)
+                    map.addLayer(station_markers_layer)
+                    plugin.station_markers_layer = station_markers_layer
+
+                    update_map_layer(plugin, initial_query_expression)
+                    var example_data
+                    if (features_data[feature_id] == undefined) {
+                        example_data = {latitude:0, longitude: 0}
+                    } else {
+                        example_data = features_data[feature_id]
+                    }
+                    plugin.filter_box = new FilterBox({
+                        updated: function (filter_function) {
+                            plugin.filter_function = filter_function
+                            plugin.colour_key.with_limits(
+                                function (min_value, max_value, gradient) {
+                                    render_map_layer(plugin, min_value, max_value, gradient)
+                                }
+                            )
+                        },
+                        example: new Place(example_data),
+                        initial_filter: plugin.filter,
+                        plugin: plugin
+                    })
+                    map.addControl(plugin.filter_box)
+                    plugin.filter_box.activate()
+                    plugin.logo = new Logo()
+                    plugin.logo.activate()
+                    map.addControl(plugin.logo)
                 },
-                onUnselect: function (feature) {
-                    apply_attributes(
-                        feature.style,
-                        {
-                            strokeColor: '',
-                            strokeDashstyle: '',
-                            strokeWidth: 1
+                error: function (jqXHR, textStatus, errorThrown) {
+                    plugin.set_status(
+                        '<a target= "_blank" href="climate/features">'+
+                            'Could not load feature data!'+
+                        '</a>'
+                    )
+                }
+            })
+            var print_window = function() {
+                // this breaks event handling in the widgets, but that's ok for printing
+                // there is no way to undo 
+                var $map_div = $(map.div)
+                $map_div.remove()
+                var body = $('body')
+                body.remove()
+                var new_body = $('<body></body>')
+                new_body.css({position:'absolute', top:0, bottom:0, left:0, right:0})
+                new_body.append($map_div)
+                $('html').append(new_body)
+                $map_div.css('width', '100%')
+                $map_div.css('height', '100%')
+                map.updateSize()
+            }
+            
+            expand_to_full_window = function() {
+                // this makes the map use the full browser window,
+                // events still work, but it leaves a scroll bar
+                // assumes only one plugin per page.
+                S3.gis.mapPanel.autoWidth = true
+                S3.gis.mapPanel.autoHeight = true
+                $(map.div).css({
+                    position:'fixed',
+                    top:0, bottom:0, left:0, right:0,
+                    width:'100%', height:'100%',
+                    zIndex: 10000
+                })
+                $('body').children().css('display', 'none')
+                $('div.fullpage').css('display', '')
+                $('html').css('overflow', 'hidden')
+                map.updateSize()
+            }
+
+            setTimeout(
+                function () {
+                    //load_world_map()
+                    load_layer_and_locate_features_in_spaces(
+                        "Nepal development regions",
+                        "/eden/static/data/Development_Region.geojson",
+                        new OpenLayers.Format.GeoJSON(),
+                        "black",
+                        "11px"
+                    )
+                    init_tooltips()
+                },
+                1000
+                // this is waiting for OpenLayers to render everything 
+                // and Ext to render all components
+            )
+        },
+        
+        addToMapWindow: function (items) {
+            var plugin = this
+            function SpecPanel(
+                panel_id, panel_title, collapsed
+            ) {
+                function make_combo_box(
+                    data,
+                    fieldLabel,
+                    hiddenName,
+                    combo_box_size
+                ) {
+                    var options = []
+                    each(
+                        data,
+                        function (option) {
+                            options.push([option, option])
                         }
                     )
-                    plugin.overlay_layer.drawFeature(feature)
-                    if (plugin.overlay_layer.selectedFeatures.length == 0) {
-                        plugin.show_chart_button.disable()
+                    var combo_box = new Ext.form.ComboBox({
+                        id: panel_id+hiddenName,
+                        fieldLabel: fieldLabel,
+                        hiddenName: hiddenName,
+                        store: new Ext.data.SimpleStore({
+                            fields: ['name', 'option'],
+                            data: options
+                        }),
+                        displayField: 'name',
+                        typeAhead: true,
+                        mode: 'local',
+                        triggerAction: 'all',
+                        emptyText:'',
+                        selectOnFocus: true,
+                        forceSelection: true
+                    })
+                    combo_box.setSize(combo_box_size)
+                    if (!!options[0]) {
+                        combo_box.setValue(options[0][0])
+                    }
+                    return combo_box
+                }
+
+                var variable_combo_box = make_combo_box(
+                    plugin.parameter_names,
+                    'Parameter',
+                    'parameter',
+                    {
+                        width: 310,
+                        heigth: 25
+                    }
+                )
+                // add tooltips to ease selection of datasets with long names
+                variable_combo_box.tpl = new Ext.XTemplate(
+                    '<tpl for=".">'+
+                        '<div ext:qtip="{name}" class="x-combo-list-item">'+
+                            '{name}'+
+                        '</div>'+
+                    '</tpl>'
+                )
+                
+                var statistic_combo_box = make_combo_box(
+                    plugin.aggregation_names,
+                    'Statistic',
+                    'statistic',
+                    {
+                        width: 115,
+                        heigth: 25
+                    }
+                )
+                
+                function inclusive_range(start, end) {
+                    var values = []
+                    for (
+                        var i = start;
+                        i <= end;
+                        i++
+                    ) {
+                        values.push(i)
+                    }
+                    return values
+                }
+                var years = inclusive_range(plugin.year_min, plugin.year_max)
+                
+                var from_year_combo_box = make_combo_box(
+                    years,
+                    null,
+                    'from_year',
+                    {width:60, height:25}
+                )
+                from_year_combo_box.setValue(plugin.year_min)
+                
+                var to_year_combo_box = make_combo_box(
+                    years,
+                    null,
+                    'to_year',
+                    {width:60, height:25}
+                )
+                to_year_combo_box.setValue(plugin.year_max)
+                
+                variable_combo_box.years = []
+                // when a dataset is selected, request the years.
+                function update_years(dataset_name) {
+                    if (dataset_name != undefined) {
+                        $.ajax({
+                            url: climate_URL(plugin, 'get_years')+'?dataset_name='+dataset_name,
+                            dataType: 'json',
+                            success: function (years) {
+                                variable_combo_box.years = years
+                                if (years.length) {
+                                    from_year_combo_box.setValue(years[0])
+                                    to_year_combo_box.setValue(years[years.length-1])
+                                }
+                            }
+                        })
                     }
                 }
+                variable_combo_box.on(
+                    'select',
+                    function (a, value) {
+                        update_years(value.json[0])
+                    }
+                )
+                update_years(plugin.parameter_names[0])
+                // grey out (but don't disable) any years in the from and to year
+                // combo boxes if no data is available for those years
+                each(
+                    [from_year_combo_box, to_year_combo_box],
+                    function (combo_box) {
+                        combo_box.on(
+                            'expand',
+                            function () {
+                                $(combo_box.list.dom).find(
+                                    '.x-combo-list-item'
+                                ).each(
+                                    function (i, option_div) {
+                                        $option_div = $(option_div)
+                                        $option_div.css('display', 'block')
+                                        if (
+                                            variable_combo_box.years.indexOf(
+                                                parseInt($option_div.text())
+                                            ) == -1
+                                        ) {
+                                            $option_div.css('display', 'none')
+                                        }
+                                    }
+                                )
+                            }
+                        )
+                    }
+                )
+                
+                var from_month_combo_box = make_combo_box(
+                    months,
+                    null,
+                    'from_month',
+                    {width:50, height:25}
+                )
+                plugin.month_selector_ids.push(from_month_combo_box.id)
+
+                var to_month_combo_box = make_combo_box(
+                    months,
+                    null,
+                    'to_month',
+                    {width:50, height:25}
+                )
+                add_tooltip({
+                    target: to_year_combo_box.id,
+                    html: 'If month is not specified, the end of the year will be used.'
+                })
+                add_tooltip({
+                    target: to_month_combo_box.id,
+                    html: 'If month is not specified, the end of the year will be used.'
+                })
+                plugin.month_selector_ids.push(to_month_combo_box.id)
+                
+                var month_letters = []
+                var month_checkboxes = []
+                // if none are picked, don't do annual aggregation
+                // if some are picked, aggregate those months
+                // if all are picked, aggregate for whole year
+                each('DJFMAMJJASOND',
+                    function (
+                        month_letter,
+                        month_index
+                    ) {
+                        month_letters.push(
+                            {
+                                html: month_letter,
+                                border: false
+                            }
+                        )
+                        var name = 'month-'+month_index
+                        month_checkboxes.push(
+                            new Ext.form.Checkbox({
+                                id: panel_id+'_'+name,
+                                name: name,
+                                checked: (month_index > 0)
+                            })
+                        )
+                    }
+                )
+                add_tooltip({
+                    target: panel_id+'_month-0',
+                    html: 'Include Previous December. Years will also start in Previous December and end in November.'
+                })
+                month_checkboxes[0].on('check', function(a, value) {
+                    if (value && month_checkboxes[12].checked) {
+                        month_checkboxes[12].setValue(false)
+                    }
+                })
+                month_checkboxes[12].on('check', function(a, value) {
+                    if (value && month_checkboxes[0].checked) {
+                        month_checkboxes[0].setValue(false)
+                    }
+                })
+                var month_filter = month_letters.concat(month_checkboxes)
+                var annual_aggregation_check_box_id = panel_id+'_annual_aggregation_checkbox'
+                var annual_aggregation_check_box = new Ext.form.Checkbox({
+                    id: annual_aggregation_check_box_id,
+                    name: 'annual_aggregation',
+                    checked: true,
+                    fieldLabel: 'Annual aggregation'
+                })
+                plugin.month_selector_ids.push(annual_aggregation_check_box_id)
+                add_tooltip({
+                    target: panel_id+'_annual_aggregation_checkbox',
+                    html: 'Aggregate monthly values into yearly values. Only affects charts.'
+                })
+                var month_checkboxes_id = panel_id+'_month_checkboxes'
+                annual_aggregation_check_box.on('check', function(a, value) {
+                    var month_checkboxes = $('#'+month_checkboxes_id)
+                    if (value) {
+                        month_checkboxes.show(300)
+                    }
+                    else {
+                        month_checkboxes.hide(300)
+                    }
+                })
+                plugin.month_selector_ids.push(month_checkboxes_id)
+
+                var form_panel = new Ext.FormPanel({
+                    id: panel_id,
+                    title: panel_title,
+                    collapsible: true,
+                    collapseMode: 'mini',
+                    collapsed: collapsed,
+                    labelWidth: 55,
+                    items: [{
+                        region: 'center',
+                        items: [
+                            new Ext.form.FieldSet({
+                                style: 'margin: 0px; border: none;',
+                                items: [
+                                    //data_type_combo_box,
+                                    variable_combo_box,
+                                    statistic_combo_box,
+                                    annual_aggregation_check_box,
+                                    // month filter checkboxes
+                                    {
+                                        id: month_checkboxes_id,
+                                        border: false,
+                                        layout: {
+                                            type: 'table',
+                                            columns: (month_filter.length / 2)
+                                        },
+                                        defaults: {
+                                            width: '15px',
+                                            height: '1.3em',
+                                            style: 'margin: 0.1em;'
+                                        },
+                                        items: month_filter
+                                    },
+                                    new Ext.form.CompositeField(
+                                        {
+                                            fieldLabel: 'From',
+                                            items:[
+                                                from_year_combo_box,
+                                                from_month_combo_box
+                                            ]
+                                        }
+                                    ),
+                                    new Ext.form.CompositeField(
+                                        {
+                                            fieldLabel: 'To',
+                                            items:[
+                                                to_year_combo_box,
+                                                to_month_combo_box
+                                            ]
+                                        }
+                                    )
+                                ]
+                            })
+                        ]
+                    }]
+                })
+                add_tooltip({
+                    target: month_checkboxes_id,
+                    html: 'Select months that will be used in the aggregation.'
+                })
+                return form_panel
             }
-        )
-        
-        // workaround: is this a bug in OpenLayers?
-        //selectCtrl.handlers.box.dragHandler.dragstart
-        OpenLayers.Handler.Drag.prototype.dragstart = function (evt) {
-            var propagate = true;
-            this.dragging = false;
-            if (this.checkModifiers(evt) &&
-                   (OpenLayers.Event.isLeftClick(evt) ||
-                    OpenLayers.Event.isSingleTouch(evt))) {
-                this.started = true;
-                this.start = evt.xy;
-                this.last = evt.xy;
-                OpenLayers.Element.addClass(
-                    this.map.viewPortDiv, "olDragDown"
-                );
-                this.down(evt);
-                this.callback("down", [evt.xy]);
 
-                //OpenLayers.Event.stop(evt);
-
-                if (!this.oldOnselectstart) {
-                    this.oldOnselectstart = document.onselectstart ?
-                        document.onselectstart : OpenLayers.Function.True;
+            var climate_data_panel = SpecPanel(
+                'climate_data_panel',
+                'Select data: (A)',
+                false
+            )
+            var comparison_panel = SpecPanel(
+                'comparison_panel',
+                'Compare with data (B)',
+                true
+            )
+            function createPanelButton(panel, text, callback) {
+                var update_map_layer_button = new Ext.Button({
+                    text: text,
+                    disabled: false,
+                    handler: callback
+                })
+                panel.addButton(update_map_layer_button)
+                items.push(panel)
+            }
+            createPanelButton(
+                climate_data_panel,
+                'Show on map (A)',
+                function () {
+                    update_map_layer(
+                        plugin,
+                        form_query_expression(climate_data_panel.getForm())
+                    )
                 }
-                document.onselectstart = OpenLayers.Function.False;
-
-                propagate = !this.stopDown;
-            } else {
-                this.started = false;
-                this.start = null;
-                this.last = null;
-            }
-            return true;
-        }
-        
-        
-
-        toolbar.add(
-            new GeoExt.Action({
-                control: selectCtrl,
-                map: map,
-                iconCls: 'select_places',
-                // button options
-                tooltip: 'Select places by dragging a box',
-                toggleGroup: 'controls',
-                allowDepress: true,
-                pressed: false
+            )
+            createPanelButton(
+                comparison_panel,
+                'Compare on map (B - A)',
+                function () {
+                    update_map_layer(
+                        plugin,
+                        (
+                            form_query_expression(comparison_panel.getForm()) + ' - ' +
+                            form_query_expression(climate_data_panel.getForm())
+                        )
+                    )
+                }
+            )
+            
+            var filter_data_store = plugin.quick_filter_data_store = new Ext.data.SimpleStore({
+                fields: ['name', 'option']
             })
-        )
-        map.controls[0].deactivate()
+            var quick_filter_combo_box = new Ext.form.ComboBox({
+                fieldLabel: 'Region',
+                hiddenName: 'region',
+                store: filter_data_store,
+                displayField: 'name',
+                typeAhead: true,
+                mode: 'local',
+                triggerAction: 'all',
+                emptyText: '',
+                selectOnFocus: true,
+                forceSelection: true
+            })
+            var quick_filter_panel = new Ext.Panel({
+                id: 'quick_filter_panel',
+                title: 'Region filter',
+                collapsible: true,
+                collapseMode: 'mini',
+                collapsed: false,
+                items: [
+                    quick_filter_combo_box
+                ]
+            })
+            quick_filter_combo_box.on(
+                'select',
+                function (combo_box, record, index) {
+                    plugin.filter_box.set_filter('within("'+record.data.name+'")')
+                }
+            )
+            items.push(quick_filter_panel)
+            
+            plugin.show_chart_button = new Ext.Button({
+                text: 'Show chart for selected features',
+                disabled: true,
+                handler: function() {
+                    // create URL
+                    var feature_ids = []
+                    var feature_names = []
+                    each(
+                        plugin.overlay_layer.selectedFeatures,
+                        function (feature) {
+                            var feature_id = feature.attributes.feature_id
+                            feature_ids.push(feature_id)
+                            var feature = plugin.features[feature_id]
+                            var feature_data = feature.data
+                            if (feature_data.station_name != undefined) {
+                                feature_names.push(feature_data.station_name)
+                            }
+                            else {
+                                feature_names.push(
+                                    '('+feature_data.latitude+','+feature_data.longitude+')'
+                                )
+                            }
+                        }
+                    )
+                    feature_names.sort()
+                    plugin.last_query_expression
+                    var query_expression = plugin.last_query_expression
+                    var spec = JSON.stringify({
+                        feature_ids: feature_ids,
+                        query_expression: query_expression
+                    })
+                    
+                    var chart_name = [
+                        query_expression.replace(
+                            new RegExp('[",]', 'g'), ''
+                        ).replace(
+                            new RegExp('[()]', 'g'), ' '
+                        ),
+                        'for '+feature_names.join(', ')
+                    ].join(' ').replace(
+                        new RegExp('\\s+', 'g'), ' '
+                    )
+
+                    // get hold of a chart manager instance
+                    if (
+                        !plugin.chart_window ||
+                        typeof plugin.chart_window.chart_manager == 'undefined'
+                    ) {
+                        var chart_window = plugin.chart_window = window.open(
+                            climate_URL(plugin, 'chart_popup.html'),
+                            'chart',
+                            'width=660,height=600,toolbar=0,resizable=0'
+                        )
+                        chart_window.onload = function () {
+                            chart_window.chart_manager = new chart_window.ChartManager(climate_URL(plugin, 'climate_chart'))
+                            chart_window.chart_manager.addChartSpec(
+                                spec,
+
+                                chart_name
+                            )
+                        }
+                        chart_window.onbeforeunload = function () {
+                            delete plugin.chart_window
+                        }
+                    } else {
+                        // some duplication here:
+                        plugin.chart_window.chart_manager.addChartSpec(spec, chart_name)
+                    }
+                }
+            })             
+            items.push(plugin.show_chart_button)
+     
+            plugin.download_data_button = new Ext.Button({
+                text: 'Download CSV map data for selected features',
+                disabled: false,
+                handler: function() {
+                    var feature_ids = []
+                    each(
+                        plugin.overlay_layer.selectedFeatures, 
+                        function (feature) {
+                            var feature_id = feature.attributes.feature_id
+                            feature_ids.push(feature_id)
+                        }
+                    )
+                    var spec = JSON.stringify({
+                        feature_ids: feature_ids,
+                        query_expression: plugin.last_query_expression
+                    })
+                    window.location.href = climate_URL(plugin, 'download_data')+'?spec='+encodeURI(spec)
+                }
+            })
+            items.push(plugin.download_data_button)
+
+            plugin.download_time_series_button = new Ext.Button({
+                text: 'Download CSV time series for selected features',
+                disabled: false,
+                handler: function() {
+                    var feature_ids = []
+                    each(
+                        plugin.overlay_layer.selectedFeatures, 
+                        function (feature) {
+                            var feature_id = feature.attributes.feature_id
+                            feature_ids.push(feature_id)
+                        }
+                    )
+                    var spec = JSON.stringify({
+                        feature_ids: feature_ids,
+                        query_expression: plugin.last_query_expression
+                    })
+                    window.location.href = plugin.download_time_series_URL+'?spec='+encodeURI(spec)
+                }
+            })
+            items.push(plugin.download_time_series_button)
+
+            plugin.print_button = new Ext.Button({
+                text: 'Download printable map image',
+                disabled: true,
+                handler: function() {
+                    // make the map use the full window
+                    // plugin.full_window()
+                    // add a button on the map "Download image"
+                    plugin.request_image()
+                    print_button.disable()
+                }
+            })
+            items.push(plugin.print_button)
+            
+            items.push(
+                {
+                    autoEl: {
+                        tag: 'div',
+                        id: 'error_div'
+                    }                
+                }
+            )
+            
+            plugin.colour_key = new ColourKey({
+                gradients: [
+                    course_colour_steps,
+                    smooth_blue_green_red,
+                    blue_green_red_cosines,
+                    black_to_white,
+                    blue_to_yellow,
+                    red_to_green,
+                    red_to_blue,
+                    green_to_blue
+                ]
+            })
+            plugin.colour_key.on_change(
+                function (min_value, max_value, colour_gradient) {
+                    render_map_layer(plugin, min_value, max_value, colour_gradient)
+                }
+            )
+            map.addControl(plugin.colour_key)
+            plugin.colour_key.activate()
+
+            plugin.query_box = new QueryBox({
+                updated: function (query_expression) {
+                    update_map_layer(plugin, query_expression)
+                }
+            })
+            map.addControl(plugin.query_box)
+                    
+            plugin.query_box.activate()
+            
+            // with a lot of data, things can get slow, animations make it worse
+            map.panDuration = 0
+        },
+        
+        setupToolbar: function (toolbar) {
+            // selection of overlay squares
+            OpenLayers.Feature.Vector.style['default']['strokeWidth'] = '2'
+            var selectCtrl = new OpenLayers.Control.SelectFeature(
+                plugin.overlay_layer,
+                {
+                    clickout: true,
+                    toggle: false,
+                    toggleKey: 'altKey',
+                    multiple: false,
+                    multipleKey: 'shiftKey',
+                    hover: false,
+                    box: true,
+                    onSelect: function (feature) {
+                        apply_attributes(
+                            feature.style,
+                            {
+                                strokeColor: 'black',
+                                strokeDashstyle: 'dash',
+                                strokeWidth: 1
+                            }
+                        )
+                        plugin.overlay_layer.drawFeature(feature)
+                        plugin.show_chart_button.enable()
+                    },
+                    onUnselect: function (feature) {
+                        apply_attributes(
+                            feature.style,
+                            {
+                                strokeColor: '',
+                                strokeDashstyle: '',
+                                strokeWidth: 1
+                            }
+                        )
+                        plugin.overlay_layer.drawFeature(feature)
+                        if (plugin.overlay_layer.selectedFeatures.length == 0) {
+                            plugin.show_chart_button.disable()
+                        }
+                    }
+                }
+            )
+            
+            toolbar.add(
+                new GeoExt.Action({
+                    control: selectCtrl,
+                    map: map,
+                    iconCls: 'select_places',
+                    // button options
+                    tooltip: 'Select features by dragging a box',
+                    toggleGroup: 'controls',
+                    allowDepress: true,
+                    pressed: false
+                })
+            )
+            // HACK: turns off some control that interferes with the events
+            map.controls[0].deactivate()
+        }
     }
 }
+define_ClimateDataMapPlugin()

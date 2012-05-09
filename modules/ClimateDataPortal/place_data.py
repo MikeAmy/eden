@@ -1,24 +1,32 @@
 from MapPlugin import *
 
 __all__ = ()
+import gluon.contrib.simplejson as JSON
+
+def get(attribute, convert, value, use):
+    if value is not None:
+        use(attribute, convert(value))
 
 class Attribute(object):
-    def __init__(attribute, name, getter, convert, compressor):
-        def get(object, use):
-            value = getter(object)
-            if value is not None:
-                use(attribute, convert(value))
+    def __init__(attribute, name, getter, compressor):
         attribute.name = name
-        attribute.get = get
+        attribute.get = getter
         attribute.compressor = compressor
         
-    def __repr__(attribute):
-        return "@"+attribute.name
-        
-    def compress(attribute, places, use_string):
-        attribute.compressor(attribute, places, use_string)
-
 def similar_numbers(attribute, places, out):
+    out("[")
+    last_value = [0]
+    def write_value(value):
+        out(str(value - last_value[0]))
+        last_value[0] = value
+    between(
+        (place[attribute] for place in places),
+        write_value,
+        lambda value: out(",")
+    )
+    out("]")
+
+def similar_lists_of_numbers(attribute, places, out):
     out("[")
     last_value = [0]
     def write_value(value):
@@ -39,63 +47,72 @@ def no_compression(attribute, places, out):
         lambda value: out(",")
     )
     out("]")
-    
+
 attributes = [
-    Attribute(
-        "id",
-        lambda place: place.climate_place.id, 
-        int,
-        similar_numbers
-    ),
-    Attribute(
-        "longitude",
-        lambda place: place.climate_place.longitude, 
-        round_to_4_sd,
-        similar_numbers
-    ),
-    Attribute(
-        "latitude",
-        lambda place: place.climate_place.latitude, 
-        round_to_4_sd,
-        similar_numbers
-    ),
-    Attribute(
-        "elevation",
-        lambda place: place.climate_place_elevation.elevation_metres, 
-        int,
-        no_compression
-    ),
-    Attribute(
-        "station_id",
-        lambda place: place.climate_place_station_id.station_id, 
-        int,
-        similar_numbers
-    ),
-    Attribute(
-        "station_name",
-        lambda place: place.climate_place_station_name.name, 
-        lambda name: '"%s"' % name.replace('"', '\\"'),
-        no_compression
+    lambda place, use: get("id", int, place.climate_place.id, use),
+    lambda place, use: get("elevation", int, place.climate_place_elevation.elevation_metres, use),
+    lambda place, use: get("station_id", int, place.climate_place_station_id.station_id, use),
+    (
+        lambda place, use: 
+            get(
+                "station_name", 
+                (lambda name: '"%s"' % name.replace('"', '\\"')),
+                place.climate_place_station_name.name,
+                use
+            )
     )
 ]
+def get_geojson_attributes(place, use):
+    geojson = JSON.loads(place.geojson)
+    if geojson["type"] == "Point":
+        latitude, longitude = geojson["coordinates"]
+        use("latitude", latitude)
+        use("longitude", longitude)
+    elif geojson["type"] == "Polygon":
+        latitudes = []
+        longitudes = []
+        for linear_ring in geojson["coordinates"]:
+            for latitude, longitude in linear_ring:
+                latitudes.append(latitude)
+                longitudes.append(longitude)
+        use("latitudes", latitudes)
+        use("longitudes", longitudes)
 
-def place_data(map_plugin):
+attributes.append(get_geojson_attributes)
+
+compressor = {
+    "id": similar_numbers,
+    "elevation": no_compression,
+    "station_id": similar_numbers,
+    "station_name": no_compression,
+    "latitude": similar_numbers,
+    "longitude": similar_numbers,
+    "latitudes": similar_lists_of_numbers,
+    "longitudes": similar_lists_of_numbers
+}
+
+def place_data(map_plugin, bounding_box):
     def generate_places(file_path):
         "return all place data in JSON format"
         db = map_plugin.env.db
                     
         places_by_attribute_groups = {}
-
+        west, south, east, north = bounding_box
+        
+        bounding_box_geometry = (
+            "POLYGON (("
+                "%(west)f %(north)f, "
+                "%(east)f %(north)f, "
+                "%(east)f %(south)f, "
+                "%(west)f %(south)f, "
+                "%(west)f %(north)f"
+            "))" % locals()
+        )
         for place_row in db(
-            # only show Nepal
-            (db.climate_place.longitude > 79.5) & 
-            (db.climate_place.longitude < 88.5) & 
-            (db.climate_place.latitude > 26.0) & 
-            (db.climate_place.latitude < 30.7)
+            db.climate_place.wkt.st_intersects(bounding_box_geometry)
         ).select(
             db.climate_place.id,
-            db.climate_place.longitude,
-            db.climate_place.latitude,
+            db.climate_place.wkt.st_asgeojson().with_alias("geojson"),
             db.climate_place_elevation.elevation_metres,
             db.climate_place_station_id.station_id,
             db.climate_place_station_name.name,
@@ -113,10 +130,11 @@ def place_data(map_plugin):
             orderby = db.climate_place.id
         ):
             place_data = {}
+            set_attribute = place_data.__setitem__
             for attribute in attributes:
-                attribute.get(place_row, place_data.__setitem__)
+                attribute(place_row, set_attribute)
             attributes_given = place_data.keys()
-            attributes_given.sort(key = lambda attribute: attribute.name)
+            attributes_given.sort()
             attribute_group = tuple(attributes_given)
             try:
                 places_for_these_attributes = places_by_attribute_groups[attribute_group]
@@ -133,19 +151,19 @@ def place_data(map_plugin):
             double_quote = '"%s"'.__mod__
             between(
                 attribute_group,
-                lambda attribute: out(double_quote(attribute.name)),
+                lambda attribute: out(double_quote(attribute)),
                 lambda attribute: out(",")
             )
             out("],\"compression\":[")
             between(
                 attribute_group,
-                lambda attribute: out(double_quote(attribute.compressor.__name__)),
+                lambda attribute: out(double_quote(compressor[attribute].__name__)),
                 lambda attribute: out(",")
             )
             out("],\n\"places\":[")
             between(
                 attribute_group,
-                lambda attribute: attribute.compress(places, out),
+                lambda attribute: compressor[attribute](attribute, places, out),
                 lambda attribute: out(",")
             )
             out("]}")
@@ -166,8 +184,11 @@ def place_data(map_plugin):
     
     return get_cached_or_generated_file(
         map_plugin.env.request.application,
-        "places.json",
+        JSON.dumps(dict(
+            bbox = bounding_box,
+            data = "places"
+        ))+".json",
         generate_places
     )
 
-MapPlugin.place_data = place_data
+MapPlugin.feature_data = place_data

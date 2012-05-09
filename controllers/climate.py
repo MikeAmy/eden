@@ -265,13 +265,21 @@ def stations():
         )
     return "[%s]" % ",".join(stations_strings)
 
-def places():
+def features():
     from datetime import datetime, timedelta
     response.headers["Expires"] = (
         datetime.now() + timedelta(days = 7)
     ).strftime("%a, %d %b %Y %H:%M:%S GMT") # not GMT, but can't find a way
     return response.stream(
-        open(_map_plugin().place_data(),"rb"),
+        open(
+            _map_plugin().feature_data(
+                bounding_box = map(
+                    float,
+                    request.vars["bbox"].split(",")
+                )
+            ),
+            "rb"
+        ),
         chunk_size=4096
     )
 
@@ -362,28 +370,6 @@ def prices():
     else:
         if s3_has_role(1):
             return s3_rest_controller()
-    
-
-def prices():
-    prices_table = db.climate_prices
-    if not auth.is_logged_in():
-        redirect(
-            URL(
-                c = "default",
-                f = "user",
-                args = ["login"],
-                vars = {
-                    "_next": URL(
-                        c = "climate",
-                        f = "prices"
-                    )
-                }
-            )
-        )
-    else:
-        if s3_has_role(1):
-            return s3_rest_controller()
-    
 
 # =============================================================================
 def save_query():

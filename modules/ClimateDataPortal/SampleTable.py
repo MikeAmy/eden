@@ -64,6 +64,7 @@ class SampleTable(object):
             year_step = 20
         ),
     }
+    default_date_mapper = __date_mapper["monthly"]
     __objects = {}
     __names = OrderedDict()
 
@@ -96,9 +97,12 @@ class SampleTable(object):
 
     @staticmethod
     def add_to_client_config_dict(config_dict):
-        data_type_option_names = []
-        for SampleTableType in sample_table_types:
-            data_type_option_names.append(SampleTableType.__name__)                
+        #data_type_option_names = []
+        #for SampleTableType in sample_table_types:
+        #    data_type_option_names.append(SampleTableType.__name__)                
+        #config_dict.update(
+        #    data_type_option_names = data_type_option_names,
+        #)
 
         parameter_names = []
         for name, sample_table in SampleTable.__names.iteritems():
@@ -106,7 +110,6 @@ class SampleTable(object):
             if sample_table.date_mapping_name == "monthly":
                 parameter_names.append(name)
         config_dict.update(
-            data_type_option_names = data_type_option_names,
             parameter_names = parameter_names
         )
     

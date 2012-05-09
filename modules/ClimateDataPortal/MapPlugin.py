@@ -86,31 +86,12 @@ class MapPlugin(object):
         T = env.T
         import json
         application_name = env.request.application
-        
-        def climate_URL(url):
-            return "/%s/climate/%s" % (application_name, url)
-        
+                
         config_dict = dict(
             map_plugin.client_config,
-            
             year_min = map_plugin.year_min,
             year_max = map_plugin.year_max,
-            overlay_data_URL = climate_URL("climate_overlay_data"),
-            chart_URL = climate_URL("climate_chart"),
-            places_URL = climate_URL("places"),
-            chart_popup_URL = climate_URL("chart_popup.html"),
-            buy_data_popup_URL = climate_URL("buy_data.html"),
-            request_image_URL = climate_URL("request_image"),
-            data_URL = climate_URL("data"),
-            years_URL = climate_URL("get_years"),
-            # Nepal specific
-            station_parameters_URL = climate_URL("station_parameter"),
-            download_data_URL = climate_URL("download_data"),
-            
-            data_type_label = str(T("Data Type")),
-            projected_option_type_label = str(
-                T("Projection Type")
-            ),
+            base_URL = "/%s/climate/" % application_name,            
             aggregation_names = [
                 Aggregation.__name__ for Aggregation in aggregations
             ],
@@ -119,14 +100,13 @@ class MapPlugin(object):
         add_configuration(
             SCRIPT(
                 "\n".join((
-                    "registerPlugin(",
-                    "    new ClimateDataMapPlugin("+
-                            json.dumps(
-                                config_dict,
-                                indent = 4
-                            )+
-                        ")",
+                    "window.climate_data_plugin = new ClimateDataMapPlugin("+
+                        json.dumps(
+                            config_dict,
+                            indent = 4
+                        )+
                     ")",
+                    "registerPlugin(climate_data_plugin)",
                 )),
                 _type="text/javascript"
             )
@@ -744,7 +724,7 @@ function (
             generate_chart
         )
 
-    def place_data(map_plugin):
+    def place_data(map_plugin, bounding_box):
         def generate_places(file_path):
             "return all place data in JSON format"
             db = map_plugin.env.db
@@ -828,12 +808,12 @@ function (
             
             places_by_attribute_groups = {}
 
+            east, north, west, south = bounding_box
             for place_row in db(
-                # only show Nepal
-                (db.climate_place.longitude > 79.5) & 
-                (db.climate_place.longitude < 88.5) & 
-                (db.climate_place.latitude > 26.0) & 
-                (db.climate_place.latitude < 30.7)
+                (db.climate_place.longitude > east) & 
+                (db.climate_place.longitude < west) & 
+                (db.climate_place.latitude > south) & 
+                (db.climate_place.latitude < north)
             ).select(
                 db.climate_place.id,
                 db.climate_place.longitude,

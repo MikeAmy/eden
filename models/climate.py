@@ -43,21 +43,14 @@ if deployment_settings.has_module("climate"):
     # when we are generating 2D maps without elevation info.
     climate_place = climate_define_table(
         "place",
-        (
-            # @ToDo: change into GIS point
+        [
             Field(
-                "longitude",
-                "double",
+                "wkt",
+                "geometry()",
                 notnull=True,
                 required=True,
             ),
-            Field(
-                "latitude",
-                "double",
-                notnull=True,
-                required=True,
-            )
-        )
+        ]
     )
 
     def place_attribute_table(
@@ -74,14 +67,14 @@ if deployment_settings.has_module("climate"):
     # also, elevation may be supplied for gridded data
     climate_elevation = place_attribute_table(
         "elevation",
-        (
+        [
             Field(
                 "elevation_metres",
                 "double",
                 notnull=True,
                 required=True,
             ),
-        )
+        ]
     )
 
     # not all places are stations with elevations
@@ -89,14 +82,14 @@ if deployment_settings.has_module("climate"):
     # a station can only be in one place
     climate_station_name = place_attribute_table(
         "station_name",
-        (
+        [
             Field(
                 "name",
                 "string",
                 notnull=True,
                 required=True,
             ),
-        )
+        ]
     )
 
     # station id may not be useful or even meaningful
@@ -104,19 +97,19 @@ if deployment_settings.has_module("climate"):
     # this is passive data so ok to store separately
     climate_station_id = place_attribute_table(
         "station_id",
-        (
+        [
             Field(
                 "station_id",
                 "integer",
                 notnull=True,
                 required=True,
             ),
-        )
+        ]
     )
 
     climate_place_country_iso_number = place_attribute_table(
         "country_iso_number",
-        (
+        [
             Field(
                 "country_iso_number",
                 "string",
@@ -124,12 +117,12 @@ if deployment_settings.has_module("climate"):
                 notnull=True,
                 required=True,
             ),
-        )
+        ]
     )
 
     climate_station_iso3_code = place_attribute_table(
         "iso3_code",
-        (
+        [
             Field(
                 "iso3_code",
                 "string",
@@ -137,7 +130,7 @@ if deployment_settings.has_module("climate"):
                 notnull=True,
                 required=True,
             ),
-        )
+        ]
     )
 
     def station_represent(id):
@@ -184,7 +177,7 @@ if deployment_settings.has_module("climate"):
 
     climate_sample_table_spec = climate_define_table(
         "sample_table_spec",
-        (
+        [
             Field(
                 "name",
                 "string",
@@ -218,15 +211,8 @@ if deployment_settings.has_module("climate"):
                 default="",
                 notnull=True,
                 required=True
-            ),
-            Field(
-                "grid_size",
-                "double",
-                default = 0,
-                notnull = True,
-                required = True
             )
-        ),
+        ]
     )
 
     def sample_table_spec_represent(id):
@@ -295,6 +281,7 @@ if deployment_settings.has_module("climate"):
         "    UNIQUE (name, sample_type_code);"
     )
 
+    '''
     climate_monthly_aggregation_table_spec = climate_define_table(
         "monthly_aggregation",
         (
@@ -314,6 +301,7 @@ if deployment_settings.has_module("climate"):
             )
         )
     )
+    '''
 
     # =====================================================================
     # Station Parameters

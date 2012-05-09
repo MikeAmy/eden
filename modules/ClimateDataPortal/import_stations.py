@@ -32,18 +32,13 @@ unused  Station name         <-id    <-elev     <-lat     <-lon
                 existing_place = db(
                     climate_station_id.station_id == station_id
                 ).select().first()
+                wkt = "POINT(%f %f)" % (longitude, latitude)
                 if existing_place is None:
-                    place_id = climate_place.insert(
-                        longitude = longitude,
-                        latitude = latitude                
-                    )
+                    place_id = climate_place.insert(wkt = wkt)
                 else:
                     print "Update:"
                     place_id = existing_place.id                    
-                    db(climate_place.id == place_id).update(
-                        longitude = longitude,
-                        latitude = latitude                
-                    )
+                    db(climate_place.id == place_id).update(wkt = wkt)
                 
                 def insert_or_update(
                     table,
@@ -54,8 +49,10 @@ unused  Station name         <-id    <-elev     <-lat     <-lon
                 ):
                     table_name = table._tablename
                     if db(table.id == place_id).count() == 0:
+                        # update
                         value = repr(value)
                         formatted_value = format(value)
+                        # DAL doesn't seem to give us access to rows by id
                         db.executesql(
                             "INSERT INTO %(table_name)s "
                             "(id, %(attribute)s) "
@@ -88,7 +85,7 @@ unused  Station name         <-id    <-elev     <-lat     <-lon
                     station_id
                 )
                                 
-                print place_id, station_id, station_name, latitude, longitude, elevation_metres 
+                print place_id, station_id, station_name, latitude, wkt 
     db.commit()
 
 import sys
