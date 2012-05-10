@@ -26,19 +26,6 @@ def similar_numbers(attribute, places, out):
     )
     out("]")
 
-def similar_lists_of_numbers(attribute, places, out):
-    out("[")
-    last_value = [0]
-    def write_value(value):
-        out(str(value - last_value[0]))
-        last_value[0] = value
-    between(
-        (place[attribute] for place in places),
-        write_value,
-        lambda value: out(",")
-    )
-    out("]")
-
 def no_compression(attribute, places, out):
     out("[")
     between(
@@ -52,44 +39,8 @@ attributes = [
     lambda place, use: get("id", int, place.climate_place.id, use),
     lambda place, use: get("elevation", int, place.climate_place_elevation.elevation_metres, use),
     lambda place, use: get("station_id", int, place.climate_place_station_id.station_id, use),
-    (
-        lambda place, use: 
-            get(
-                "station_name", 
-                (lambda name: '"%s"' % name.replace('"', '\\"')),
-                place.climate_place_station_name.name,
-                use
-            )
-    )
+    lambda place, use: get("station_name", str, place.climate_place_station_name.name, use),
 ]
-def get_geojson_attributes(place, use):
-    geojson = JSON.loads(place.geojson)
-    if geojson["type"] == "Point":
-        latitude, longitude = geojson["coordinates"]
-        use("latitude", latitude)
-        use("longitude", longitude)
-    elif geojson["type"] == "Polygon":
-        latitudes = []
-        longitudes = []
-        for linear_ring in geojson["coordinates"]:
-            for latitude, longitude in linear_ring:
-                latitudes.append(latitude)
-                longitudes.append(longitude)
-        use("latitudes", latitudes)
-        use("longitudes", longitudes)
-
-attributes.append(get_geojson_attributes)
-
-compressor = {
-    "id": similar_numbers,
-    "elevation": no_compression,
-    "station_id": similar_numbers,
-    "station_name": no_compression,
-    "latitude": similar_numbers,
-    "longitude": similar_numbers,
-    "latitudes": similar_lists_of_numbers,
-    "longitudes": similar_lists_of_numbers
-}
 
 def place_data(map_plugin, bounding_box):
     def generate_places(file_path):
@@ -108,6 +59,7 @@ def place_data(map_plugin, bounding_box):
                 "%(west)f %(north)f"
             "))" % locals()
         )
+        features = []
         for place_row in db(
             db.climate_place.wkt.st_intersects(bounding_box_geometry)
         ).select(
@@ -129,56 +81,26 @@ def place_data(map_plugin, bounding_box):
             ),
             orderby = db.climate_place.id
         ):
-            place_data = {}
-            set_attribute = place_data.__setitem__
+            properties = {}
+            set_attribute = properties.__setitem__
             for attribute in attributes:
                 attribute(place_row, set_attribute)
-            attributes_given = place_data.keys()
-            attributes_given.sort()
-            attribute_group = tuple(attributes_given)
-            try:
-                places_for_these_attributes = places_by_attribute_groups[attribute_group]
-            except KeyError:
-                places_for_these_attributes = places_by_attribute_groups[attribute_group] = []
-            places_for_these_attributes.append(place_data)
-            
-        places_strings = []
-        out = places_strings.append
-        out("[")
-
-        def add_data_for_attribute_group((attribute_group, places)):
-            out("{\"attributes\":[")
-            double_quote = '"%s"'.__mod__
-            between(
-                attribute_group,
-                lambda attribute: out(double_quote(attribute)),
-                lambda attribute: out(",")
-            )
-            out("],\"compression\":[")
-            between(
-                attribute_group,
-                lambda attribute: out(double_quote(compressor[attribute].__name__)),
-                lambda attribute: out(",")
-            )
-            out("],\n\"places\":[")
-            between(
-                attribute_group,
-                lambda attribute: compressor[attribute](attribute, places, out),
-                lambda attribute: out(",")
-            )
-            out("]}")
-        
-        between(
-            places_by_attribute_groups.iteritems(),
-            add_data_for_attribute_group,
-            lambda item: out(","),
-        )
-                
-        out("]")
+            features.append({
+                "type": "Feature",
+                "geometry": JSON.loads(place_row.geojson),
+                "properties": properties
+            })
 
         file = open(file_path, "w")
         file.write(
-            "".join(places_strings)
+            "".join(
+                JSON.dumps(
+                    {
+                        "type": "FeatureCollection",
+                        "features": features
+                    }
+                )
+            )
         )
         file.close()
     
