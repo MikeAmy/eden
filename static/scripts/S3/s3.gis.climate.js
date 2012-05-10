@@ -1621,17 +1621,20 @@ load_layer_and_locate_features_in_spaces = function (
                                     var detector = new PointInLinearRingDetector(
                                         linear_ring
                                     )
-                                    for (p in features) {
-                                        if (features.hasOwnProperty(p)) {
-                                            var feature = features[p]
-                                            detector.containsPoint(
-                                                feature.point,
-                                                function () {
-                                                    feature.add_space(linear_ring)
-                                                }
-                                            )
+                                    each(
+                                        features,
+                                        function (p) {
+                                            if (features.hasOwnProperty(p)) {
+                                                var feature = features[p]
+                                                detector.containsPoint(
+                                                    feature.point,
+                                                    function () {
+                                                        feature.add_space(linear_ring)
+                                                    }
+                                                )
+                                            }
                                         }
-                                    }
+                                    )
                                 }
                             )
                         }
@@ -1762,82 +1765,7 @@ function load_world_map(plugin) {
     )
 }
 
-CompressibleJSON = new OpenLayers.Class(
-    OpenLayers.Format,
-    {
-        'CLASS_NAME': 'CompressibleJSON',
-        read: function (json) {
-            var rearranged_features_data = eval(json)
-            each(
-                rearranged_features_data,
-                function (features_by_attribute_group) {
-                    var attributes = features_by_attribute_group.attributes
-                    var compression = features_by_attribute_group.compression
-                    var features = features_by_attribute_group.features
-                    var id_index = attributes.indexOf('id')
-                    var id_attribute = features[id_index]
-                    var previous_id = 0
-                    each(id_attribute,
-                        function (id_offset, position) {
-                            var feature_id = id_offset + previous_id
-                            if (features_data[feature_id] == undefined) {
-                                features_data[feature_id] = {}
-                            }
-                            id_attribute[position] = previous_id = feature_id
-                        }
-                    )
-                    attributes.splice(id_index, 1)
-                    features.splice(id_index, 1)
-                    compression.splice(id_index, 1)
-                    each(
-                        attributes,
-                        function (attribute_name, index) {
-                            if (compression[index] == "similar_numbers") {
-                                var previous = 0
-                                each(
-                                    features[index],
-                                    function (value, position) {
-                                        var feature_id = id_attribute[position]
-                                        var feature_data = features_data[feature_id]
-                                        previous = feature_data[attribute_name] = previous + value 
-                                    }
-                                )
-                            }
-                            else {
-                                // no compression
-                                each(
-                                    features[index],
-                                    function (value, position) {
-                                        var feature_id = id_attribute[position]
-                                        var feature_data = features_data[feature_id]
-                                        feature_data[attribute_name] = value
-                                    }
-                                )
-                            }
-                        }
-                    )
-                }
-            )
-            return rearranged_features_data
-            
-            var features = []
-            for (
-                var i = 0;
-                i < feature_ids.length;
-                i++
-            ) {
-                var feature_id = feature_ids[i]
-                var feature = plugin.features[feature_id]
-                var data = feature.data
-                var lat = data.latitude
-                var lon = data.longitude
-                var attributes = {}                
-            }            
-        }
-    }
-)
-
-HoverControl = function(layer, features, title) {
+HoverControl = function(layer, title) {
     // hovering over a feature pops up a box showing details
     // subsequently moving to another feature pops up another box instantly
     // not hovering for a while resets the hover delay
@@ -1853,25 +1781,21 @@ HoverControl = function(layer, features, title) {
             hover_timeout = setTimeout(
                 function () {
                     hover_delay = 0
-                    var data = feature.data
-                    var feature = features[data.feature_id]
-                    if (!!feature) {
-                        feature.popup(
-                            feature,
-                            data.value,
-                            function (popup_box) {
-                                feature.popup_box = popup_box
-                                map.addPopup(popup_box)
-                                feature.unselect_timeout = setTimeout(
-                                    function () {
-                                        onFeatureUnselect(feature)
-                                    },
-                                    10000
-                                )
-                            },
-                            hover_control.handlers.feature.evt
-                        )
-                    }
+                    feature.popup(
+                        feature,
+                        feature.data.value,
+                        function (popup_box) {
+                            feature.popup_box = popup_box
+                            map.addPopup(popup_box)
+                            feature.unselect_timeout = setTimeout(
+                                function () {
+                                    onFeatureUnselect(feature)
+                                },
+                                10000
+                            )
+                        },
+                        hover_control.handlers.feature.evt
+                    )
                 },
                 hover_delay
             )
@@ -2432,10 +2356,9 @@ function define_ClimateDataMapPlugin() {
         plugin.spaces = []
 
         // change to a layer
-        plugin.features = {}
         plugin.features_events = []
         plugin.when_features_loaded = function (features_function) {
-            features_function(plugin.features)
+            features_function(plugin.overlay_layer.features)
             plugin.features_events.push(features_function)
         }
         
@@ -2457,6 +2380,64 @@ function define_ClimateDataMapPlugin() {
                 isBaseLayer: false                                
             }
         )
+        plugin.overlay_layer.events.on(
+            'loadend',
+            function () {
+                // create station markers layer
+                var station_markers_layer = new OpenLayers.Layer.Markers(
+                    "Observation stations"
+                )
+                // use feature layer
+                var new_features = []
+                each(
+                    plugin.overlay_layer,
+                    function (feature) {
+                        var feature_id = feature.data.id
+                        new_features.push(feature)
+                        feature.generate_marker(
+                            function (marker) { 
+                                station_markers_layer.addMarker(marker) 
+                            }
+                        )
+                    }
+                )
+                each(
+                    plugin.features_events,
+                    function (features_function) {
+                        features_function(new_features)
+                    }
+                )
+                station_markers_layer.setVisibility(false)
+                map.addLayer(station_markers_layer)
+                
+                plugin.station_markers_layer = station_markers_layer
+
+                update_map_layer(plugin, initial_query_expression)
+                plugin.filter_box = new FilterBox({
+                    updated: function (filter_function) {
+                        plugin.filter_function = filter_function
+                        plugin.colour_key.with_limits(
+                            function (min_value, max_value, gradient) {
+                                render_map_layer(plugin, min_value, max_value, gradient)
+                            }
+                        )
+                    },
+                    example: new OpenLayers.Feature.Vector({
+                        data:{
+                            latitude:0,
+                            longitude: 0
+                        }
+                    }),
+                    initial_filter: plugin.filter,
+                    plugin: plugin
+                })
+                map.addControl(plugin.filter_box)
+                plugin.filter_box.activate()
+                plugin.logo = new Logo()
+                plugin.logo.activate()
+                map.addControl(plugin.logo)
+            }
+        )
     }
     ClimateDataMapPlugin.prototype = {
         setup: function () {
@@ -2466,83 +2447,11 @@ function define_ClimateDataMapPlugin() {
             
             var hover_control = HoverControl(
                 layer,
-                plugin.features,
                 'Show detail by hovering over a square'
             )
             map.addControl(hover_control)
             hover_control.activate()
             
-            $.ajax({
-                url: climate_URL(plugin, 'features'),
-                dataType: 'json',
-                success: function (rearranged_features_data) {
-                    // add marker layer for features
-                    var station_markers_layer = new OpenLayers.Layer.Markers(
-                        "Observation stations"
-                    )
-                    features_data = {}
-                    // use feature layer
-                    
-                    var new_features = []
-                    for (var feature_id in features_data) {
-                        if (features_data.hasOwnProperty(feature_id)) {
-                            var feature_data = features_data[feature_id]
-                            // store feature data
-                            var feature = new Place(feature_data)
-                            new_features.push(feature)
-                            plugin.features[feature_id] = feature
-                            // add marker
-                            feature.generate_marker(
-                                function (marker) { 
-                                    station_markers_layer.addMarker(marker) 
-                                }
-                            )
-                        }
-                    }
-                    each(
-                        plugin.features_events,
-                        function (features_function) {
-                            features_function(new_features)
-                        }
-                    )
-                    station_markers_layer.setVisibility(false)
-                    map.addLayer(station_markers_layer)
-                    plugin.station_markers_layer = station_markers_layer
-
-                    update_map_layer(plugin, initial_query_expression)
-                    var example_data
-                    if (features_data[feature_id] == undefined) {
-                        example_data = {latitude:0, longitude: 0}
-                    } else {
-                        example_data = features_data[feature_id]
-                    }
-                    plugin.filter_box = new FilterBox({
-                        updated: function (filter_function) {
-                            plugin.filter_function = filter_function
-                            plugin.colour_key.with_limits(
-                                function (min_value, max_value, gradient) {
-                                    render_map_layer(plugin, min_value, max_value, gradient)
-                                }
-                            )
-                        },
-                        example: new Place(example_data),
-                        initial_filter: plugin.filter,
-                        plugin: plugin
-                    })
-                    map.addControl(plugin.filter_box)
-                    plugin.filter_box.activate()
-                    plugin.logo = new Logo()
-                    plugin.logo.activate()
-                    map.addControl(plugin.logo)
-                },
-                error: function (jqXHR, textStatus, errorThrown) {
-                    plugin.set_status(
-                        '<a target= "_blank" href="climate/features">'+
-                            'Could not load feature data!'+
-                        '</a>'
-                    )
-                }
-            })
             var print_window = function() {
                 // this breaks event handling in the widgets, but that's ok for printing
                 // there is no way to undo 
@@ -2982,10 +2891,9 @@ function define_ClimateDataMapPlugin() {
                     each(
                         plugin.overlay_layer.selectedFeatures,
                         function (feature) {
-                            var feature_id = feature.attributes.feature_id
-                            feature_ids.push(feature_id)
-                            var feature = plugin.features[feature_id]
                             var feature_data = feature.data
+                            var feature_id = feature_data.id
+                            feature_ids.push(feature_id)
                             if (feature_data.station_name != undefined) {
                                 feature_names.push(feature_data.station_name)
                             }

@@ -98,18 +98,15 @@ class MapPlugin(object):
         )
         SampleTable.add_to_client_config_dict(config_dict)
         add_configuration(
-            SCRIPT(
-                "\n".join((
-                    "window.climate_data_plugin = new ClimateDataMapPlugin("+
-                        json.dumps(
-                            config_dict,
-                            indent = 4
-                        )+
-                    ")",
-                    "registerPlugin(climate_data_plugin)",
-                )),
-                _type="text/javascript"
-            )
+            "\n".join((
+                "window.climate_data_plugin = new ClimateDataMapPlugin("+
+                    json.dumps(
+                        config_dict,
+                        indent = 4
+                    )+
+                ")",
+                "registerPlugin(climate_data_plugin)",
+            ))
         )
 
     def get_overlay_data(
