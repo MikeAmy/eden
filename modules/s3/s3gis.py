@@ -4419,6 +4419,11 @@ S3.i18n.gis_feature_info = '%s';
 
         # Static Script
         if debug:
+            add_javascript("scripts/S3/each.js")
+            add_javascript("scripts/S3/HTML.js")
+            add_javascript("scripts/S3/ColourGradient.js")
+            add_javascript("scripts/S3/StandardColourGradients.js")
+            add_javascript("scripts/S3/ColourGradientSelector.js")
             add_javascript("scripts/S3/s3.gis.layers.js")
             add_javascript("scripts/S3/s3.gis.controls.js")
             add_javascript("scripts/S3/s3.gis.js")

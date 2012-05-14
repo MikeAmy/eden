@@ -952,11 +952,35 @@ function addLayerPropertiesButton() {
                                 });
                             });
                         } else {
-                            var tabPanel = new Ext.Panel({
+                            var colour_gradient_selector = new ColourGradientSelector({
+                                gradients: [
+                                    coarse_colour_steps,
+                                    smooth_blue_green_red,
+                                    blue_green_red_cosines,
+                                    black_to_white,
+                                    blue_to_yellow,
+                                    red_to_green,
+                                    red_to_blue,
+                                    green_to_blue
+                                ]
+                            })
+                            colour_gradient_selector.set_gradient(smooth_blue_green_red)
+                            var tabPanel = new Ext.TabPanel({
                                 // View/Edit Basic Details
                                 // @ToDo: i18n
-                                title: 'Layer Properties',
-                                html: response.responseText
+                                activeTab: 0,
+                                items: [
+                                    {
+                                        title: 'Layer Properties',
+                                        html: response.responseText,
+                                        id: 'layer_properties_tab'
+                                    },
+                                    {
+                                        title: 'Style',
+                                        contentEl: colour_gradient_selector.draw(),
+                                        id: 'layer_style_tab'
+                                    }
+                                ]
                             });
                         }
                         S3.gis.propertiesWindow = new Ext.Window({

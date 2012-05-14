@@ -1,4 +1,6 @@
 
+// require(['each.js', 'HTML.js'], function(util) {
+
 // Workaround: see http://stackoverflow.com/questions/4728852/forcing-an-openlayers-markers-layer-to-draw-on-top-and-having-selectable-layers
 // This fixes a problem whereby the marker layer doesn't 
 // respond to click events
@@ -75,81 +77,6 @@ function apply_attributes(object, attributes) {
         }
     }
 }
-    
-
-function each(array, fn) {
-    if (!array) {
-        throw new Error(
-            ""+array+" is not an array"
-        )
-    }
-    else {
-        for (
-            var i = 0;
-            i < array.length;
-            ++i
-        ) {
-            fn(array[i], i)
-        }
-    }
-}
-
-
-// HTML nodes
-function walk(items, use_item) {
-    if (
-        items.constructor === Array
-    ) {
-        each(
-            items,
-            function (item) {
-                walk(item, use_item)
-            }
-        )
-    }
-    else {
-        use_item(items)
-    }
-}
-function flatten(items) {
-    var result = []
-    walk(
-        items,
-        function (item) {
-            result.push(item)
-        }
-    )
-    return result
-}
-
-function node(tag_name, attrs, children) {
-    var result = $(document.createElement(tag_name))
-    for (var key in attrs) {
-        if (attrs.hasOwnProperty(key)) {
-            result.attr(key, attrs[key])
-        }
-    }
-    result.append.apply(result, flatten(children))
-    return result
-}
-function NodeGenerator(tag_name) {
-    return function (/* attrs, child1... */) {
-        var attrs = Array.prototype.shift.apply(arguments)
-        arguments.constructor = Array
-        return node(tag_name, attrs, arguments)
-    }
-}
-
-INPUT = NodeGenerator('input')
-DIV = NodeGenerator('div')
-TABLE = NodeGenerator('table')
-TR = NodeGenerator('tr')
-TD = NodeGenerator('td')
-SPAN = NodeGenerator('span')
-IMG = NodeGenerator('img')
-TEXTAREA = NodeGenerator('textarea')
-A = NodeGenerator('a')
-
 
 // human-readable numbers
 var power_pattern = new RegExp('\\^(-?\\d+)', 'g')
@@ -162,6 +89,7 @@ function replace_power_with_sup(string) {
 
 // Map widget classes
 
+// @depends ColourGradientSelector
 var ColourKey = OpenLayers.Class(OpenLayers.Control, {
     CLASS_NAME: 'ColourKey',
     /* The colour key is implemented as an OpenLayers control
@@ -171,6 +99,12 @@ var ColourKey = OpenLayers.Class(OpenLayers.Control, {
          gradient (optional)
          gradients 
     */
+    initialize: function () {
+        var colour_key = this
+        colour_key.colour_gradient_selector = new ColourGradientSelector(
+            
+        )
+    },
     destroy: function() {
         var colour_key = this
         colour_key.deactivate();
@@ -179,10 +113,7 @@ var ColourKey = OpenLayers.Class(OpenLayers.Control, {
     
     set_gradient: function (colour_gradient) {
         var colour_key = this
-        colour_key.gradient = colour_gradient
-        colour_gradient.manage_image(
-            colour_key.$key_colour_key_img
-        )
+        colour_key.colour_gradient_selector.set_gradient(colour_gradient)
     },
     
     on_change: function (use_limits_and_gradient) {
@@ -342,62 +273,6 @@ var ColourKey = OpenLayers.Class(OpenLayers.Control, {
             '</label>'
         )
         
-        var gradient_images = []
-        function raise(x) {
-            $(this).css('border-top', '1px solid #DDD')
-            $(this).css('border-bottom', '1px solid #AAA')
-        }
-        function lower(x) {
-            $(this).css('border-top', '1px solid black')
-            $(this).css('border-bottom', '1px solid black')
-        }
-        each(
-            colour_key.gradients,
-            function (colour_gradient) {
-                var gradient_image = IMG({
-                    width:'100%',
-                    height:'15px',
-                    style:'border-top: 1px solid black; border-bottom: 1px solid black; margin-top: 1px;',
-                    title: 'click to use this gradient'
-                })
-                colour_gradient.manage_image(gradient_image)
-                gradient_images.push(gradient_image)
-                gradient_image.mouseover(raise)
-                gradient_image.mouseout(lower)
-                gradient_image.click(function () {
-                    colour_key.set_gradient(colour_gradient)
-                    colour_key.use_callback()
-                })
-            }
-        )
-        colour_key.$controls = DIV(
-            {
-                style: 'display: none; padding-top: 3px;'
-            },
-            SPAN({}, 'Click to select gradient:'),
-            gradient_images,
-            DIV({style:'text-align:center;'},
-                colour_key.$limit_lock,
-                colour_key.$limit_lock_label
-            )
-        )
-        
-        colour_key.$key_colour_key_img = IMG({
-            width:'100%',
-            height:'15px',
-            title:'Click to invert colour gradient'
-        })
-        colour_key.$gradient = DIV({},
-            colour_key.$key_colour_key_img,
-            colour_key.$controls
-        )
-        colour_key.$key_colour_key_img.click(
-            function () {
-                colour_key.gradient.invert()
-                colour_key.use_callback()
-            }
-        )
-        
         colour_key.$units = SPAN({}, 'Units')
         var $div = colour_key.$inner_div = DIV({
                 style:'width: 240px; position:absolute; top: 10px; left:55px; background-color:#222; border-top:1px solid #EEE; padding: 4px; border-radius: 5px;color:white;'
@@ -424,7 +299,11 @@ var ColourKey = OpenLayers.Class(OpenLayers.Control, {
                 )
                 // key_scale_tr (unused)
             ),
-            colour_key.$gradient
+            $(colour_key.colour_gradient_selector.draw()),
+            DIV({style:'text-align:center;'},
+               colour_key.$limit_lock,
+               colour_key.$limit_lock_label
+            )
         )
         $div.mouseover(
             function () {
@@ -436,26 +315,6 @@ var ColourKey = OpenLayers.Class(OpenLayers.Control, {
                 colour_key.$controls.css('display', 'none')
             }
         )
-        /*
-        // code that draws a scale on the colours as lines, to aid 
-        // interpretation. Doesn't work well for some scales
-        var scale_divisions = range/range_mag
-        alert(''+range+' '+range_mag+' '+scale_divisions)
-        
-        var scale_html = '';
-        for (
-            var i = 0;
-            i < scale_divisions-1;
-            i++
-        ) {
-            scale_html += '<td style="border-left:1px solid black">&nbsp;</td>'
-        }
-        $('#id_key_scale_tr').html(
-            scale_html+
-            '<td style="border-left:1px solid black; border-right:1px solid black;">&nbsp;</td>'
-        )
-        */
-
         $(colour_key.div).append($div)
         $div.show()
         return colour_key.div
@@ -647,227 +506,6 @@ var QueryBox = OpenLayers.Class(OpenLayers.Control, {
         query_box.$text_area.css('text-align', 'center')
     }
 });
-
-
-// ---------------------
-
-function base64_encode(s) {
-    var base64chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'.split("");
-    var r = ''
-    var p = ''
-    var c = s.length % 3
-    if (c > 0) { 
-        for (; c < 3; c++) { 
-            p += '='
-            s += '\0'
-        } 
-    }
-    for (c = 0;
-        c < s.length;
-        c += 3
-    ) {
-        if (c > 0 && (c / 3 * 4) % 76 == 0) { 
-            r += '\r\n'; 
-        }
-        var n = (
-            (s.charCodeAt(c) << 16) + 
-            (s.charCodeAt(c+1) << 8) + 
-            s.charCodeAt(c+2)
-        )
-        n = [
-            (n >>> 18) & 63,
-            (n >>> 12) & 63,
-            (n >>> 6) & 63,
-            n & 63
-        ]
-        r += (
-            base64chars[n[0]] + 
-            base64chars[n[1]] + 
-            base64chars[n[2]] + 
-            base64chars[n[3]]
-        )
-    }
-    return r.substring(0, r.length - p.length) + p
-}
-
-function ColourGradient(
-    rgb_values
-) {
-    var colour_gradient = this
-    var rgb_values = rgb_values
-    var bitmap_string = null
-    function bitmap_data() {
-        if (bitmap_string != null) {
-            return bitmap_string
-        }
-        else {
-            function encode(number, bytes) {
-                var oldbase = 1
-                var string = ''
-                for (var x = 0; x < bytes; x++) {
-                    var byte = 0
-                    if (number != 0) {
-                        var base = oldbase * 256
-                        byte = number % base
-                        number = number - byte
-                        byte = byte / oldbase
-                        oldbase = base
-                    }
-                    string += String.fromCharCode(byte)
-                }
-                return string
-            }
-            var width = rgb_values.length
-
-            var data = []
-            for (var x = 0; x < width; x++) {
-                var value = rgb_values[Math.floor((x/width) * rgb_values.length)]
-                data.push(
-                    String.fromCharCode(
-                        value[2],
-                        value[1],
-                        value[0]
-                    )
-                )
-            }
-            padding = (
-                width % 4 ? 
-                '\0\0\0'.substr((width % 4) - 1, 3):
-                ''
-            )
-            data.push(padding + padding + padding)
-            var data_bytes = data.join('')
-
-            var info_header = (
-                encode(40, 4) + // Number of bytes in the DIB header (from this point)
-                encode(width, 4) + // Width of the bitmap in pixels
-                encode(1, 4) + // Height of the bitmap in pixels
-                '\x01\0' + // Number of color planes being used
-                encode(24, 2) + // Number of bits per pixel
-                '\0\0\0\0'+ // BI_RGB, no Pixel Array compression used
-                encode(data_bytes.length, 4)+ // Size of the raw data in the Pixel Array (including padding)
-                encode(2835, 4)+ //Horizontal resolution of the image
-                encode(2835, 4)+ // Vertical resolution of the image
-                '\0\0\0\0\0\0\0\0'
-            )
-
-            var header_length = 14 + info_header.length
-            bitmap_string = (
-                'BM'+
-                encode(header_length + data_bytes.length, 4)+
-                '\0\0\0\0'+
-                encode(header_length, 4)
-            ) + info_header + data_bytes
-            return bitmap_string
-        }
-    }
-
-    var fill_image = function (image) {
-        $(image).attr(
-            'src',
-            'data:image/bmp;base64,'+
-            base64_encode(bitmap_data())
-        )
-    }
-    var images = []
-    colour_gradient.manage_image = function (image) {
-        images.push(image)
-        fill_image(image)
-    }
-    colour_gradient.invert = function () {
-        rgb_values = rgb_values.reverse()
-        bitmap_string = null
-        each(images, fill_image)
-    }
-    colour_gradient.colour_for_value = function (
-        normalised_value // must be between 0 and 1
-    ) {
-        return rgb_values[
-            Math.floor(
-                normalised_value * (rgb_values.length-1)
-            )
-        ]
-    }
-}
-
-var course_colour_steps = new ColourGradient([
-    [240, 10, 135],
-	[255, 62, 62],
-    [240, 130, 40],
-    [230, 220, 50],
-    [160, 230, 55],
-    [10, 210, 140],
-    [10, 200, 200],
-    [30, 60, 255],
-    [130, 0, 220],
-    [160, 0, 200]
-])
-
-var blue_green_red_cosines = []
-with (Math) {
-    var i;
-    for (i = -900; i < 900; i++) {
-        var x = i/1000 * PI
-        var red = floor((1- (2 * abs(PI/2-x))/PI) * 255) //floor(sin(x) * 255)
-        var green = floor((1- (2 * abs(x))/PI) * 255) //floor(cos(x) *255)
-        var blue = floor((1- (2 * abs(PI/2+x))/PI) * 255) //floor(-sin(x) *255)
-        blue_green_red_cosines.push([
-            red < 0 ? 0 : red,
-            green < 0 ? 0 : green,
-            blue < 0 ? 0 : blue
-        ])
-    }
-}
-
-var blue_green_red_cosines = new ColourGradient(blue_green_red_cosines)
-
-var smooth_blue_green_red = []
-with (Math) {
-    var i;
-    for (i = -400; i < 800; i++) {
-        var x = i/1000 * PI
-        var red = floor(sin(x) * 255)
-        var green = floor(sin(x + (PI/3)) *255)
-        var blue = floor(sin(x + (2 * PI/3)) *255)
-        smooth_blue_green_red.push([
-            red < 0 ? 0 : red,
-            green < 0 ? 0 : green,
-            blue < 0 ? 0 : blue
-        ])
-    }
-}
-var smooth_blue_green_red = new ColourGradient(smooth_blue_green_red)
-
-function linear_gradient(start_colour, end_colour, steps) {
-    steps = steps || 100
-    var start_red = start_colour[0],
-        start_green = start_colour[1],
-        start_blue = start_colour[2]
-    var range_red = end_colour[0] - start_red,
-        range_green = end_colour[1] - start_green,
-        range_blue = end_colour[2] - start_blue
-    var colours = []
-    var floor = Math.floor
-    for (
-        var i = 0;
-        i < steps;
-        ++i
-    ) {
-        var value = i / steps
-        colours.push([
-            floor((start_red + value * range_red) * 255),
-            floor((start_green + value * range_green) * 255),
-            floor((start_blue + value * range_blue) * 255),
-        ])
-    }
-    return colours
-}
-
-var black_to_white = new ColourGradient(linear_gradient([0,0,0], [1,1,1])),
-    blue_to_yellow = new ColourGradient(linear_gradient([0,0,1], [1,1,0])),
-    red_to_green = new ColourGradient(linear_gradient([1,0,0], [0,1,0])),
-    red_to_blue = new ColourGradient(linear_gradient([1,0,0], [0,0,1])),
-    green_to_blue = new ColourGradient(linear_gradient([0,1,0], [0,0,1]))
 
 
 // ---------------------
@@ -3018,7 +2656,7 @@ function define_ClimateDataMapPlugin() {
             
             plugin.colour_key = new ColourKey({
                 gradients: [
-                    course_colour_steps,
+                    coarse_colour_steps,
                     smooth_blue_green_red,
                     blue_green_red_cosines,
                     black_to_white,

@@ -32,7 +32,6 @@ def between(items, main, between, *a, **kw):
         else:
             between(item, *a, **kw)
 
-
 class MapPlugin(object):
     def __init__(
         map_plugin,
