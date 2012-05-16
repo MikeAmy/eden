@@ -896,8 +896,13 @@ function addLayerPropertiesButton() {
             }
             var node = S3.gis.layerTree.root.findChildBy(isSelected, null, true);
             if (node) {
-                var layer_type = node.layer.s3_layer_type;
-                var url = S3.Ap.concat('/gis/layer_' + layer_type + '.plain?layer_' + layer_type + '.layer_id=' + node.layer.s3_layer_id + '&update=1');
+                var layer = node.layer
+                var layer_type = layer.s3_layer_type;
+                var url = S3.Ap.concat(
+                    '/gis/layer_' + layer_type + '.plain?'+
+                    'layer_' + layer_type + '.layer_id=' + layer.s3_layer_id + 
+                    '&update=1'
+                );
                 Ext.Ajax.request({
                     url: url,
                     method: 'GET',
@@ -906,6 +911,7 @@ function addLayerPropertiesButton() {
                         if (S3.gis.propertiesWindow) {
                             S3.gis.propertiesWindow.close();
                         }
+                        console.log(layer)
                         if (layer_type == 'feature') {
                             var tabPanel = new Ext.TabPanel({
                                 activeTab: 0,
@@ -915,15 +921,15 @@ function addLayerPropertiesButton() {
                                         // @ToDo: i18n
                                         title: 'Layer Properties',
                                         html: response.responseText
-                                    }, {
+                                    },
+                                    {
                                         // Tab for Search Widget
                                         // @ToDo: i18n
                                         title: 'Filter',
                                         id: 's3_gis_layer_filter_tab',
                                         html: ''
                                     }
-                                    // @ToDo: Tab for Styling (esp. Thematic Mapping)
-                                    ]
+                                ]
                             });
                             tabPanel.items.items[1].on('activate', function() {
                                 // Find which search form to load
@@ -952,35 +958,71 @@ function addLayerPropertiesButton() {
                                 });
                             });
                         } else {
-                            var colour_gradient_selector = new ColourGradientSelector({
-                                gradients: [
-                                    coarse_colour_steps,
-                                    smooth_blue_green_red,
-                                    blue_green_red_cosines,
-                                    black_to_white,
-                                    blue_to_yellow,
-                                    red_to_green,
-                                    red_to_blue,
-                                    green_to_blue
-                                ]
-                            })
-                            colour_gradient_selector.set_gradient(smooth_blue_green_red)
-                            var tabPanel = new Ext.TabPanel({
-                                // View/Edit Basic Details
-                                // @ToDo: i18n
-                                activeTab: 0,
-                                items: [
-                                    {
-                                        title: 'Layer Properties',
-                                        html: response.responseText,
-                                        id: 'layer_properties_tab'
-                                    },
+                            var tabPanelItems = [
+                                {
+                                    title: 'Layer Properties',
+                                    html: response.responseText,
+                                    id: 'layer_properties_tab'
+                                }
+                            ]
+                            if (layer_type == 'theme') { 
+                                var standard_gradients = {
+                                     coarse_colour_steps: coarse_colour_steps,
+                                     smooth_blue_green_red: smooth_blue_green_red,
+                                     blue_green_red_cosines: blue_green_red_cosines,
+                                     black_to_white: black_to_white,
+                                     blue_to_yellow: blue_to_yellow,
+                                     red_to_green: red_to_green,
+                                     red_to_blue: red_to_blue,
+                                     green_to_blue: green_to_blue
+                                }
+                                var gradients = []
+                                Ext.iterate(
+                                     standard_gradients,
+                                     function (name, gradient) {
+                                         gradients.push(gradient)
+                                     }
+                                )
+                                var style_gradient = layer.s3_style
+                                var style_gradient_to_use
+                                // pretty bad when one feels the best thing to do
+                                // is use a switch statement.
+                                // (but then, if statements are small switch statements)
+                                switch (typeof style_gradient) {
+                                    case "undefined":
+                                        style_gradient_to_use = smooth_blue_green_red
+                                        break
+                                    case "string":
+                                        // named gradient
+                                        style_gradient_to_use = standard_gradients[style_gradient]
+                                        break
+                                    case "array":
+                                        if (style_gradient[0].constructor == "object") {
+                                            style_gradient_to_use = new ColourIntervals(style_gradient)
+                                        }
+                                        else {
+                                            style_gradient_to_use = new ColourGradient(style_gradient)
+                                        }
+                                        gradients.push(style_gradient_to_use)
+                                        break
+                                }
+                                var colour_gradient_selector = new ColourGradientSelector({
+                                    gradients: gradients
+                                })
+                                colour_gradient_selector.set_gradient(style_gradient_to_use)
+                                tabPanelItems.push(
                                     {
                                         title: 'Style',
                                         contentEl: colour_gradient_selector.draw(),
                                         id: 'layer_style_tab'
                                     }
-                                ]
+                                )
+                            }
+                            var tabPanel = new Ext.TabPanel({
+                                // View/Edit Basic Details
+                                // @ToDo: i18n
+                                activeTab: 0,
+                                items: tabPanelItems
                             });
                         }
                         S3.gis.propertiesWindow = new Ext.Window({

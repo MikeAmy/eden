@@ -1,14 +1,15 @@
 
 var ColourGradientSelector = OpenLayers.Class(OpenLayers.Control, {
     CLASS_NAME: 'ColourGradientSelector',
-/*    initialize: function () {
+    initialize: function (args) {
         var colour_gradient_selector = this
-        console.log(colour_gradient_selector.gradients)
-        colour_gradient_selector.gradients = colour_gradient_selector.gradients || []
-        if (colour_gradient_selector.gradients.length > 0) {
-            colour_gradient_selector.set_gradient(colour_gradient_selector.gradients[0])
-        }
-    },*/
+        colour_gradient_selector.gradients = args.gradients
+        colour_gradient_selector.$key_colour_gradient_selector_img = IMG({
+            width:'100%',
+            height:'15px',
+            title:'Click to invert colour gradient'
+        })
+    },
     destroy: function() {
         var colour_gradient_selector = this
         colour_gradient_selector.deactivate();
@@ -24,16 +25,14 @@ var ColourGradientSelector = OpenLayers.Class(OpenLayers.Control, {
             colour_gradient_selector.$key_colour_gradient_selector_img
         )
     },    
-    on_change: function (use_limits_and_gradient) {
-        // provide a callback for when the limits change
-        // use_limits needs to accept min and max
-        this.use_limits_and_gradient = use_limits_and_gradient
+    on_change: function (use_gradient) {
+        // provide a callback for when the gradient changes
+        this.use_gradient = use_gradient
     },
     use_callback: function () {
-        if (colour_gradient_selector.use_limits_and_gradient != null) {
-            colour_gradient_selector.use_limits_and_gradient(
-                parseFloat(colour_gradient_selector.$lower_limit.attr('value')),
-                parseFloat(colour_gradient_selector.$upper_limit.attr('value')),
+        var colour_gradient_selector = this
+        if (typeof colour_gradient_selector.use_gradient == "function") {
+            colour_gradient_selector.use_gradient(
                 colour_gradient_selector.gradient
             )
         }
@@ -41,11 +40,16 @@ var ColourGradientSelector = OpenLayers.Class(OpenLayers.Control, {
     activate: function() {
         var colour_gradient_selector = this
         if (
-            OpenLayers.Control.prototype.activate.apply(colour_gradient_selector, arguments)
+            OpenLayers.Control.prototype.activate.apply(
+                colour_gradient_selector,
+                arguments
+            )
         ) {
             colour_gradient_selector.set_gradient(colour_gradient_selector.gradients[0])
             // when the user changes limits, the map colours update instantly
-            var bound_use_callback = function () { colour_gradient_selector.use_callback() }
+            var bound_use_callback = function () {
+                colour_gradient_selector.use_callback()
+            }
             colour_gradient_selector.$lower_limit.change(bound_use_callback)
             colour_gradient_selector.$upper_limit.change(bound_use_callback)
             return true;
@@ -103,11 +107,6 @@ var ColourGradientSelector = OpenLayers.Class(OpenLayers.Control, {
             gradient_images
         )
         
-        colour_gradient_selector.$key_colour_gradient_selector_img = IMG({
-            width:'100%',
-            height:'15px',
-            title:'Click to invert colour gradient'
-        })
         colour_gradient_selector.$gradient = DIV({},
             colour_gradient_selector.$key_colour_gradient_selector_img,
             colour_gradient_selector.$controls

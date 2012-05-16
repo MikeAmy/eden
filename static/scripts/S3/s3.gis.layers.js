@@ -5,6 +5,33 @@
  * This script is in Static to allow caching
  * Dynamic constants (e.g. Internationalised strings) are set in server-generated script
  */
+ 
+function colour_intervals(intervals) {
+    var checks = []
+    each(interval,
+        function (interval) {
+            var conditions = []
+            if (interval.low) {
+                conditions.push(
+                    "(value >="+interval.low+")"
+                )
+            }
+            if (interval.high) {
+                conditions.push(
+                    "(value <"+interval.high+")"
+                )
+            }
+            checks.push(
+                "if ("+conditions.join(" && ")+") return "+elem.fill
+            )
+        }
+    )
+    return new Function(
+        "value",
+        checks.join("\n")
+    ) 
+}
+
 
 // Add Layers from the Catalogue
 function addLayers() {
@@ -531,14 +558,8 @@ function addGeoJSONLayer(layer) {
                 } else if (style.length) {
                     // Theme Layer: Lookup colour from style rule
                     var value = feature.attributes.value;
-                    var color;
-                    $.each(style, function(index, elem) { 
-                        if ((value >= elem.low) && (value < elem.high)) {
-                            color = elem.fill;
-                            return false;
-                        }
-                    });
-                    if (undefined != color) {
+                    var color = colour_intervals(style)(value);
+                    if (undefined !== color) {
                         color = '#' + color;
                     } else {
                         // default fillColor
