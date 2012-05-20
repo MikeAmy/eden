@@ -5,33 +5,27 @@
  * This script is in Static to allow caching
  * Dynamic constants (e.g. Internationalised strings) are set in server-generated script
  */
- 
-function colour_intervals(intervals) {
-    var checks = []
-    each(interval,
-        function (interval) {
-            var conditions = []
-            if (interval.low) {
-                conditions.push(
-                    "(value >="+interval.low+")"
-                )
-            }
-            if (interval.high) {
-                conditions.push(
-                    "(value <"+interval.high+")"
-                )
-            }
-            checks.push(
-                "if ("+conditions.join(" && ")+") return "+elem.fill
-            )
-        }
-    )
-    return new Function(
-        "value",
-        checks.join("\n")
-    ) 
+
+function defaulted(default_value, value) {
+    if (value === undefined) {
+        return default_value
+    } else {
+        return value
+    }
 }
 
+function Theme_Layer_Lookup_colour_from_style_rule(style, value) {
+    var color;
+    $.each(style,
+        function(index, elem) { 
+            if ((value >= elem.low) && (value < elem.high)) {
+                color = elem.fill;
+                return false;
+            }
+        }
+    );
+    return color
+}
 
 // Add Layers from the Catalogue
 function addLayers() {
@@ -556,15 +550,13 @@ function addGeoJSONLayer(layer) {
                     // Feature Query: Use colour from feature
                     var color = feature.attributes.colour;
                 } else if (style.length) {
-                    // Theme Layer: Lookup colour from style rule
-                    var value = feature.attributes.value;
-                    var color = colour_intervals(style)(value);
-                    if (undefined !== color) {
-                        color = '#' + color;
-                    } else {
-                        // default fillColor
-                        color = '#000000';
-                    }
+                    var color = '#' + defaulted(
+                        '000000', 
+                        Theme_Layer_Lookup_colour_from_style_rule(
+                            style,
+                            feature.attributes.value
+                        )
+                    )
                 } else {
                     // default fillColor for Unclustered Point
                     var color = '#f5902e';
@@ -602,21 +594,13 @@ function addGeoJSONLayer(layer) {
                     // Feature Query: Use colour from feature
                     var color = feature.attributes.colour;
                 } else if (style.length) {
-                    // Theme Layer: Lookup colour from style rule
-                    var value = feature.attributes.value;
-                    var color;
-                    $.each(style, function(index, elem) { 
-                        if ((value >= elem.low) && (value < elem.high)) {
-                            color = elem.fill;
-                            return false;
-                        }
-                    });
-                    if (undefined != color) {
-                        color = '#' + color;
-                    } else {
-                        // default fillColor
-                        color = '#000000';
-                    }
+                    var color = '#' + defaulted(
+                        '000000',
+                        Theme_Layer_Lookup_colour_from_style_rule(
+                            style,
+                            feature.attributes.value
+                        )
+                    )
                 } else {
                     // default strokeColor for Unclustered Point
                     var color = '#f5902e';

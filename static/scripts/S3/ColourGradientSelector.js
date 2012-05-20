@@ -19,11 +19,15 @@ var ColourGradientSelector = OpenLayers.Class(OpenLayers.Control, {
         );
     },
     set_gradient: function (colour_gradient) {
-        var colour_gradient_selector = this
-        colour_gradient_selector.gradient = colour_gradient
-        colour_gradient.manage_image(
-            colour_gradient_selector.$key_colour_gradient_selector_img
-        )
+        if (!colour_gradient) {
+            throw new Error("No gradient specified")
+        } else {
+            var colour_gradient_selector = this
+            colour_gradient_selector.gradient = colour_gradient
+            colour_gradient.manage_image(
+                colour_gradient_selector.$key_colour_gradient_selector_img
+            )                         
+        }
     },    
     on_change: function (use_gradient) {
         // provide a callback for when the gradient changes

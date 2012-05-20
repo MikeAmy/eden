@@ -966,48 +966,13 @@ function addLayerPropertiesButton() {
                                 }
                             ]
                             if (layer_type == 'theme') { 
-                                var standard_gradients = {
-                                     coarse_colour_steps: coarse_colour_steps,
-                                     smooth_blue_green_red: smooth_blue_green_red,
-                                     blue_green_red_cosines: blue_green_red_cosines,
-                                     black_to_white: black_to_white,
-                                     blue_to_yellow: blue_to_yellow,
-                                     red_to_green: red_to_green,
-                                     red_to_blue: red_to_blue,
-                                     green_to_blue: green_to_blue
-                                }
-                                var gradients = []
-                                Ext.iterate(
-                                     standard_gradients,
-                                     function (name, gradient) {
-                                         gradients.push(gradient)
-                                     }
-                                )
                                 var style_gradient = layer.s3_style
                                 var style_gradient_to_use
-                                // pretty bad when one feels the best thing to do
-                                // is use a switch statement.
-                                // (but then, if statements are small switch statements)
-                                switch (typeof style_gradient) {
-                                    case "undefined":
-                                        style_gradient_to_use = smooth_blue_green_red
-                                        break
-                                    case "string":
-                                        // named gradient
-                                        style_gradient_to_use = standard_gradients[style_gradient]
-                                        break
-                                    case "array":
-                                        if (style_gradient[0].constructor == "object") {
-                                            style_gradient_to_use = new ColourIntervals(style_gradient)
-                                        }
-                                        else {
-                                            style_gradient_to_use = new ColourGradient(style_gradient)
-                                        }
-                                        gradients.push(style_gradient_to_use)
-                                        break
-                                }
+                                style_gradient_to_use = new ColourIntervals(
+                                    style_gradient
+                                )
                                 var colour_gradient_selector = new ColourGradientSelector({
-                                    gradients: gradients
+                                    gradients: [style_gradient_to_use]
                                 })
                                 colour_gradient_selector.set_gradient(style_gradient_to_use)
                                 tabPanelItems.push(
