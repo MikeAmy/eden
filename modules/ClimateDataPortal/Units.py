@@ -272,19 +272,21 @@ class Measure(object):
         
         if factor == 1.0:
             if offset:
-                to_standard = lambda number: number - offset
-                from_standard = lambda number: number + offset
+                to_standard = (lambda number: number - offset)
+                from_standard = (lambda number: number + offset)
             else:
                 to_standard = same
                 from_standard = same
         else:
             if offset != 0.0:
-                to_standard = lambda number: (number * factor) - offset
-                from_standard = lambda number: (number + offset) / factor
+                to_standard = (lambda number: (number * factor) - offset)
+                from_standard = (lambda number: (number + offset) / factor)
             else:
-                to_standard = lambda number: number * factor
-                from_standard = lambda number: number / factor
+                to_standard = (lambda number: number * factor)
+                from_standard = (lambda number: number / factor)
 
+        measure.to_standard = to_standard
+        measure.from_standard = from_standard
         units_in_out[name] = measure
 
 # There should be some distinction introduced "standard" and "preferred" units.

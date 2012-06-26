@@ -9,7 +9,6 @@ def get_or_create(dict, key, creator):
         value = dict[key] = creator()
     return value
 
-#from import_NetCDF_readings import InsertChunksWithoutCheckingForExistingReadings
 import sys
 class Readings(object):
     "Stores a set of readings for a single place"
@@ -19,18 +18,19 @@ class Readings(object):
         place_id,
         missing_data_marker,
         converter,
-        year_month_to_month_number,
+        date_to_time_period,
+        writer,
         maximum = None,
         minimum = None
     ):
         self.sample_table = sample_table
         self.missing_data_marker = missing_data_marker
         self.maximum = maximum
-        self.minimum = 0 #minimum
+        self.minimum = minimum
         self.converter = converter
         self.place_id = place_id
-        self.year_month_to_month_number = year_month_to_month_number
-        
+        self.date_to_time_period = date_to_time_period
+        self.writer = writer
         self.aggregated_values = {}
         
     def __repr__(self):
@@ -39,7 +39,7 @@ class Readings(object):
             self.place_id
         )
      
-    def add_reading(self, year, month, day, reading, out_of_range):
+    def add_reading(self, date_tuple, reading, out_of_range):
         if reading != self.missing_data_marker:
             reading = self.converter(reading)
             if (
@@ -47,32 +47,22 @@ class Readings(object):
                 (self.maximum is not None and reading > self.maximum)
             ):
                 pass
-                #out_of_range(year, month, day, reading)
+                #out_of_range(date_tuple, reading)
             else:
-                print "%i,%i,%f" % (
+                self.writer(
+                    self.date_to_time_period(*date_tuple),
                     self.place_id,
-                    ClimateDataPortal.year_month_day_to_day_number(year, month, day),
                     reading
                 )
-                return
-                readings = get_or_create(
-                    self.aggregated_values,
-                    self.year_month_day_to_day_number(year, month, day),
-                    list
-                )
-                readings.append(reading)
 
     def done(self):
-        "Writes the average reading to the database for that place and month"
-        for day_number, values in self.aggregated_values.iteritems():
-            
-            self.sample_table.insert(
-                time_period = month_number,
-                place_id = self.place_id,
-                value = sum(values) / len(values)
-            )
+       self.writer.done()
 
 ClimateDataPortal = local_import("ClimateDataPortal")
+
+InsertChunksWithoutCheckingForExistingReadings = local_import("ClimateDataPortal.InsertChunksWithoutCheckingForExistingReadings").InsertChunksWithoutCheckingForExistingReadings
+
+from ClimateDataPortal import units_in_out
 
 def import_tabbed_readings(
     folder,
@@ -83,7 +73,8 @@ def import_tabbed_readings(
     fields,
     clear_existing_data,
     separator,
-    missing_data_marker
+    missing_data_marker,
+    units
 ):
     """
     Expects a folder containing files with name rtXXXX.txt
@@ -101,47 +92,50 @@ representing year, month, day, rainfall(mm), minimum and maximum temperature
     
     field_order = []
     
+    
     def readings_lambda(sample_table):
+        # from/to_standard wrong way round?
+        conversion_function = units_in_out[units].from_standard
         return (lambda missing_data_marker, converter, place_id:
             Readings(
                 sample_table,
                 place_id,
                 missing_data_marker = missing_data_marker,
-                converter = Decimal,
-                year_month_to_month_number = ClimateDataPortal.year_month_to_month_number,
+                converter = lambda x: Decimal(conversion_function(float(x))),
+                date_to_time_period = sample_table.date_mapper.to_time_period,
                 maximum = None,
-                minimum = None
+                minimum = None,
+                writer = InsertChunksWithoutCheckingForExistingReadings(sample_table)
             )
         )
-    date_format = {}
+    date_format = []
     field_positions = []
     
     for field, position in zip(fields, range(len(fields))):
         sys.stderr.write( field)
         if field != "UNUSED":
             if field in ("year", "month", "day"):
-                date_format[field+"_pos"] = position
+                date_format.append(position)
             else:
                 try:
-                    sample_table = ClimateDataPortal.SampleTable.matching(field, "O")
+                    sample_table = ClimateDataPortal.SampleTable.with_name(field)
                 except KeyError:
                     raise Exception(
-                        "'%s' not recognised, available options are: %s\n"
+                        "'%s' not recognised\n"
                         "You can add new tables using add_table.py" % (
-                            field,
-                            ", ".join(map("\"%s\"".__mod__, available_tables.keys()))
+                            field
                         )
                     )
                 else:
                     if clear_existing_data:
-                        sys.stderr.write( "Clearing "+sample_table._tablename+"\n")
-                        db(sample_table.id > 0).delete()    
+                        sys.stderr.write( "Clearing %s\n" % sample_table)
+                        sample_table.clear()    
                     field_positions.append(
                         (readings_lambda(sample_table), position)
                     )
     
-    for field in ("year", "month", "day"):
-        assert field+"_pos" in date_format, "%s is not specified in --fields" % field
+#    for field in ("year", "month", "day"):
+#        assert field in date_format, "%s is not specified in --fields" % field
 
     query_terms = []
     if start_station is not None:
@@ -182,21 +176,21 @@ representing year, month, day, rainfall(mm), minimum and maximum temperature
                     data_file_path,
                     tuple(variable_positions),
                     separator,
-                    **date_format
+                    date_format
                 )                
             db.commit()
     else:
         sys.stderr.write( "No stations! Import using import_stations.py\n")
 
-def out_of_range(year, month, day, reading):
+def out_of_range(date_tuple, reading):
     sys.stderr.write( "%s-%s-%s: %s out of range\n" % (
-        year, month, day, reading
+        date_tuple, reading
     ))
 
-def import_data_row(year, month, day, data):
+def import_data_row(date_tuple, data):
     for variable, field_string in data:
         variable.add_reading(
-            year, month, day,
+            date_tuple,
             field_string,
             out_of_range = out_of_range 
         )
@@ -205,39 +199,30 @@ def import_data_in_file(
     data_file_path,
     variable_positions,
     separator,
-    year_pos,
-    month_pos,
-    day_pos,
+    date_tuple_positions
+
 ):
-#    print variables
     try:
         line_number = 1
-        last_year = last_month = last_day = None
+        last_date_tuple = ()
         for line in open(data_file_path, "r").readlines():
             if line:
                 field_strings = line.split(separator)
                 if field_strings.__len__() > 0:
                     try:                        
                         field = field_strings.__getitem__
-                        year = int(field(year_pos))
-                        month = int(field(month_pos))
-                        day = int(field(day_pos))
-                        if day == last_day:
-                            if month == last_month:
-                                if year == last_year:
-                                    sys.stderr.write("Duplicate record for %s" % str(year,month,day))
+                        date_tuple = tuple(int(field(pos)) for pos in date_tuple_positions)
+                        if last_date_tuple == date_tuple:
+                            sys.stderr.write("Duplicate record for %s" % str(date_tuple))
                         else:
-                            last_year = year
-                            last_month = month
-                            last_day = day
+                            last_date_tuple = date_tuple
                             import_data_row(
-                                year,
-                                month,
-                                day,
+                                date_tuple,
                                 tuple((variable, field(position)) for variable, position in variable_positions)
                             )
                     except Exception, exception:
                         sys.stderr.write( "line %i: %s\n" % (line_number, exception))
+                        raise
             line_number += 1
         for variable, position in variable_positions:
             variable.done()
@@ -322,25 +307,25 @@ Examples: *(IN ROOT OF APP FOLDER)*
     )
     parser.add_argument(
         "--prefix",
-        default = "rt",
-        help="File name prefix e.g. '%(default)s' (default)"
+        required = True,
+        help="File name prefix e.g. 'rt' (default)"
     )
     parser.add_argument(
         "--suffix",
-        default = ".txt",
-        help="File name suffix e.g. '%(default)s' (default)."
+        required = True,
+        help="File name suffix e.g. '%_monthly.csv' (default)."
     )
     parser.add_argument(
         "--separator",
-        default = "\t",
-        help="Field separator e.g. '\t' (default)."
+        default = "(None)",
+        help="Field separator e.g. '(None)' (default)."
     )
-#    parser.add_argument(
-#        "--units",
-#        required = True,
-#        choices = ClimateDataPortal.units_in_out.keys(),
-#        help="Field units"
-#    )
+    parser.add_argument(
+        "--units",
+        required = True,
+        choices = ClimateDataPortal.units_in_out.keys(),
+        help="Field units"
+    )
     parser.add_argument(
         "--missing_data_marker",
         default = "-99.9",
@@ -362,6 +347,8 @@ Examples: *(IN ROOT OF APP FOLDER)*
 
     args = parser.parse_args(argv[1:])
     kwargs = {}
+    if args.separator == "(None)":
+        args.separator = None
     for key, value in args.__dict__.iteritems():
         if not key.startswith("_"):
             kwargs[key] = value

@@ -92,4 +92,10 @@ unused  Station name         <-id    <-elev     <-lat     <-lon
     db.commit()
 
 import sys
-import_stations(sys.argv[1])
+if len(sys.argv) < 2:
+    print """First argument should be the path the stations file.
+    
+    python2.7 ./run.py modules/ClimateDataPortal/import_stations.py 
+    """
+else:
+    import_stations(sys.argv[1])
