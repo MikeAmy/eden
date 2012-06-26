@@ -101,7 +101,7 @@ representing year, month, day, rainfall(mm), minimum and maximum temperature
                 sample_table,
                 place_id,
                 missing_data_marker = missing_data_marker,
-                converter = lambda x: Decimal(conversion_function(float(x))),
+                converter = lambda x: Decimal(str(conversion_function(float(x)))),
                 date_to_time_period = sample_table.date_mapper.to_time_period,
                 maximum = None,
                 minimum = None,
