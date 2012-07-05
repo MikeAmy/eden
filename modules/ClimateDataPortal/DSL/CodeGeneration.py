@@ -398,7 +398,7 @@ def DSLAggregationNode_SQL(aggregation, key, out, extra_filter):
         if month_numbers == []:
             add_filter("FALSE")
         else:
-            add_months_filter(date_mapper)(month_numbers, time_period, add_filter)
+            add_months_filter(date_mapper, month_numbers, time_period, add_filter)
     if filter_strings:
         out(
             " WHERE ", 

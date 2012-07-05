@@ -96,6 +96,8 @@ class Units(object):
             units._positive
         )
 
+    def commensurable_with(units, other_units):
+        return units._dimensions.commensurable_with(other_units._dimensions)
 
 import re
 counted_dimension_pattern = re.compile(
