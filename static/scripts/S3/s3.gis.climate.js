@@ -1583,7 +1583,9 @@ load_layer_and_locate_places_in_spaces = function (
                         }
                     )
                     
-                    plugin.quick_filter_data_store.loadData(plugin.spaces)
+                    plugin.quick_filter_data_store.loadData(
+                        ([["(All)",""]]).concat(plugin.spaces)
+                    )
                     plugin.quick_filter_data_store.sort('name', 'ASC')
                     //vector_layer.redraw()
                 },
@@ -2853,7 +2855,13 @@ ClimateDataMapPlugin = function (config) {
         quick_filter_combo_box.on(
             'select',
             function (combo_box, record, index) {
-                plugin.filter_box.set_filter('within("'+record.data.name+'")')
+                var region_name = record.data.name
+                if (region_name == "(All)") {
+                    plugin.filter_box.set_filter('')
+                } 
+                else {
+                    plugin.filter_box.set_filter('within("'+region_name+'")')
+                }
             }
         )
         items.push(quick_filter_panel)
