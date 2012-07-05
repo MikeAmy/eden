@@ -428,9 +428,9 @@ def MultipleYearsByMonth_time_series_args(date_mapper, is_yearly_values, use_kwa
 get_grouping_key = Method("get_grouping_key")
 
 @get_grouping_key.implementation(Monthly)
-def Monthly_grouping_key(date_mapper, is_yearly_values):
+def Monthly_grouping_key(date_mapper, is_yearly_values, previous_december = False):
     if is_yearly_values:
-        if "Prev" in query_expression:
+        if previous_december:
             # PreviousDecember handling:
             return "(time_period - ((time_period + 1000008 + %i +1) %% 12))" % date_mapper.start_month_0_indexed
         else:
@@ -439,11 +439,11 @@ def Monthly_grouping_key(date_mapper, is_yearly_values):
         return "time_period"
 
 @get_grouping_key.implementation(Yearly)
-def Yearly_grouping_key(date_mapper, is_yearly_values):
+def Yearly_grouping_key(date_mapper, is_yearly_values, **kwargs):
     return "time_period"
 
 @get_grouping_key.implementation(MultipleYearsByMonth)
-def MultipleYearsByMonth_grouping_key(date_mapper, is_yearly_values):
+def MultipleYearsByMonth_grouping_key(date_mapper, is_yearly_values, **kwargs):
     return "(time_period - ((time_period + 1000008) % 12))"
 
 
@@ -599,7 +599,10 @@ def render_plots(
             
             is_yearly_values = True #"Months(" in query_expression
             yearly.append(is_yearly_values)
-            grouping_key = get_grouping_key(date_mapper)(is_yearly_values)
+            grouping_key = get_grouping_key(date_mapper)(
+                is_yearly_values,
+                previous_december = "Prev" in query_expression
+            )
             code = DSL.R_Code_for_values(
                 expression, 
                 grouping_key,
