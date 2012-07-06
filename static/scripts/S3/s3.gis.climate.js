@@ -2869,7 +2869,7 @@ ClimateDataMapPlugin = function (config) {
                 each(
                     plugin.overlay_layer.selectedFeatures,
                     function (feature) {
-                        var place_id = feature.attributes.place_id
+                        var place_id = feature.data.place_id
                         place_ids.push(place_id)
                         var place = plugin.places[place_id]
                         var place_data = place.data
