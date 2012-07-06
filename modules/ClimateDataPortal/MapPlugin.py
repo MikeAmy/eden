@@ -869,6 +869,7 @@ legend(
             raise TypeError("%r is not JSON serializable" % (obj,)) 
     
     return get_cached_or_generated_file(
+        map_plugin.env.request.application,
         "".join((
             md5.md5(
                 JSON.dumps(
