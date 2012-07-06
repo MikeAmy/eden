@@ -394,16 +394,16 @@ from DateMapping import Monthly, Yearly, MultipleYearsByMonth
 time_period_to_float_year = Method("time_period_to_float_year")
 
 @time_period_to_float_year.implementation(Monthly)
-def Monthly_time_period_to_float_year(date_mapper, month_number):
-    year, month = date_mapper.to_date_tuple(month_number+previous_december_month_offset)
+def Monthly_time_period_to_float_year(date_mapper, month_number, offset=0):
+    year, month = date_mapper.to_date_tuple(month_number+offset)
     return year + (float(month-1) / 12)
 
 @time_period_to_float_year.implementation(Yearly)
-def Yearly_time_period_to_float_year(date_mapper, year_number):
+def Yearly_time_period_to_float_year(date_mapper, year_number, **kwargs):
     return float(year_number + date_mapper.start_year)
 
 @time_period_to_float_year.implementation(MultipleYearsByMonth)
-def MultipleYearsByMonth_time_period_to_year(date_mapper, time_period):
+def MultipleYearsByMonth_time_period_to_year(date_mapper, time_period, **kwargs):
     return float(date_mapper.to_date(time_period).year)
 
 
@@ -640,7 +640,10 @@ def render_plots(
                 converted_keys = map(
                     (
                         lambda time_period: 
-                            time_period_to_float_year(date_mapper)(time_period)
+                            time_period_to_float_year(date_mapper)(
+                                time_period,
+                                offset = previous_december_month_offset
+                            )
                     ),
                     keys
                 )
