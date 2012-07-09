@@ -310,7 +310,7 @@ def parse(expression_string):
     scanner_spec = (
         (r"\#[^\n]*(?:\n|$)", comment),
         (
-            r'"([^"]+)"',
+            r'"([^"]*)"',
             write_table_name
         ),
         (r"(%s)(?=\W)" % "|".join(allowed_names.keys()), allowed_identifier),
