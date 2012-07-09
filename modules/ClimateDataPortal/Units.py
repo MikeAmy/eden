@@ -56,7 +56,7 @@ class Units(object):
         # signed + positive = positive
         # positive + positive = positive, but nonsense (but used in average)
         return Units(
-            units._dimensions + other_units._dimensions,
+            units._dimensions,
             units._positive or other_units._positive
         )
     
@@ -66,7 +66,7 @@ class Units(object):
         # signed - positive = signed, but nonsense
         # positive - positive = signed
         return Units(
-            units._dimensions - other_units._dimensions,
+            units._dimensions,
             units._positive and not other_units._positive
         )
 
