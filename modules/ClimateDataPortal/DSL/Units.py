@@ -2,6 +2,7 @@
 
 from ..Method import Method
 from .. import Units
+from ..Units import Dimensionless
 
 units = Method("units")
 
