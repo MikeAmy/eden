@@ -754,28 +754,28 @@ function (
     axis_labels, axis_orientation,
     ...
 ) {
-    split_names <- lapply(
-        names,
-        strwrap, width=(width - 100)/5
-    )
-    wrapped_names <- lapply(
-        split_names,
-        paste, collapse='\n'
-    )
-    legend_line_count = sum(sapply(split_names, length))
-    legend_height_inches <- grconvertY(
-        -(
-            (legend_line_count * 11) + 
-            (length(wrapped_names) * 6) + 30
-        ),
-        "device",
-        "inches"
-    ) - grconvertY(0, "device", "inches")
-    par(
-        xpd = T,
-        mai = (par()$mai + c(legend_height_inches , 0, 0, 0))
-    )
     if (n > 0) {
+        split_names <- lapply(
+            names,
+            strwrap, width=(width - 100)/5
+        )
+        wrapped_names <- lapply(
+            split_names,
+            paste, collapse='\n'
+        )
+        legend_line_count = sum(sapply(split_names, length))
+        legend_height_inches <- grconvertY(
+            -(
+                (legend_line_count * 11) + 
+                (length(wrapped_names) * 6) + 30
+            ),
+            "device",
+            "inches"
+        ) - grconvertY(0, "device", "inches")
+        par(
+            xpd = T,
+            mai = (par()$mai + c(legend_height_inches , 0, 0, 0))
+        )
         ts.plot(...,
             gpars = list(
                 xlab = xlab,
@@ -806,6 +806,9 @@ function (
             y.intersp = line_interspacing,
             text.width = 3
         )
+    }
+    else {
+        text(0, 0, "(No time series data to display)")
     }
 }""" )
         from math import log10, floor, isnan
