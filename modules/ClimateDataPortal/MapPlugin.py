@@ -245,8 +245,7 @@ class MapPlugin(object):
                     "place_id"
                )
             values_by_place_data_frame = R(code)()
-            # R willfully removes empty data frame columns 
-            # which is ridiculous behaviour
+            # R unhelpfully removes empty data frame columns 
             if isinstance(
                 values_by_place_data_frame,
                 map_plugin.robjects.vectors.StrVector
@@ -270,7 +269,7 @@ class MapPlugin(object):
                 else:
                     place_selection = (db.climate_place.id > 0)
                 
-                places = {}
+                places_by_id = {}
                 for place_row in db(
                     place_selection
                 ).select(
@@ -292,10 +291,10 @@ class MapPlugin(object):
                         )
                     )
                 ):
-                    place_ids[place_row.climate_place.id] = place_row
+                    places_by_id[place_row.climate_place.id] = place_row
 
                 for place_id, value in zip(keys, values):
-                    place = place_ids[place_id]
+                    place = places_by_id[place_id]
                     write(
                         ",".join(
                             map(
