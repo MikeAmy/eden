@@ -622,6 +622,8 @@ def render_plots(
                 map_plugin.robjects.vectors.StrVector
             ):
                 raise Exception(str(values_by_time_period_data_frame))
+            elif not hasattr(values_by_time_period_data_frame, "ncol"):
+                raise Exception("Don't understand R object:"+str(values_by_time_period_data_frame))                
             elif values_by_time_period_data_frame.ncol == 0:
                 pass
             else:
