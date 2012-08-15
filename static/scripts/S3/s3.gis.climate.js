@@ -2873,67 +2873,80 @@ ClimateDataMapPlugin = function (config) {
             handler: function() {
                 // create URL
                 var place_ids = []
-                var place_names = []
-                each(
-                    plugin.overlay_layer.selectedFeatures,
-                    function (feature) {
-                        var place_id = feature.data.place_id
-                        place_ids.push(place_id)
-                        var place = plugin.places[place_id]
-                        var place_data = place.data
-                        if (place_data.station_name != undefined) {
-                            place_names.push(place_data.station_name)
-                        }
-                        else {
-                            place_names.push(
-                                '('+place_data.latitude+','+place_data.longitude+')'
+                if (place_ids.length == 0) {
+                    // there is bug in the selection
+                    // sometimes places look selected but aren't
+                    // deselect all, disable and give up
+                    show_chart_button.disable()
+                    selectCtrl.unselectAll()
+                }
+                else {
+                    plugin.last_query_expression
+                    var query_expression = plugin.last_query_expression
+                    var spec = JSON.stringify({
+                        place_ids: place_ids,
+                        query_expression: query_expression
+                    })
+                    
+                    if (place_names.length > 7) {
+                        var place_names_string = "many places"
+                    } else {
+                        var place_names = []
+                        each(
+                            plugin.overlay_layer.selectedFeatures,
+                            function (feature) {
+                                var place_id = feature.data.place_id
+                                place_ids.push(place_id)
+                                var place = plugin.places[place_id]
+                                var place_data = place.data
+                                if (place_data.station_name != undefined) {
+                                    place_names.push(place_data.station_name)
+                                }
+                                else {
+                                    place_names.push(
+                                        '('+place_data.latitude+'N,'+place_data.longitude+'E)'
+                                    )
+                                }
+                            }
+                        )
+                        var place_names_string = place_names.join(', ')
+                    }
+                    var chart_name = [
+                        query_expression.replace(
+                            new RegExp('[",]', 'g'), ''
+                        ).replace(
+                            new RegExp('[()]', 'g'), ' '
+                        ),
+                        'for '+
+                    ].join(' ').replace(
+                        new RegExp('\\s+', 'g'), ' '
+                    )
+
+                    // get hold of a chart manager instance
+                    if (
+                        !plugin.chart_window ||
+                        typeof plugin.chart_window.chart_manager == 'undefined'
+                    ) {
+                        var chart_window = plugin.chart_window = window.open(
+                            plugin.chart_popup_URL,
+                            'chart',
+                            'width=660,height=600,toolbar=0,resizable=0'
+                        )
+                        chart_window.onload = function () {
+                            chart_window.chart_manager = new chart_window.ChartManager(plugin.chart_URL)
+                            chart_window.chart_manager.addChartSpec(
+                                spec,
+
+                                chart_name
                             )
                         }
+                        chart_window.onbeforeunload = function () {
+                            delete plugin.chart_window
+                        }
+                    } else {
+                        // some duplication here:
+                        plugin.chart_window.chart_manager.addChartSpec(spec, chart_name)
                     }
-                )
-                place_names.sort()
-                plugin.last_query_expression
-                var query_expression = plugin.last_query_expression
-                var spec = JSON.stringify({
-                    place_ids: place_ids,
-                    query_expression: query_expression
-                })
-                
-                var chart_name = [
-                    query_expression.replace(
-                        new RegExp('[",]', 'g'), ''
-                    ).replace(
-                        new RegExp('[()]', 'g'), ' '
-                    ),
-                    'for '+place_names.join(', ')
-                ].join(' ').replace(
-                    new RegExp('\\s+', 'g'), ' '
-                )
-
-                // get hold of a chart manager instance
-                if (
-                    !plugin.chart_window ||
-                    typeof plugin.chart_window.chart_manager == 'undefined'
-                ) {
-                    var chart_window = plugin.chart_window = window.open(
-                        plugin.chart_popup_URL,
-                        'chart',
-                        'width=660,height=600,toolbar=0,resizable=0'
-                    )
-                    chart_window.onload = function () {
-                        chart_window.chart_manager = new chart_window.ChartManager(plugin.chart_URL)
-                        chart_window.chart_manager.addChartSpec(
-                            spec,
-
-                            chart_name
-                        )
-                    }
-                    chart_window.onbeforeunload = function () {
-                        delete plugin.chart_window
-                    }
-                } else {
-                    // some duplication here:
-                    plugin.chart_window.chart_manager.addChartSpec(spec, chart_name)
                 }
             }
         })
