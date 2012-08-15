@@ -2917,7 +2917,7 @@ ClimateDataMapPlugin = function (config) {
                         ).replace(
                             new RegExp('[()]', 'g'), ' '
                         ),
-                        'for '+
+                        'for '+place_names_string
                     ].join(' ').replace(
                         new RegExp('\\s+', 'g'), ' '
                     )
