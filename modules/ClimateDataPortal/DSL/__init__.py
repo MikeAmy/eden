@@ -49,6 +49,7 @@ We need:
 Meaningless expressions are allowed in the DSL but then 
 detected during the dimensional analysis phase. Some types can be inferred.
 """
+from ..Units import WhateverUnitsAreNeeded
 
 def normalised(value):
     if isinstance(value, (int, float)):
@@ -388,7 +389,6 @@ def parse(expression_string):
 from Units import (
     units,
     analysis,
-    WhateverUnitsAreNeeded
 )
 from Check import check, check_analysis
 from Build import Build
