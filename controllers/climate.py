@@ -460,7 +460,7 @@ def download_data():
     else:
         data_path = _map_plugin().get_csv_location_data(**arguments)
         response.headers["Content-Type"] = "application/force-download"
-        response.headers["Content-disposition"] = (
+        response.headers["Content-Disposition"] = (
             "attachment; filename=" + arguments["query_expression"]
         )
         return response.stream(
