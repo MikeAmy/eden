@@ -455,7 +455,8 @@ def Monthly_get_axis_labels(
     max_end_time_period,
     axis_points,
     axis_labels,
-    show_months
+    show_months,
+    width
 ):
     if show_months:
         # label_step spaces out the x-axis marks sensibly based on
@@ -502,7 +503,8 @@ def Monthly_get_axis_labels(
     max_end_time_period,
     axis_points,
     axis_labels,
-    show_months
+    show_months,
+    width
 ):
     start_year, = date_mapper.to_date_tuple(min_start_time_period)
     end_year, = date_mapper.to_date_tuple(max_end_time_period)
@@ -517,7 +519,8 @@ def MultipleYearsByMonth_axis_labels(
     max_end_time_period, 
     axis_points,
     axis_labels,
-    show_months
+    show_months,
+    width
 ):
     start_year = date_mapper.to_date_tuple(min_start_time_period)[0]
     end_year = date_mapper.to_date_tuple(max_end_time_period)[0]
@@ -722,14 +725,13 @@ def render_plots(
         axis_points = []
         axis_labels = []
         
-        get_axis_labels(
-            date_mapper
-        )(
+        get_axis_labels(date_mapper)(
             min_start_time_period,
             max_end_time_period,
             axis_points,
             axis_labels,
-            show_months
+            show_months,
+            width
         )
 
         # HACK for Celsius degrees symbol display in R
