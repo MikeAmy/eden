@@ -371,7 +371,7 @@ def request_image():
     ).strftime("%a, %d %b %Y %H:%M:%S GMT") # not GMT, but can't find a way
     response.headers["Content-Type"] = "application/force-download"
     response.headers["Content-disposition"] = (
-        "attachment; filename=Map of "+_nice_filename(request.env.query_string)+".png"
+        "attachment; filename=Map of "+_nice_filename(vars["expression"])+".png"
     )
     vars = request.vars
     return response.stream(
