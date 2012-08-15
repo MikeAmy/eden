@@ -582,7 +582,7 @@ def render_plots(
         start_time_periods = []
         end_time_periods = []
         yearly = []
-        for (label, spec), spec_index in zip(specs, range(len(spec))):
+        for (label, spec), spec_index in zip(specs, range(len(specs))):
             query_expression = spec["query_expression"]
             expression = DSL.parse(query_expression)
             understood_expression_string = str(expression)
@@ -679,7 +679,6 @@ def render_plots(
                     end = date_mapper.to_date_tuple(
                         end_time_period + previous_december_month_offset
                     )
-                    
 
                     values = []
                     add_value = values.append
@@ -695,9 +694,7 @@ def render_plots(
                             # similar to above (conversion is done twice)
                             add_value(converter(data[time_period]))
 
-                    get_chart_values(
-                        date_mapper
-                    )(
+                    get_chart_values(date_mapper)(
                         start_time_period,
                         end_time_period,
                         is_yearly_values,
