@@ -745,6 +745,8 @@ def render_plots(
 function (
     xlab, ylab, n,  
     plot_type,
+    axis_points, 
+    axis_labels, axis_orientation,
     ...
 ) {
     ts.plot(...,
@@ -757,11 +759,16 @@ function (
             xaxt = 'n'
         )
     )
+    axis(
+        1, 
+        at = axis_points,
+        labels = axis_labels,
+        las = axis_orientation
+    )
 }""" )
         plot_chart = R("""
 function (
-    n, names, axis_points, 
-    axis_labels, axis_orientation, 
+    n, names, 
     width, height, 
     total_margin_height,
     line_interspacing
@@ -786,12 +793,6 @@ function (
     par(
         xpd = T,
         mai = (par()$mai + c(legend_height_inches , 0, 0, 0))
-    )
-    axis(
-        1, 
-        at = axis_points,
-        labels = axis_labels,
-        las = axis_orientation
     )
     legend(
         par()$usr[1],
@@ -846,9 +847,6 @@ function (
         plot_chart(
             n = len(time_serieses),
             names = spec_labels,
-            axis_points = axis_points,
-            axis_labels = axis_labels,
-            axis_orientation = [0,2][show_months], 
             width = width,
             height = height,
             # R uses Normalised Display coordinates.
@@ -863,6 +861,9 @@ function (
                 ylab = display_units,
                 n = len(time_serieses),
                 plot_type= "lo"[is_yearly_values],               
+                axis_points = axis_points,
+                axis_labels = axis_labels,
+                axis_orientation = [0,2][show_months], 
                 *time_serieses
             )
         
