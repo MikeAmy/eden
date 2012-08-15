@@ -713,8 +713,8 @@ def render_plots(
                     time_series_args(date_mapper)(is_yearly_values, append_time_series)
         
         # What happens if there is no data at all?
-        min_start_time_period = min(start_time_periods if len(start_time_periods) > 0 else 1940)
-        max_end_time_period = max(end_time_periods if len(end_time_periods) >0 else 2100)
+        min_start_time_period = min(start_time_periods) if len(start_time_periods) > 0 else 1940
+        max_end_time_period = max(end_time_periods) if len(end_time_periods) >0 else 2100
         
         show_months = any(not is_yearly for is_yearly in yearly)
 
