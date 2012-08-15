@@ -809,7 +809,7 @@ function (
     }
     else {
         plot.new()
-        text(0, 0, "(No time series data to display)")
+        text(0.5, 0.5, "(No time series data to display)")
     }
 }""" )
         from math import log10, floor, isnan
