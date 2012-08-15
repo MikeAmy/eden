@@ -357,6 +357,13 @@ def save_query():
     output = s3_rest_controller()
     return output
 
+
+import re
+non_filename_characters = re.compile(r'[^A-Za-z_0-9\+\/\-\*]+')
+def _nice_filename(nasty_filename):
+    return non_filename_characters.sub(" ",nasty_filename).strip()[:250]
+
+
 def request_image():
     from datetime import datetime, timedelta
     response.headers["Expires"] = (
@@ -364,7 +371,7 @@ def request_image():
     ).strftime("%a, %d %b %Y %H:%M:%S GMT") # not GMT, but can't find a way
     response.headers["Content-Type"] = "application/force-download"
     response.headers["Content-disposition"] = (
-        "attachment; filename=MapScreenshot.png"
+        "attachment; filename=Map of "+_nice_filename(request.env.query_string)+".png"
     )
     vars = request.vars
     return response.stream(
@@ -389,6 +396,7 @@ def request_image():
         ),
         chunk_size=4096
     )
+
 
 def download_purchased_data():
     purchase_id = request.vars["purchase_id"]
@@ -431,6 +439,7 @@ def download_purchased_data():
     else:
         return
 
+
 def download_data():
     kwargs = dict(request.vars)
     import gluon.contrib.simplejson as JSON
@@ -461,7 +470,11 @@ def download_data():
         data_path = _map_plugin().get_csv_location_data(**arguments)
         response.headers["Content-Type"] = "application/force-download"
         response.headers["Content-Disposition"] = (
-            "attachment; filename=" + arguments["query_expression"]
+            "attachment; filename=" + (
+                _nice_filename(
+                    arguments["query_expression"]
+                )+".csv"
+            )
         )
         return response.stream(
             open(data_path, "rb"),
