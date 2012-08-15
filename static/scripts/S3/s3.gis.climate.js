@@ -2866,19 +2866,26 @@ ClimateDataMapPlugin = function (config) {
         )
         items.push(quick_filter_panel)
         
-        
+        function get_selected_place_ids() {
+            var place_ids = []
+            each(
+                plugin.overlay_layer.selectedFeatures,
+                function (feature) {
+                    place_ids.push(feature.data.place_id)
+                }
+            )
+            return place_ids
+        }
         var show_chart_button = new Ext.Button({
             text: 'Show chart for selected places',
             disabled: true,
             handler: function() {
                 // create URL
-                var place_ids = []
+                var place_ids = get_selected_place_ids()
                 var place_names = []
                 each(
-                    plugin.overlay_layer.selectedFeatures,
-                    function (feature) {
-                        var place_id = feature.data.place_id
-                        place_ids.push(place_id)
+                    pplace_ids,
+                    function (place_id) {
                         var place = plugin.places[place_id]
                         var place_data = place.data
                         if (place_data.station_name != undefined) {
@@ -2957,27 +2964,7 @@ ClimateDataMapPlugin = function (config) {
             text: 'Download CSV map data for selected places',
             disabled: false,
             handler: function() {
-                var place_ids = []
-                //var place_names = []
-                each(
-                    plugin.overlay_layer.selectedFeatures, 
-                    function (feature) {
-                        var place_id = feature.attributes.place_id
-                        place_ids.push(place_id)
-                        /*
-                        var place = plugin.places[place_id]
-                        var place_data = place.data
-                        if (place_data.station_name != undefined) {
-                            place_names.push(place_data.station_name)
-                        }
-                        else {
-                            place_names.push(
-                                '('+place_data.latitude+','+place_data.longitude+')'
-                            )
-                        }*/
-                    }
-                )
-                //place_names.sort()
+                var place_ids = get_selected_place_ids()
                 var spec = JSON.stringify({
                     place_ids: place_ids,
                     query_expression: plugin.last_query_expression
@@ -2992,14 +2979,7 @@ ClimateDataMapPlugin = function (config) {
             text: 'Download CSV time series for selected places',
             disabled: false,
             handler: function() {
-                var place_ids = []
-                each(
-                    plugin.overlay_layer.selectedFeatures, 
-                    function (feature) {
-                        var place_id = feature.attributes.place_id
-                        place_ids.push(place_id)
-                    }
-                )
+                var place_ids = get_selected_place_ids()
                 var spec = JSON.stringify({
                     place_ids: place_ids,
                     query_expression: plugin.last_query_expression
