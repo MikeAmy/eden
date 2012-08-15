@@ -624,7 +624,15 @@ def render_plots(
                 raise Exception(str(values_by_time_period_data_frame))
             elif not hasattr(values_by_time_period_data_frame, "ncol"):
                 # TODO: stop empty place_ids getting in (bug in the JS mapping code)
-                raise Exception("Don't understand R object:"+str(values_by_time_period_data_frame))                
+                import logging
+                logging.error((
+                        "Don't understand R object %s:"
+                        "\nresulting from %s"
+                    ) % (
+                        str(values_by_time_period_data_frame),
+                        code
+                    )
+                )                
             elif values_by_time_period_data_frame.ncol == 0:
                 pass
             else:
