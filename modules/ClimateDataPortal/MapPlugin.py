@@ -792,21 +792,21 @@ function (
             labels = axis_labels,
             las = axis_orientation
         )
+        legend(
+            par()$usr[1],
+            par()$usr[3] - (
+                grconvertY(0, "device", "user") -
+                grconvertY(70, "device", "user")
+            ),
+            wrapped_names,
+            cex = 0.8,
+            pt.bg = c(1:n),
+            pch = c(21:25),
+            bty = 'n',
+            y.intersp = line_interspacing,
+            text.width = 3
+        )
     }
-    legend(
-        par()$usr[1],
-        par()$usr[3] - (
-            grconvertY(0, "device", "user") -
-            grconvertY(70, "device", "user")
-        ),
-        wrapped_names,
-        cex = 0.8,
-        pt.bg = c(1:n),
-        pch = c(21:25),
-        bty = 'n',
-        y.intersp = line_interspacing,
-        text.width = 3
-    )
 }""" )
         from math import log10, floor, isnan
         for i, regression_line in regression_lines.iteritems():
