@@ -864,17 +864,18 @@ function (
         
         # R's colour number is the spec index
         for colour_number, regression_line in regression_lines.iteritems():
-            slope = regression_line[0]
-            intercept = regression_line[1]
-            if isnan(slope) or isnan(intercept):
-                pass
-            else:
-                R.par(xpd = False)
-                R.abline(
-                    intercept,
-                    slope,
-                    col = colour_number+1
-                )
+            if regression_line is not None:
+                slope = regression_line[0]
+                intercept = regression_line[1]
+                if isnan(slope) or isnan(intercept):
+                    pass
+                else:
+                    R.par(xpd = False)
+                    R.abline(
+                        intercept,
+                        slope,
+                        col = colour_number+1
+                    )
         R("dev.off()")
 
     import md5
