@@ -570,19 +570,23 @@ def render_plots(
         time_serieses = []
         
         from scipy import stats
-        regression_lines = []
+        # need to make sure spec_index matches 
+        # because the regression lines will be coloured the same
+        # as the timeseries lines
+        regression_lines = {} # spec_index (int) -> regression
         
         R = map_plugin.get_R()
         c = R("c")
-        spec_names = []
+        # TODO: this would all be better in a class
+        spec_labels = []
         start_time_periods = []
         end_time_periods = []
         yearly = []
-        for label, spec in specs:
+        for (label, spec), spec_index in zip(specs, range(len(spec))):
             query_expression = spec["query_expression"]
             expression = DSL.parse(query_expression)
             understood_expression_string = str(expression)
-            spec_names.append(label)
+            spec_labels.append(label)
             
             units = DSL.units(expression)()
             unit_string = str(units)
@@ -608,7 +612,6 @@ def render_plots(
                 grouping_key,
                 "place_id IN (%s)" % ",".join(map(str, spec["place_ids"]))
             )
-            #print code
             values_by_time_period_data_frame = R(code)()
             data = {}
             if isinstance(
@@ -633,6 +636,9 @@ def render_plots(
                                     
                 linear_regression = R("{}")
                 
+                # TODO: Hacky way to do this
+                # alternative involves changing the parser
+                # Will break if Prev in a dataset name
                 previous_december_month_offset = [0,1][
                     is_yearly_values and "Prev" in query_expression
                 ]
@@ -654,55 +660,64 @@ def render_plots(
                     # it's possible that there will be no linear regression
                     # if the data is of zero length
                     regression = None
-                regression_lines.append(regression)
+                regression_lines[spec_index] = regression
                 
                 add = data.__setitem__
                 for key, value in zip(keys, values):
                     add(key, value)
-                # Date Mapping
-                # currently assumes monthly values and monthly time_period
-                start_time_period = min(data.iterkeys())
-                start_time_periods.append(start_time_period)
-                start = date_mapper.to_date_tuple(
-                    start_time_period + previous_december_month_offset
-                )
-
-                end_time_period = max(data.iterkeys())
-                end_time_periods.append(end_time_period)
-                end = date_mapper.to_date_tuple(
-                    end_time_period + previous_december_month_offset
-                )
-
-                values = []
-                add_value = values.append
-                def use_time_period(time_period):
-                    if not data.has_key(time_period):
-                        add_value(None)
-                    else:
-                        add_value(converter(data[time_period]))
-
-                get_chart_values(
-                    date_mapper
-                )(
-                    start_time_period,
-                    end_time_period,
-                    is_yearly_values,
-                    use_time_period
-                )
-                                
-                def append_time_series(**kwargs):
-                    time_serieses.append(
-                        R("ts")(
-                            map_plugin.robjects.FloatVector(values),
-                            start = c(*start),
-                            end = c(*end),
-                            **kwargs
-                        )
+                if len(data) > 0:
+                    # Date Mapping
+                    # TODO: currently assumes monthly values and monthly time_period
+                    start_time_period = min(data.iterkeys())
+                    start_time_periods.append(start_time_period)
+                    start = date_mapper.to_date_tuple(
+                        start_time_period + previous_december_month_offset
                     )
-                time_series_args(date_mapper)(is_yearly_values, append_time_series)
 
-        min_start_time_period = min(start_time_periods)
-        max_end_time_period = max(end_time_periods)
+                    end_time_period = max(data.iterkeys())
+                    end_time_periods.append(end_time_period)
+                    end = date_mapper.to_date_tuple(
+                        end_time_period + previous_december_month_offset
+                    )
+                    
+
+                    values = []
+                    add_value = values.append
+                    def use_time_period(time_period):
+                        """Add time periods in if they are not in the data
+                        so that R generates a meaningful chart (missing values
+                        show as white space). Otherwise, missing values shift 
+                        other data forward, and the chart will be incorrect.
+                        """
+                        if not data.has_key(time_period):
+                            add_value(None)
+                        else:
+                            # similar to above (conversion is done twice)
+                            add_value(converter(data[time_period]))
+
+                    get_chart_values(
+                        date_mapper
+                    )(
+                        start_time_period,
+                        end_time_period,
+                        is_yearly_values,
+                        use_time_period
+                    )
+                                    
+                    def append_time_series(**kwargs):
+                        time_serieses.append(
+                            R("ts")(
+                                map_plugin.robjects.FloatVector(values),
+                                start = c(*start),
+                                end = c(*end),
+                                **kwargs
+                            )
+                        )
+                    time_series_args(date_mapper)(is_yearly_values, append_time_series)
+        
+        # What happens if there is no data at all?
+        min_start_time_period = min(start_time_periods if len(start_time_periods) > 0 else 1940)
+        max_end_time_period = max(end_time_periods if len(end_time_periods) >0 else 2100)
         
         show_months = any(not is_yearly for is_yearly in yearly)
 
@@ -720,6 +735,7 @@ def render_plots(
             show_months
         )
 
+        # HACK for Celsius degrees symbol display in R
         display_units = display_units.replace("Celsius", "\xc2\xb0Celsius")
 
         R.png(
@@ -791,16 +807,13 @@ legend(
 )
 }""" )
         from math import log10, floor, isnan
-        for regression_line, i in zip(
-            regression_lines,
-            range(len(time_serieses))
-        ):
+        for i, regression_line in regression_lines.iteritems():
             if regression_line is None:
-                spec_names[i] += "   (no data)"                
+                spec_labels[i] += "   (no data)"                
             else:
                 slope, intercept, r, p, stderr = regression_line
                 if isnan(slope) or isnan(intercept):
-                    spec_names[i] += "   (cannot calculate linear regression)"
+                    spec_labels[i] += "   (cannot calculate linear regression)"
                 else:
                     if isnan(p):
                         p_str = "NaN"
@@ -816,7 +829,7 @@ legend(
                         map(round_to_4_sd, (slope, intercept, r))
                     )
                 
-                    spec_names[i] += (
+                    spec_labels[i] += (
                         u"   {"
                             "y=%(slope_str)s x year %(add)s%(intercept_str)s, "
                             "r= %(r_str)s, "
@@ -832,7 +845,7 @@ legend(
             xlab = "",
             ylab = display_units,
             n = len(time_serieses),
-            names = spec_names,
+            names = spec_labels,
             axis_points = axis_points,
             axis_labels = axis_labels,
             axis_orientation = [0,2][show_months], 
@@ -847,10 +860,8 @@ legend(
             *time_serieses
         )
         
-        for regression_line, colour_number in zip(
-            regression_lines,
-            range(len(time_serieses))
-        ):
+        # R's colour number is the spec index
+        for colour_number, regression_line in regression_lines.iteritems():
             slope = regression_line[0]
             intercept = regression_line[1]
             if isnan(slope) or isnan(intercept):
