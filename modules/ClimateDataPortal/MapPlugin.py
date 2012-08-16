@@ -741,67 +741,72 @@ def render_plots(
             height = height
         )
         
+        plot_time_serieses = R("""
+function (
+    xlab, ylab, n,  
+    plot_type,
+    ...
+) {
+    ts.plot(...,
+        gpars = list(
+            xlab = xlab,
+            ylab = ylab,
+            col = c(1:n),
+            pch = c(21:25),
+            type = plot_type,
+            xaxt = 'n'
+        )
+    )
+}""" )
         plot_chart = R("""
 function (
-xlab, ylab, n, names, axis_points, 
-axis_labels, axis_orientation, 
-plot_type,
-width, height, 
-total_margin_height,
-line_interspacing,
-...
+    n, names, axis_points, 
+    axis_labels, axis_orientation, 
+    width, height, 
+    total_margin_height,
+    line_interspacing
 ) {
-split_names <- lapply(
-    names,
-    strwrap, width=(width - 100)/5
-)
-wrapped_names <- lapply(
-    split_names,
-    paste, collapse='\n'
-)
-legend_line_count = sum(sapply(split_names, length))
-legend_height_inches <- grconvertY(
-    -(
-        (legend_line_count * 11) + 
-        (length(wrapped_names) * 6) + 30
-    ),
-    "device",
-    "inches"
-) - grconvertY(0, "device", "inches")
-par(
-    xpd = T,
-    mai = (par()$mai + c(legend_height_inches , 0, 0, 0))
-)
-ts.plot(...,
-    gpars = list(
-        xlab = xlab,
-        ylab = ylab,
-        col = c(1:n),
-        pch = c(21:25),
-        type = plot_type,
-        xaxt = 'n'
+    split_names <- lapply(
+        names,
+        strwrap, width=(width - 100)/5
     )
-)
-axis(
-    1, 
-    at = axis_points,
-    labels = axis_labels,
-    las = axis_orientation
-)
-legend(
-    par()$usr[1],
-    par()$usr[3] - (
-        grconvertY(0, "device", "user") -
-        grconvertY(70, "device", "user")
-    ),
-    wrapped_names,
-    cex = 0.8,
-    pt.bg = c(1:n),
-    pch = c(21:25),
-    bty = 'n',
-    y.intersp = line_interspacing,
-    text.width = 3
-)
+    wrapped_names <- lapply(
+        split_names,
+        paste, collapse='\n'
+    )
+    legend_line_count = sum(sapply(split_names, length))
+    legend_height_inches <- grconvertY(
+        -(
+            (legend_line_count * 11) + 
+            (length(wrapped_names) * 6) + 30
+        ),
+        "device",
+        "inches"
+    ) - grconvertY(0, "device", "inches")
+    par(
+        xpd = T,
+        mai = (par()$mai + c(legend_height_inches , 0, 0, 0))
+    )
+    axis(
+        1, 
+        at = axis_points,
+        labels = axis_labels,
+        las = axis_orientation
+    )
+    legend(
+        par()$usr[1],
+        par()$usr[3] - (
+            grconvertY(0, "device", "user") -
+            grconvertY(70, "device", "user")
+        ),
+        wrapped_names,
+        cex = 0.8,
+        pt.bg = c(1:n),
+        pch = c(21:25),
+        bty = 'n',
+        y.intersp = line_interspacing,
+        text.width = 3
+    )
 }""" )
         from math import log10, floor, isnan
         for i, regression_line in regression_lines.iteritems():
@@ -839,14 +844,11 @@ legend(
                     )
                 
         plot_chart(
-            xlab = "",
-            ylab = display_units,
             n = len(time_serieses),
             names = spec_labels,
             axis_points = axis_points,
             axis_labels = axis_labels,
             axis_orientation = [0,2][show_months], 
-            plot_type= "lo"[is_yearly_values],               
             width = width,
             height = height,
             # R uses Normalised Display coordinates.
@@ -854,8 +856,15 @@ legend(
             # they place the legend legibly. tested up to 8 lines
             total_margin_height = 150,
             line_interspacing = 1.8,
-            *time_serieses
         )
+        if len(timeserieses) > 0:
+            plot_time_serieses(
+                xlab = "",
+                ylab = display_units,
+                n = len(time_serieses),
+                plot_type= "lo"[is_yearly_values],               
+                *time_serieses
+            )
         
         # R's colour number is the spec index
         for colour_number, regression_line in regression_lines.iteritems():
