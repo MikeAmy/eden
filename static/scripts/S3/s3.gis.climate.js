@@ -2873,6 +2873,24 @@ ClimateDataMapPlugin = function (config) {
             handler: function() {
                 // create URL
                 var place_ids = []
+                var place_names = []
+                each(
+                    plugin.overlay_layer.selectedFeatures,
+                    function (feature) {
+                        var place_id = feature.data.place_id
+                        place_ids.push(place_id)
+                        var place = plugin.places[place_id]
+                        var place_data = place.data
+                        if (place_data.station_name != undefined) {
+                            place_names.push(place_data.station_name)
+                        }
+                        else {
+                            place_names.push(
+                                '('+place_data.latitude+'N,'+place_data.longitude+'E)'
+                            )
+                        }
+                    }
+                )
                 if (place_ids.length == 0) {
                     // there is bug in the selection
                     // sometimes places look selected but aren't
@@ -2881,7 +2899,6 @@ ClimateDataMapPlugin = function (config) {
                     plugin.selectCtrl.unselectAll()
                 }
                 else {
-                    plugin.last_query_expression
                     var query_expression = plugin.last_query_expression
                     var spec = JSON.stringify({
                         place_ids: place_ids,
@@ -2891,24 +2908,6 @@ ClimateDataMapPlugin = function (config) {
                     if (place_names.length > 7) {
                         var place_names_string = "many places"
                     } else {
-                        var place_names = []
-                        each(
-                            plugin.overlay_layer.selectedFeatures,
-                            function (feature) {
-                                var place_id = feature.data.place_id
-                                place_ids.push(place_id)
-                                var place = plugin.places[place_id]
-                                var place_data = place.data
-                                if (place_data.station_name != undefined) {
-                                    place_names.push(place_data.station_name)
-                                }
-                                else {
-                                    place_names.push(
-                                        '('+place_data.latitude+'N,'+place_data.longitude+'E)'
-                                    )
-                                }
-                            }
-                        )
                         var place_names_string = place_names.join(', ')
                     }
                     var chart_name = [
