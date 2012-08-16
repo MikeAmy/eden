@@ -2877,8 +2877,8 @@ ClimateDataMapPlugin = function (config) {
                     // there is bug in the selection
                     // sometimes places look selected but aren't
                     // deselect all, disable and give up
-                    show_chart_button.disable()
-                    selectCtrl.unselectAll()
+                    plugin.show_chart_button.disable()
+                    plugin.selectCtrl.unselectAll()
                 }
                 else {
                     plugin.last_query_expression
@@ -3084,7 +3084,7 @@ ClimateDataMapPlugin = function (config) {
         });
         // selection of overlay squares
         OpenLayers.Feature.Vector.style['default']['strokeWidth'] = '2'
-        var selectCtrl = new OpenLayers.Control.SelectFeature(
+        var selectCtrl = plugin.selectCtrl = new OpenLayers.Control.SelectFeature(
             plugin.overlay_layer,
             {
                 clickout: true,
