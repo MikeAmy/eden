@@ -752,7 +752,6 @@ function (
     plot_type,
     axis_points, 
     axis_labels, axis_orientation,
-    any_timeseries,
     ...
 ) {
     split_names <- lapply(
@@ -776,7 +775,7 @@ function (
         xpd = T,
         mai = (par()$mai + c(legend_height_inches , 0, 0, 0))
     )
-    if (any_timeseries) {
+    if (n > 0) {
         ts.plot(...,
             gpars = list(
                 xlab = xlab,
@@ -860,7 +859,6 @@ function (
             axis_points = axis_points,
             axis_labels = axis_labels,
             axis_orientation = [0,2][show_months], 
-            any_timeseries = (len(timeserieses) > 0),
             *time_serieses
         )
         
