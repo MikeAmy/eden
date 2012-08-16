@@ -741,37 +741,19 @@ def render_plots(
             height = height
         )
         
-        plot_time_serieses = R("""
-function (
-    xlab, ylab, n,  
-    plot_type,
-    axis_points, 
-    axis_labels, axis_orientation,
-    ...
-) {
-    ts.plot(...,
-        gpars = list(
-            xlab = xlab,
-            ylab = ylab,
-            col = c(1:n),
-            pch = c(21:25),
-            type = plot_type,
-            xaxt = 'n'
-        )
-    )
-    axis(
-        1, 
-        at = axis_points,
-        labels = axis_labels,
-        las = axis_orientation
-    )
-}""" )
         plot_chart = R("""
 function (
     n, names, 
     width, height, 
     total_margin_height,
-    line_interspacing
+    line_interspacing,
+    
+    xlab, ylab, 
+    plot_type,
+    axis_points, 
+    axis_labels, axis_orientation,
+    any_timeseries,
+    ...
 ) {
     split_names <- lapply(
         names,
@@ -794,6 +776,24 @@ function (
         xpd = T,
         mai = (par()$mai + c(legend_height_inches , 0, 0, 0))
     )
+    if (any_timeseries) {
+        ts.plot(...,
+            gpars = list(
+                xlab = xlab,
+                ylab = ylab,
+                col = c(1:n),
+                pch = c(21:25),
+                type = plot_type,
+                xaxt = 'n'
+            )
+        )
+        axis(
+            1, 
+            at = axis_points,
+            labels = axis_labels,
+            las = axis_orientation
+        )
+    }
     legend(
         par()$usr[1],
         par()$usr[3] - (
@@ -854,18 +854,15 @@ function (
             # they place the legend legibly. tested up to 8 lines
             total_margin_height = 150,
             line_interspacing = 1.8,
+            xlab = "",
+            ylab = display_units,
+            plot_type= "lo"[is_yearly_values],               
+            axis_points = axis_points,
+            axis_labels = axis_labels,
+            axis_orientation = [0,2][show_months], 
+            any_timeseries = (len(timeserieses) > 0),
+            *time_serieses
         )
-        if len(timeserieses) > 0:
-            plot_time_serieses(
-                xlab = "",
-                ylab = display_units,
-                n = len(time_serieses),
-                plot_type= "lo"[is_yearly_values],               
-                axis_points = axis_points,
-                axis_labels = axis_labels,
-                axis_orientation = [0,2][show_months], 
-                *time_serieses
-            )
         
         # R's colour number is the spec index
         for colour_number, regression_line in regression_lines.iteritems():
