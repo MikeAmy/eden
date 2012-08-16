@@ -623,6 +623,7 @@ def render_plots(
             ):
                 raise Exception(str(values_by_time_period_data_frame))
             elif not hasattr(values_by_time_period_data_frame, "ncol"):
+                # TODO: stop empty place_ids getting in (bug in the JS mapping code)
                 raise Exception("Don't understand R object:"+str(values_by_time_period_data_frame))                
             elif values_by_time_period_data_frame.ncol == 0:
                 pass
@@ -637,7 +638,7 @@ def render_plots(
                     converter = lambda x:x
                     display_units = unit_string
                 else:
-                    converter = units_in_out[display_units]["out"]
+                    converter = units_in_out[display_units].to_standard
                                     
                 linear_regression = R("{}")
                 
