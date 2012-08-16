@@ -601,7 +601,7 @@ def render_plots(
             
             date_mapper = DSL.date_mapping(expression)()
             
-            is_yearly_values = True #"Months(" in query_expression
+            is_yearly_values = "Months(" in query_expression
             yearly.append(is_yearly_values)
             grouping_key = get_grouping_key(date_mapper)(
                 is_yearly_values,
