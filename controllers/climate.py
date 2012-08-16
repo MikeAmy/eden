@@ -366,6 +366,7 @@ def _nice_filename(nasty_filename):
 
 def request_image():
     from datetime import datetime, timedelta
+    vars = request.vars
     response.headers["Expires"] = (
         datetime.now() + timedelta(days = 7)
     ).strftime("%a, %d %b %Y %H:%M:%S GMT") # not GMT, but can't find a way
@@ -373,7 +374,6 @@ def request_image():
     response.headers["Content-disposition"] = (
         "attachment; filename=Map of "+_nice_filename(vars["expression"])+".png"
     )
-    vars = request.vars
     return response.stream(
         open(
             _map_plugin().printable_map_image_file(
