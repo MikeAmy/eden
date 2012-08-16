@@ -10,7 +10,8 @@ from SampleTable import (
     SampleTable,
     Observed,
     Gridded,
-    Projected
+    Projected,
+    sample_table_types_by_code
 )
 from Units import (
     Units,

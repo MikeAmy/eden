@@ -209,7 +209,7 @@ def PowRoot_check(binop):
 def Aggregation_check(aggregation):
     aggregation.errors = set()
     def error(message):
-        aggregation.errors.append(message)
+        aggregation.errors.add(message)
     if not isinstance(aggregation.dataset_name, str):
         error("First argument should be the name of a data set enclosed in "
                 "parentheses. ")
@@ -262,7 +262,7 @@ def Number_check(number):
     number.errors = set()
     number.units.check_number(
         number.value,
-        number.errors.append
+        number.errors.add
     )
     return number.errors
 
