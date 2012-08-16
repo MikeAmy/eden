@@ -387,7 +387,8 @@ def parse(expression_string):
 
 from Units import (
     units,
-    analysis
+    analysis,
+    WhateverUnitsAreNeeded
 )
 from Check import check, check_analysis
 from Build import Build

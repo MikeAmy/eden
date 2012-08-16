@@ -7,6 +7,19 @@ class DimensionError(Exception):
     pass
 
 class Units(object):
+    """Keeps track of multidimensional units, i.e. when arithmetic 
+    occurs to numbers with units, the result makes sense.
+    
+    Units are used by DSL expressions to determine the units of
+    expressions, i.e. what to put on axis of graphs. 
+    
+    We can also detect nonsensical calculations e.g. adding
+    temperatures to rainfall values.
+    
+    This Units Class also keeps track of whether an expression is affine 
+    or vector so that we can see whether something is a delta value
+    or not.
+    """
     __slots__ = ("_dimensions", "_positive")
     delta_strings = ("delta", "Δ")
     @staticmethod
@@ -266,6 +279,13 @@ same = lambda x: x
 
 units_in_out = {}
 class Measure(object):
+    """A Measure is like a two-way mapping between a real-world measurement 
+    'unit' and DSL Units. 
+    
+    This allows for wacky conversions like with Celsius/Kelvin.
+    Currently only factors and offsets are used, but could also implement
+    thing like logarihmic scales here.
+    """
     def __init__(measure, dimensions, name, factor = 1.0, offset = 0.0):
         measure.name = name
         measure.dimensions = dimensions
