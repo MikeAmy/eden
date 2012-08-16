@@ -808,6 +808,7 @@ function (
         )
     }
     else {
+        plot.new()
         text(0, 0, "(No time series data to display)")
     }
 }""" )
