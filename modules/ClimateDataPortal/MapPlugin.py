@@ -647,10 +647,14 @@ def render_plots(
                     ),
                     keys
                 )
-                converted_values = map(converter, values) 
-                regression_lines.append(
-                    stats.linregress(converted_keys, converted_values)
-                )
+                converted_values = map(converter, values)
+                if len(converted_keys) > 0:
+                    regression = stats.linregress(converted_keys, converted_values)
+                else:
+                    # it's possible that there will be no linear regression
+                    # if the data is of zero length
+                    regression = None
+                regression_lines.append(regression)
                 
                 add = data.__setitem__
                 for key, value in zip(keys, values):
@@ -791,35 +795,38 @@ legend(
             regression_lines,
             range(len(time_serieses))
         ):
-            slope, intercept, r, p, stderr = regression_line
-            if isnan(slope) or isnan(intercept):
-                spec_names[i] += "   {cannot calculate linear regression}"
+            if regression_line is None:
+                spec_names[i] += "   (no data)"                
             else:
-                if isnan(p):
-                    p_str = "NaN"
+                slope, intercept, r, p, stderr = regression_line
+                if isnan(slope) or isnan(intercept):
+                    spec_names[i] += "   (cannot calculate linear regression)"
                 else:
-                    p_str = str(round_to_4_sd(p))
-                if isnan(stderr):
-                    stderr_str = "NaN"
-                else:
-                    stderr_str = str(round_to_4_sd(p))
-                    
-                slope_str, intercept_str, r_str = map(
-                    str,
-                    map(round_to_4_sd, (slope, intercept, r))
-                )
-            
-                spec_names[i] += (
-                    u"   {"
-                        "y=%(slope_str)s x year %(add)s%(intercept_str)s, "
-                        "r= %(r_str)s, "
-                        "p= %(p_str)s, "
-                        "S.E.= %(stderr_str)s"
-                    "}"
-                ) % dict(
-                    locals(),
-                    add = [u"+ ",u""][intercept_str.startswith("-")]
-                )
+                    if isnan(p):
+                        p_str = "NaN"
+                    else:
+                        p_str = str(round_to_4_sd(p))
+                    if isnan(stderr):
+                        stderr_str = "NaN"
+                    else:
+                        stderr_str = str(round_to_4_sd(p))
+                        
+                    slope_str, intercept_str, r_str = map(
+                        str,
+                        map(round_to_4_sd, (slope, intercept, r))
+                    )
+                
+                    spec_names[i] += (
+                        u"   {"
+                            "y=%(slope_str)s x year %(add)s%(intercept_str)s, "
+                            "r= %(r_str)s, "
+                            "p= %(p_str)s, "
+                            "S.E.= %(stderr_str)s"
+                        "}"
+                    ) % dict(
+                        locals(),
+                        add = [u"+ ",u""][intercept_str.startswith("-")]
+                    )
                 
         plot_chart(
             xlab = "",
