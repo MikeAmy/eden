@@ -1040,7 +1040,7 @@ Place.prototype = {
         }
         var spaces = this.spaces
         for (var i = 0; i < spaces.length; i++) {
-            if (space[i].indexOf(name) != -1) {
+            if (spaces[i].indexOf(name) != -1) {
                 return true
             }
         }
@@ -1813,8 +1813,8 @@ ClimateDataMapPlugin = function (config) {
         // Simple strings can be used to search for a place or area name
         try {
             if (typeof eval(filter_expression) == "string") {
-                filter_expression = "matches("+filter_expression+")"
                 plugin.filter.set_filter(filter_expression)
+                filter_expression = "matches("+filter_expression+")"
             }
         }
         catch (exception) {}
@@ -2029,12 +2029,11 @@ ClimateDataMapPlugin = function (config) {
                         )
                     },
                     example: new Place(places_data[place_id]),
-                    initial_filter: initial_filter,
+                    initial_filter: initial_filter || "Nepal",
                     plugin: plugin
                 })
                 map.addControl(plugin.filter_box)
                 plugin.filter_box.activate()
-                plugin.filter_box.set_filter("within_Nepal()")
                 plugin.logo = new Logo()
                 plugin.logo.activate()
                 map.addControl(plugin.logo)
