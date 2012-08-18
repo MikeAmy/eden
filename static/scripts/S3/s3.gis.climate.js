@@ -913,7 +913,7 @@ var FilterBox = OpenLayers.Class(OpenLayers.Control, {
                 'overflow: scroll;'
             )
         },
-            filter_box.initial_filter || 'unfiltered'
+            filter_box.initial_filter || 'Nepal' // 'unfiltered'
         )
         
         $filter_box_div.append($text_area)
@@ -2029,7 +2029,7 @@ ClimateDataMapPlugin = function (config) {
                         )
                     },
                     example: new Place(places_data[place_id]),
-                    initial_filter: initial_filter || "Nepal",
+                    initial_filter: initial_filter,
                     plugin: plugin
                 })
                 map.addControl(plugin.filter_box)
