@@ -341,19 +341,21 @@ if deployment_settings.has_module("climate"):
     # Virtual Field for pack_quantity
     class station_parameters_virtualfields(dict, object):
         def range_from(self):
+            station_parameter = self.climate_station_parameter
             query = (
                 "SELECT MIN(time_period) "
                 "from climate_sample_table_%(parameter_id)i "
                 "WHERE place_id = %(station_id)i;"
             ) % dict(
-                parameter_id = self.climate_station_parameter.parameter_id,
-                station_id = self.climate_station_parameter.station_id,
+                parameter_id = station_parameter.parameter_id,
+                station_id = station_parameter.station_id,
             )
-            date  = db.executesql(query)[0][0]
-            if date is not None:
-                monthly = ClimateDataPortal.SampleTable._SampleTable__date_mapper["monthly"]
-                year, month = monthly.to_date_tuple(date)
-                return "%s-%s" % (month, year)
+            time_period  = db.executesql(query)[0][0]
+            if time_period is not None:
+                ClimateDataPortal = local_import("ClimateDataPortal")
+                sample_table = ClimateDataPortal.SampleTable.with_id(station_parameter.parameter_id)
+                date_tuple = sample_table.date_mapper.to_date_tuple(time_period)
+                return "-".join(date_tuple)
             else:
                 return NONE
         
@@ -361,19 +363,21 @@ if deployment_settings.has_module("climate"):
         #    self.climate_station_parameter.station_id,
         #    self.climate_station_parameter.parameter_id)
         def range_to(self):
+            station_parameter = self.climate_station_parameter
             query = (
                 "SELECT MAX(time_period) "
                 "from climate_sample_table_%(parameter_id)i "
                 "WHERE place_id = %(station_id)i;"
             ) % dict(
-                parameter_id = self.climate_station_parameter.parameter_id,
-                station_id = self.climate_station_parameter.station_id,
+                parameter_id = station_parameter.parameter_id,
+                station_id = station_parameter.station_id,
             )
-            date  = db.executesql(query)[0][0]
-            if date is not None:
-                monthly = ClimateDataPortal.SampleTable._SampleTable__date_mapper["monthly"]
-                year,month = monthly.to_date_tuple(date)
-                return "%s-%s" % (month, year)
+            time_period  = db.executesql(query)[0][0]
+            if time_period is not None:
+                ClimateDataPortal = local_import("ClimateDataPortal")
+                sample_table = ClimateDataPortal.SampleTable.with_id(station_parameter.parameter_id)
+                date_tuple = sample_table.date_mapper.to_date_tuple(time_period)
+                return "-".join(date_tuple)
             else:
                 return NONE
     
