@@ -338,48 +338,32 @@ if deployment_settings.has_module("climate"):
         entity = "Station Parameter"
     )    
 
-    # Virtual Field for pack_quantity
     class station_parameters_virtualfields(dict, object):
+        def range(self, min_or_max):
+            station_parameter = self.climate_station_parameter
+            query = (
+                "SELECT %(min_or_max)s(time_period) "
+                "from climate_sample_table_%(parameter_id)i "
+                "WHERE place_id = %(station_id)i;"
+            ) % dict(
+                min_or_max = min_or_max,
+                parameter_id = station_parameter.parameter_id,
+                station_id = station_parameter.station_id,
+            )
+            time_period  = db.executesql(query)[0][0]
+            if time_period is not None:
+                ClimateDataPortal = local_import("ClimateDataPortal")
+                sample_table = ClimateDataPortal.SampleTable.with_id(station_parameter.parameter_id)
+                date_tuple = sample_table.date_mapper.to_date_tuple(time_period)
+                return "-".join(date_tuple)
+            else:
+                return NONE
+            
         def range_from(self):
-            station_parameter = self.climate_station_parameter
-            query = (
-                "SELECT MIN(time_period) "
-                "from climate_sample_table_%(parameter_id)i "
-                "WHERE place_id = %(station_id)i;"
-            ) % dict(
-                parameter_id = station_parameter.parameter_id,
-                station_id = station_parameter.station_id,
-            )
-            time_period  = db.executesql(query)[0][0]
-            if time_period is not None:
-                ClimateDataPortal = local_import("ClimateDataPortal")
-                sample_table = ClimateDataPortal.SampleTable.with_id(station_parameter.parameter_id)
-                date_tuple = sample_table.date_mapper.to_date_tuple(time_period)
-                return "-".join(date_tuple)
-            else:
-                return NONE
-        
-        #"Now station_id=%s parameter_id=%s" % (
-        #    self.climate_station_parameter.station_id,
-        #    self.climate_station_parameter.parameter_id)
+            return self.range("MIN")
+            
         def range_to(self):
-            station_parameter = self.climate_station_parameter
-            query = (
-                "SELECT MAX(time_period) "
-                "from climate_sample_table_%(parameter_id)i "
-                "WHERE place_id = %(station_id)i;"
-            ) % dict(
-                parameter_id = station_parameter.parameter_id,
-                station_id = station_parameter.station_id,
-            )
-            time_period  = db.executesql(query)[0][0]
-            if time_period is not None:
-                ClimateDataPortal = local_import("ClimateDataPortal")
-                sample_table = ClimateDataPortal.SampleTable.with_id(station_parameter.parameter_id)
-                date_tuple = sample_table.date_mapper.to_date_tuple(time_period)
-                return "-".join(date_tuple)
-            else:
-                return NONE
+            return self.range("MAX")
     
     climate_station_parameter_table.virtualfields.append(
         station_parameters_virtualfields()
