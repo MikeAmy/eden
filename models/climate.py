@@ -237,6 +237,7 @@ if deployment_settings.has_module("climate"):
             limitby=(0, 1)
         ).first()
         if row:
+            ClimateDataPortal = local_import("ClimateDataPortal")
             return "%s %s" % (
                 ClimateDataPortal.sample_table_types_by_code[row.sample_type_code].__name__, 
                 row.name
@@ -252,6 +253,7 @@ if deployment_settings.has_module("climate"):
             limitby=(0, 1)
         ).first()
         if row:
+            ClimateDataPortal = local_import("ClimateDataPortal")
             return "%s %s" % (
                 ClimateDataPortal.sample_table_types_by_code[row.sample_type_code].__name__, 
                 row.name
@@ -359,6 +361,7 @@ if deployment_settings.has_module("climate"):
 
     # Virtual Field for pack_quantity
     class station_parameters_virtualfields(dict, object):
+        ClimateDataPortal = local_import("ClimateDataPortal")
         monthly = ClimateDataPortal.SampleTable._SampleTable_date_mapper["monthly"]
         def range_from(self):
             query = (
@@ -644,7 +647,8 @@ if deployment_settings.has_module("climate"):
                     2: "US$ %.2f"
                 }[nationality]
                 
-                date_mapping = getattr(ClimateDataPortal, date_mapping_name)
+                ClimateDataPortal = local_import("ClimateDataPortal")
+                date_mapping = ClimateDataPortal.SampleTable._SampleTable_date_mapper[date_mapping_name]
                 
                 start_date_number = date_mapping.date_to_time_period(date_from)
                 end_date_number = date_mapping.date_to_time_period(date_to)
