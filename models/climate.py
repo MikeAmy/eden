@@ -338,32 +338,34 @@ if deployment_settings.has_module("climate"):
         entity = "Station Parameter"
     )    
 
-    class station_parameters_virtualfields(dict, object):
-        def range(self, min_or_max):
-            station_parameter = self.climate_station_parameter
-            query = (
-                "SELECT %(min_or_max)s(time_period) "
-                "from climate_sample_table_%(parameter_id)i "
-                "WHERE place_id = %(station_id)i;"
-            ) % dict(
-                min_or_max = min_or_max,
-                parameter_id = station_parameter.parameter_id,
-                station_id = station_parameter.station_id,
-            )
-            time_period  = db.executesql(query)[0][0]
-            if time_period is not None:
-                ClimateDataPortal = local_import("ClimateDataPortal")
-                sample_table = ClimateDataPortal.SampleTable.with_id(station_parameter.parameter_id)
-                date_tuple = sample_table.date_mapper.to_date_tuple(time_period)
-                return "-".join(date_tuple)
-            else:
-                return NONE
-            
+    # should be in class station_parameters_virtualfields, but 
+    # station_parameters_virtualfields isn't really a class at all
+    def station_parameters_virtualfields__range(self, min_or_max):
+        station_parameter = self.climate_station_parameter
+        query = (
+            "SELECT %(min_or_max)s(time_period) "
+            "from climate_sample_table_%(parameter_id)i "
+            "WHERE place_id = %(station_id)i;"
+        ) % dict(
+            min_or_max = min_or_max,
+            parameter_id = station_parameter.parameter_id,
+            station_id = station_parameter.station_id,
+        )
+        time_period  = db.executesql(query)[0][0]
+        if time_period is not None:
+            ClimateDataPortal = local_import("ClimateDataPortal")
+            sample_table = ClimateDataPortal.SampleTable.with_id(station_parameter.parameter_id)
+            date_tuple = sample_table.date_mapper.to_date_tuple(time_period)
+            return "-".join(date_tuple)
+        else:
+            return NONE
+    
+    class station_parameters_virtualfields(dict, object):            
         def range_from(self):
-            return self.range("MIN")
+            return station_parameters_virtualfields__range(self, "MIN")
             
         def range_to(self):
-            return self.range("MAX")
+            return station_parameters_virtualfields__range(self, "MAX")
     
     climate_station_parameter_table.virtualfields.append(
         station_parameters_virtualfields()
