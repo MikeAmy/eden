@@ -933,7 +933,7 @@ MapPlugin.render_plots = render_plots
 
 def get_csv_timeseries_data(
     map_plugin,
-    spec,
+    query_expression,
     place_ids
 ):
     env = map_plugin.env
@@ -944,7 +944,6 @@ def get_csv_timeseries_data(
         c = R("c")
         yearly = []
 
-        query_expression = spec["query_expression"]
         expression = DSL.parse(query_expression)
         understood_expression_string = str(expression)
         
@@ -980,7 +979,7 @@ def get_csv_timeseries_data(
         code = DSL.R_Code_for_values(
             expression, 
             grouping_key,
-            "place_id IN (%s)" % ",".join(map(str, spec["place_ids"]))
+            "place_id IN (%s)" % ",".join(map(str, place_ids))
         )
         values_by_time_period_data_frame = R(code)()
 
@@ -1028,32 +1027,16 @@ def get_csv_timeseries_data(
                 
     import md5
     import gluon.contrib.simplejson as JSON
-
-    import datetime
-    def serialiseDate(obj):
-        if isinstance(
-            obj,
-            (
-                datetime.date, 
-                datetime.datetime, 
-                datetime.time
-            )
-        ): 
-            return obj.isoformat()[:19].replace("T"," ")
-        else:
-            raise TypeError("%r is not JSON serializable" % (obj,)) 
     
     return get_cached_or_generated_file(
         map_plugin.env.request.application,
         "".join((
             md5.md5(
                 JSON.dumps(
-                    [specs, width, height],
-                    sort_keys=True,
-                    default=serialiseDate,
+                    ["timeseries",query_expression,place_ids],
                 )
             ).hexdigest(),
-            ".png"
+            ".csv"
         )),
         generate_csv_data
     )
