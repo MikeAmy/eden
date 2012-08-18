@@ -1020,7 +1020,7 @@ def get_csv_timeseries_data(
             time_periods.sort()
             for time_period in time_periods:
                 file.write("%s,%s" % (
-                    "-".join(date_mapper.to_date_tuple(time_period)),
+                    "-".join(map(str, date_mapper.to_date_tuple(time_period))),
                     converter(data[time_period]))
                 )
         file.close()
