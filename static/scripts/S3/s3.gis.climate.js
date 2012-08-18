@@ -2884,7 +2884,7 @@ ClimateDataMapPlugin = function (config) {
                 var place_ids = get_selected_place_ids()
                 var place_names = []
                 each(
-                    pplace_ids,
+                    place_ids,
                     function (place_id) {
                         var place = plugin.places[place_id]
                         var place_data = place.data
