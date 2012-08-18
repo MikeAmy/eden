@@ -848,6 +848,11 @@ var FilterBox = OpenLayers.Class(OpenLayers.Control, {
             return false
         }
     },
+
+    set_filter_no_update: function(filter_expression) {
+        var filter_box = this
+        filter_box.$text_area.val(filter_expression)
+    },
     
     set_filter: function(filter_expression) {
         var filter_box = this
@@ -866,7 +871,7 @@ var FilterBox = OpenLayers.Class(OpenLayers.Control, {
         else {
             try {
                 filter_function = filter_box.plugin.create_filter_function(
-                    $text_area.val()
+                    filter_expression
                 )
                 // test it a bit
                 filter_function(filter_box.example, 0)
@@ -1773,7 +1778,7 @@ ClimateDataMapPlugin = function (config) {
             ')'
         )
     }
-    var initial_filter = decodeURI(config.filter || 'Nepal') // 'unfiltered')
+    var initial_filter = decodeURI(config.filter || 'unfiltered')
     
     delete config
     
@@ -1813,8 +1818,8 @@ ClimateDataMapPlugin = function (config) {
         // Simple strings can be used to search for a place or area name
         try {
             if (typeof eval(filter_expression) == "string") {
-                plugin.filter.set_filter(filter_expression)
                 filter_expression = "matches("+filter_expression+")"
+                plugin.filter_box.set_filter_no_update(filter_expression)
             }
         }
         catch (exception) {}
@@ -2034,6 +2039,10 @@ ClimateDataMapPlugin = function (config) {
                 })
                 map.addControl(plugin.filter_box)
                 plugin.filter_box.activate()
+                if (initial_filter == 'unfiltered') {
+                    // don't update as no data loaded
+                    plugin.filter_box.set_filter_no_update('Nepal')
+                }
                 plugin.logo = new Logo()
                 plugin.logo.activate()
                 map.addControl(plugin.logo)
@@ -2893,7 +2902,7 @@ ClimateDataMapPlugin = function (config) {
                 } 
                 else {
                     if (region_name == "Nepal") {
-                        plugin.filter_box.set_filter('within_Nepal()')
+                        plugin.filter_box.set_filter('Nepal')
                     } 
                     else {
                         plugin.filter_box.set_filter('within("'+region_name+'")')
