@@ -3030,7 +3030,7 @@ ClimateDataMapPlugin = function (config) {
                     place_ids: place_ids,
                     query_expression: plugin.last_query_expression
                 })
-                window.location.href = plugin.download_time_series_URL+'?spec='+encodeURI(spec)
+                window.location.href = plugin.download_timeseries_URL+'?spec='+encodeURI(spec)
             }
         })
         plugin.download_time_series_button = download_time_series_button

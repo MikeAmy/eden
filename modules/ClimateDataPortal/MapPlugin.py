@@ -106,6 +106,7 @@ class MapPlugin(object):
             # Nepal specific
             station_parameters_URL = climate_URL("station_parameter"),
             download_data_URL = climate_URL("download_data"),
+            download_timeseries_URL = climate_URL("download_timeseries"),
             
             data_type_label = str(T("Data Type")),
             projected_option_type_label = str(
@@ -929,5 +930,135 @@ function (
     )
 
 MapPlugin.render_plots = render_plots
+
+def get_csv_timeseries_data(
+    map_plugin,
+    spec,
+    place_ids
+):
+    env = map_plugin.env
+    DSL = env.DSL
+    
+    def generate_csv_data(file_path):        
+        R = map_plugin.get_R()
+        c = R("c")
+        yearly = []
+
+        query_expression = spec["query_expression"]
+        expression = DSL.parse(query_expression)
+        understood_expression_string = str(expression)
+        
+        units = DSL.units(expression)()
+        if units is None:
+            analysis_strings = []
+            def analysis_out(*things):
+                analysis_strings.append("".join(map(str, things)))
+            DSL.analysis(expression)(analysis_out)
+            raise MeaninglessUnitsException(
+                "\n".join(analysis_strings)
+            )
+        else:
+            unit_string = str(units)
+            try:
+                display_units = {
+                    "Kelvin": "Celsius",
+                }[unit_string]
+            except KeyError:
+                converter = lambda x:x
+                display_units = unit_string
+            else:
+                converter = units_in_out[display_units].to_standard
+
+        date_mapper = DSL.date_mapping(expression)()
+        
+        is_yearly_values = "Months(" in query_expression
+        yearly.append(is_yearly_values)
+        grouping_key = get_grouping_key(date_mapper)(
+            is_yearly_values,
+            previous_december = "Prev" in query_expression
+        )
+        code = DSL.R_Code_for_values(
+            expression, 
+            grouping_key,
+            "place_id IN (%s)" % ",".join(map(str, spec["place_ids"]))
+        )
+        values_by_time_period_data_frame = R(code)()
+
+        display_units = display_units.replace("Celsius", "\xc2\xb0Celsius")
+        file = open(file_path, 'w')
+        file.write('date,"%s"' % display_units)
+
+        if isinstance(
+            values_by_time_period_data_frame,
+            map_plugin.robjects.vectors.StrVector
+        ):
+            raise Exception(str(values_by_time_period_data_frame))
+        elif not hasattr(values_by_time_period_data_frame, "ncol"):
+            # TODO: stop empty place_ids getting in (bug in the JS mapping code)
+            import logging
+            logging.error((
+                    "Don't understand R object %s:"
+                    "\nresulting from %s"
+                ) % (
+                    str(values_by_time_period_data_frame),
+                    code
+                )
+            )                
+        elif values_by_time_period_data_frame.ncol == 0:
+            pass
+        else:
+            keys = values_by_time_period_data_frame.rx2("key")
+            values = values_by_time_period_data_frame.rx2("value")
+            previous_december_month_offset = [0,1][
+                is_yearly_values and "Prev" in query_expression
+            ]
+                        
+            data = {}
+            add = data.__setitem__
+            for time_period, value in zip(keys, values):
+                add(time_period + previous_december_month_offset, value)
+            time_periods = data.keys()
+            time_periods.sort()
+            for time_period in time_periods:
+                file.write("%s,%s" % (
+                    "-".join(date_mapper.to_date_tuple(time_period)),
+                    converter(data[time_period]))
+                )
+        file.close()
+                
+    import md5
+    import gluon.contrib.simplejson as JSON
+
+    import datetime
+    def serialiseDate(obj):
+        if isinstance(
+            obj,
+            (
+                datetime.date, 
+                datetime.datetime, 
+                datetime.time
+            )
+        ): 
+            return obj.isoformat()[:19].replace("T"," ")
+        else:
+            raise TypeError("%r is not JSON serializable" % (obj,)) 
+    
+    return get_cached_or_generated_file(
+        map_plugin.env.request.application,
+        "".join((
+            md5.md5(
+                JSON.dumps(
+                    [specs, width, height],
+                    sort_keys=True,
+                    default=serialiseDate,
+                )
+            ).hexdigest(),
+            ".png"
+        )),
+        generate_csv_data
+    )
+
+MapPlugin.get_csv_timeseries_data = get_csv_timeseries_data
+
 
 import place_data

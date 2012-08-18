@@ -464,6 +464,48 @@ def download_data():
             chunk_size=4096
         )
 
+def download_timeseries():
+    kwargs = dict(request.vars)
+    import gluon.contrib.simplejson as JSON
+    spec = JSON.loads(kwargs.pop("spec"))
+    arguments = {}
+    errors = []
+    for name, converter in dict(
+        query_expression = str,
+        place_ids = _list_of(int)
+    ).iteritems():
+        try:
+            value = spec.pop(name)
+        except KeyError:
+            errors.append("%s missing" % name)
+        else:
+            try:
+                arguments[name] = converter(value)
+            except TypeError:
+                errors.append("%s is wrong type" % name)
+            except AssertionError, assertion_error:
+                errors.append("%s: %s" % (name, assertion_error))
+    if spec:
+        errors.append("Unexpected arguments: %s" % spec.keys())
+    
+    if errors:
+        raise HTTP(400, "<br />".join(errors))
+    else:
+        data_path = _map_plugin().get_csv_timeseries_data(**arguments)
+        response.headers["Content-Type"] = "application/force-download"
+        response.headers["Content-Disposition"] = (
+            "attachment; filename=" + (
+                _nice_filename(
+                    arguments["query_expression"]
+                )+".csv"
+            )
+        )
+        return response.stream(
+            open(data_path, "rb"),
+            chunk_size=4096
+        )
+
+
 def get_years():
     from datetime import datetime, timedelta
     response.headers["Expires"] = (
