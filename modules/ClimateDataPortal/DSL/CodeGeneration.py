@@ -363,7 +363,7 @@ def DSLAggregationNode_SQL(aggregation, key, out, extra_filter):
 
     out("SELECT (", key)    
     if key != "place_id":
-        if aggregation.year_offset != 0 or aggregation.month_offset != 0:
+        if aggregation.year_offset or aggregation.month_offset:
             out(
                 "+ %i" % (
                     (aggregation.year_offset * 12) + 
