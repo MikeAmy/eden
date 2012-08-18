@@ -985,7 +985,7 @@ def get_csv_timeseries_data(
 
         display_units = display_units.replace("Celsius", "\xc2\xb0Celsius")
         file = open(file_path, 'w')
-        file.write('date,"%s"\n' % display_units)
+        file.write('year,month,"%s"\n' % display_units)
 
         if isinstance(
             values_by_time_period_data_frame,
@@ -1020,7 +1020,7 @@ def get_csv_timeseries_data(
             time_periods.sort()
             for time_period in time_periods:
                 file.write("%s,%s\n" % (
-                    "-".join(map(str, date_mapper.to_date_tuple(time_period))),
+                    ",".join(map(str, date_mapper.to_date_tuple(time_period))),
                     round_to_4_sd(converter(data[time_period])))
                 )
         file.close()
