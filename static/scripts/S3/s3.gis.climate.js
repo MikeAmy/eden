@@ -1034,18 +1034,18 @@ Place.prototype = {
     within_Nepal: function () {
         return this.spaces.length > 0
     },
-    matches: function (name) {
+    matches: function (match_value) {
         var data = this.data
-        if (data.station_id == name) {
+        if (data.station_id == match_value) {
             return true
         }
-        lowercase_name = name.toLowerCase()
+        lowercase_name = match_value.toLowerCase()
         if (data.station_name.toLowerCase().indexOf(lowercase_name) != -1) {
             return true
         }
         var spaces = this.spaces
         for (var i = 0; i < spaces.length; i++) {
-            if (spaces[i].indexOf(name) != -1) {
+            if (spaces[i].indexOf(match_value) != -1) {
                 return true
             }
         }
