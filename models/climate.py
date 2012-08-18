@@ -20,8 +20,6 @@ Places may have elevation or other optional information.
 module = "climate"
 
 if deployment_settings.has_module("climate"):
-    ClimateDataPortal = local_import("ClimateDataPortal")
-
     climate_first_run_sql = []
     def climate_first_run():
         for sql in climate_first_run_sql:
@@ -238,6 +236,7 @@ if deployment_settings.has_module("climate"):
             limitby=(0, 1)
         ).first()
         if row:
+            ClimateDataPortal = local_import("ClimateDataPortal")
             return "%s %s" % (
                 ClimateDataPortal.sample_table_types_by_code[row.sample_type_code].__name__, 
                 row.name
@@ -253,6 +252,7 @@ if deployment_settings.has_module("climate"):
             limitby=(0, 1)
         ).first()
         if row:
+            ClimateDataPortal = local_import("ClimateDataPortal")
             return "%s %s" % (
                 ClimateDataPortal.sample_table_types_by_code[row.sample_type_code].__name__, 
                 row.name
@@ -279,26 +279,6 @@ if deployment_settings.has_module("climate"):
         "ALTER TABLE climate_sample_table_spec"
         "    ADD CONSTRAINT climate_sample_table_name_sample_type_unique"
         "    UNIQUE (name, sample_type_code);"
-    )
-
-    climate_monthly_aggregation_table_spec = climate_define_table(
-        "monthly_aggregation",
-        (
-            Field(
-                "sample_table_id",
-                climate_sample_table_spec,
-                notnull = True,
-                required = True
-            ),
-            Field(
-                # this maps to the name of a python class
-                # that deals with the monthly aggregated data.
-                "aggregation",
-                "string",
-                notnull=True,
-                required=True,
-            )
-        )
     )
 
     # =====================================================================
@@ -359,7 +339,6 @@ if deployment_settings.has_module("climate"):
     )    
 
     # Virtual Field for pack_quantity
-    monthly = ClimateDataPortal.SampleTable._SampleTable__date_mapper["monthly"]
     class station_parameters_virtualfields(dict, object):
         def range_from(self):
             query = (
@@ -372,6 +351,7 @@ if deployment_settings.has_module("climate"):
             )
             date  = db.executesql(query)[0][0]
             if date is not None:
+                monthly = ClimateDataPortal.SampleTable._SampleTable__date_mapper["monthly"]
                 year, month = monthly.to_date_tuple(date)
                 return "%s-%s" % (month, year)
             else:
@@ -391,6 +371,7 @@ if deployment_settings.has_module("climate"):
             )
             date  = db.executesql(query)[0][0]
             if date is not None:
+                monthly = ClimateDataPortal.SampleTable._SampleTable__date_mapper["monthly"]
                 year,month = monthly.to_date_tuple(date)
                 return "%s-%s" % (month, year)
             else:
@@ -643,6 +624,7 @@ if deployment_settings.has_module("climate"):
                     2: "US$ %.2f"
                 }[nationality]
                 
+                ClimateDataPortal = local_import("ClimateDataPortal")
                 date_mapping = ClimateDataPortal.SampleTable._SampleTable_date_mapper[date_mapping_name]
                 
                 start_date_number = date_mapping.date_to_time_period(date_from)
