@@ -20,6 +20,8 @@ Places may have elevation or other optional information.
 module = "climate"
 
 if deployment_settings.has_module("climate"):
+    ClimateDataPortal = local_import("ClimateDataPortal")
+
     climate_first_run_sql = []
     def climate_first_run():
         for sql in climate_first_run_sql:
@@ -236,7 +238,6 @@ if deployment_settings.has_module("climate"):
             limitby=(0, 1)
         ).first()
         if row:
-            ClimateDataPortal = local_import("ClimateDataPortal")
             return "%s %s" % (
                 ClimateDataPortal.sample_table_types_by_code[row.sample_type_code].__name__, 
                 row.name
@@ -252,7 +253,6 @@ if deployment_settings.has_module("climate"):
             limitby=(0, 1)
         ).first()
         if row:
-            ClimateDataPortal = local_import("ClimateDataPortal")
             return "%s %s" % (
                 ClimateDataPortal.sample_table_types_by_code[row.sample_type_code].__name__, 
                 row.name
@@ -359,9 +359,8 @@ if deployment_settings.has_module("climate"):
     )    
 
     # Virtual Field for pack_quantity
+    monthly = ClimateDataPortal.SampleTable._SampleTable__date_mapper["monthly"]
     class station_parameters_virtualfields(dict, object):
-        ClimateDataPortal = local_import("ClimateDataPortal")
-        monthly = ClimateDataPortal.SampleTable._SampleTable__date_mapper["monthly"]
         def range_from(self):
             query = (
                 "SELECT MIN(time_period) "
@@ -377,8 +376,6 @@ if deployment_settings.has_module("climate"):
                 return "%s-%s" % (month, year)
             else:
                 return NONE
-            
-            
         
         #"Now station_id=%s parameter_id=%s" % (
         #    self.climate_station_parameter.station_id,
@@ -646,7 +643,6 @@ if deployment_settings.has_module("climate"):
                     2: "US$ %.2f"
                 }[nationality]
                 
-                ClimateDataPortal = local_import("ClimateDataPortal")
                 date_mapping = ClimateDataPortal.SampleTable._SampleTable_date_mapper[date_mapping_name]
                 
                 start_date_number = date_mapping.date_to_time_period(date_from)
