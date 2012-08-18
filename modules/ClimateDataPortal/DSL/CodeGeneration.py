@@ -359,10 +359,19 @@ def DSLAggregationNode_SQL(aggregation, key, out, extra_filter):
     """From this we are going to get back a result set with key and value.
     """
     sample_table = aggregation.sample_table
-    out("SELECT ", key)
-    date_mapper = aggregation.sample_table.date_mapper
+    date_mapper = sample_table.date_mapper
 
-    out(" as key, ",
+    out("SELECT (", key)    
+    if key != "place_id":
+        if aggregation.year_offset != 0 or aggregation.month_offset != 0:
+            out(
+                "+ %i" % (
+                    (aggregation.year_offset * 12) + 
+                    aggregation.month_offset
+                )
+            )
+
+    out(") as key, ",
         aggregation.SQL_function, "(value) as value ",
         'FROM \\"', sample_table.table_name, '\\"'
     )

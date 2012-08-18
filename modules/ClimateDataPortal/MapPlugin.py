@@ -433,6 +433,8 @@ def Monthly_grouping_key(date_mapper, is_yearly_values, previous_december = Fals
             # PreviousDecember handling:
             return "(time_period - ((time_period + 1000008 + %i +1) %% 12))" % date_mapper.start_month_0_indexed
         else:
+            # the 1000008 is to add a large enough month offset so that PostgreSQL's
+            # modulo function doesn't ever return negatives
             return "(time_period - ((time_period + 1000008 + %i) %% 12))" % date_mapper.start_month_0_indexed
     else:
         return "time_period"

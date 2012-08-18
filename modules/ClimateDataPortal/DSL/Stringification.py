@@ -30,6 +30,13 @@ def To__str__(to_date):
     return "To(%s)" % ", ".join(map(str,original_args))
 To.__str__ = To__str__
 
+def Date_Offset__str__(date_offset):
+    original_args = [date_offset.years]
+    if date_offset.months is not 0:
+        original_args.append(date_offset.months)
+    return "Date_Offset(%s)" % ", ".join(map(str,original_args))
+Date_Offset.__str__ = Date_Offset__str__
+
 def Number__str__(number):
     units_name = str(number.units)
     if units_name:
