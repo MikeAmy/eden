@@ -356,7 +356,7 @@ if deployment_settings.has_module("climate"):
             ClimateDataPortal = local_import("ClimateDataPortal")
             sample_table = ClimateDataPortal.SampleTable.with_id(station_parameter.parameter_id)
             date_tuple = sample_table.date_mapper.to_date_tuple(time_period)
-            return "-".join(date_tuple)
+            return "-".join(map(str, date_tuple))
         else:
             return NONE
     
