@@ -359,7 +359,7 @@ if deployment_settings.has_module("climate"):
 
     # Virtual Field for pack_quantity
     class station_parameters_virtualfields(dict, object):
-        monthly = ClimateDataPortal.SampleTable._SampleTable_date_mapper['Monthly']
+        monthly = ClimateDataPortal.SampleTable._SampleTable_date_mapper["monthly"]
         def range_from(self):
             query = (
                 "SELECT MIN(time_period) "
