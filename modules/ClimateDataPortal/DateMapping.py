@@ -14,6 +14,10 @@ class Daily(object):
     def __init__(date_mapper, start_date):
         date_mapper.start_ordinal = start_date.toordinal()
        
+    def to_date_tuple(date_mapper, day_number):
+        date = date_mapper.to_date(day_number)
+        return date.year, date.month, date.day
+
     def to_time_period(date_mapper, year, month, day):
         return date(year, month, day).toordinal() - date_mapper.start_ordinal
     
