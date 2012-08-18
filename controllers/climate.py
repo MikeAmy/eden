@@ -313,26 +313,6 @@ def purchase():
     output["addheader"] = T("Please enter the details of the data you wish to purchase")
     return output
 
-def prices():
-    prices_table = db.climate_prices
-    if not auth.is_logged_in():
-        redirect(
-            URL(
-                c = "default",
-                f = "user",
-                args = ["login"],
-                vars = {
-                    "_next": URL(
-                        c = "climate",
-                        f = "prices"
-                    )
-                }
-            )
-        )
-    else:
-        if s3_has_role(1):
-            return s3_rest_controller()
-    
 
 def prices():
     prices_table = db.climate_prices
