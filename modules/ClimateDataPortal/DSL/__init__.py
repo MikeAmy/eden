@@ -49,7 +49,7 @@ We need:
 Meaningless expressions are allowed in the DSL but then 
 detected during the dimensional analysis phase. Some types can be inferred.
 """
-from ..Units import WhateverUnitsAreNeeded
+from .. import Units, WhateverUnitsAreNeeded
 
 def normalised(value):
     if isinstance(value, (int, float)):
