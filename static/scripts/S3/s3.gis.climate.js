@@ -819,7 +819,7 @@ var FilterBox = OpenLayers.Class(OpenLayers.Control, {
     title: (
         'Enter filter expressions here to filter the map overlay. '+
         '"unfiltered" means the map overlay is not being filtered. '+
-        'You can use any attribute that is shown in the overlay '+
+        'You can use any attribute shown in the overlay '+
         'popup box, and logical operators "and", "not" and "or". \n'+
         'within("Region name") and within_Nepal() filter by region.'
     ),
@@ -1028,6 +1028,23 @@ Place.prototype = {
     },
     within_Nepal: function () {
         return this.spaces.length > 0
+    },
+    matches: function (name) {
+        var data = this.data
+        if (data.station_id == name) {
+            return true
+        }
+        lowercase_name = name.toLowerCase()
+        if (data.station_name.toLowerCase().indexOf(lowercase_name) != -1) {
+            return true
+        }
+        var spaces = this.spaces
+        for (var i = 0; i < spaces.length; i++) {
+            if (space[i].indexOf(name) != -1) {
+                return true
+            }
+        }
+        return false
     },
     generate_marker: function (use_marker) {
         // only for stations
@@ -1584,7 +1601,7 @@ load_layer_and_locate_places_in_spaces = function (
                     )
                     
                     plugin.quick_filter_data_store.loadData(
-                        ([["(All)",""]]).concat(plugin.spaces)
+                        ([["(All)",""], ["Nepal", "within_Nepal()"]]).concat(plugin.spaces)
                     )
                     plugin.quick_filter_data_store.sort('name', 'ASC')
                     //vector_layer.redraw()
@@ -1786,6 +1803,21 @@ ClimateDataMapPlugin = function (config) {
                 )
             }
         }
+        /* Special cases */
+        if (filter_expression == "Nepal" ||
+            filter_expression == "'Nepal'" ||
+            filter_expression == '"Nepal"'
+        ) {
+            filter_expression = "within_Nepal()"
+        }
+        // Simple strings can be used to search for a place or area name
+        try {
+            if (typeof eval(filter_expression) == "string") {
+                filter_expression = "matches("+filter_expression+")"
+                plugin.filter.set_filter(filter_expression)
+            }
+        }
+        catch () {}
 
         var function_string = (
             'unfiltered = true\n'+
@@ -2002,6 +2034,7 @@ ClimateDataMapPlugin = function (config) {
                 })
                 map.addControl(plugin.filter_box)
                 plugin.filter_box.activate()
+                plugin.filter_box.set_filter("within_Nepal()")
                 plugin.logo = new Logo()
                 plugin.logo.activate()
                 map.addControl(plugin.logo)
@@ -2860,7 +2893,12 @@ ClimateDataMapPlugin = function (config) {
                     plugin.filter_box.set_filter('')
                 } 
                 else {
-                    plugin.filter_box.set_filter('within("'+region_name+'")')
+                    if (region_name == "Nepal") {
+                        plugin.filter_box.set_filter('within_Nepal()')
+                    } 
+                    else {
+                        plugin.filter_box.set_filter('within("'+region_name+'")')
+                    }
                 }
             }
         )
