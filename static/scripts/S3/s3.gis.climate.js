@@ -206,49 +206,53 @@ var ColourKey = OpenLayers.Class(OpenLayers.Control, {
             // but if units change, old limits become meaningless
             || previous_units != new_units
         ) {
-            // sensible range
-            var significant_digits = 1
-            function scaling_factor(value) {
-                return Math.pow(
-                    10,
-                    (
-                        Math.floor(
-                            Math.log(Math.abs(value)) / Math.LN10
-                        ) - (significant_digits - 1)
+            if (
+                // Sometimes there is only one value, e.g. 0
+                min_value < max_value
+            ) {
+                // sensible range
+                var significant_digits = 1
+                function scaling_factor(value) {
+                    return Math.pow(
+                        10,
+                        (
+                            Math.floor(
+                                Math.log(Math.abs(value)) / Math.LN10
+                            ) - (significant_digits - 1)
+                        )
                     )
+                }
+                function sensible(value, round) {
+                    if (value == 0.0) {
+                        return 0.0
+                    }
+                    else {
+                        factor = scaling_factor(value)
+                        return round(value/factor) * factor
+                    }
+                }
+                var range_mag = scaling_factor(
+                    sensible(max_value, Math.ceil) - 
+                    sensible(min_value, Math.floor)
                 )
-            }
-            function sensible(value, round) {
-                if (value == 0.0) {
-                    return 0.0
+                function to_significant_digits(number, sd){
+                    return parseFloat(number.toPrecision(sd))
+                }
+                    
+                // function set_scale(min_value, max_value) {
+                min_value = Math.floor(min_value/range_mag) * range_mag
+                // if min is near zero (relative to max), just use 0
+                if (min_value > 0 && (min_value / max_value) < 0.5) {
+                    min_value = 0.0
                 }
                 else {
-                    factor = scaling_factor(value)
-                    return round(value/factor) * factor
+                    min_value = to_significant_digits(min_value, 1)
                 }
+                max_value = to_significant_digits(
+                    Math.ceil(max_value/range_mag) * range_mag,
+                    1
+                )
             }
-            range_mag = scaling_factor(
-                sensible(max_value, Math.ceil) - 
-                sensible(min_value, Math.floor)
-            )
-            function to_significant_digits(number, sd){
-                return parseFloat(number.toPrecision(sd))
-            }
-                
-            // function set_scale(min_value, max_value) {
-            min_value = Math.floor(min_value/range_mag) * range_mag
-            // if min is near zero (relative to max), just use 0
-            if (min_value > 0 && (min_value / max_value) < 0.5) {
-                min_value = 0.0
-            }
-            else {
-                min_value = to_significant_digits(min_value, 1)
-            }
-            max_value = to_significant_digits(
-                Math.ceil(max_value/range_mag) * range_mag,
-                1
-            )
-            
             function nice_number_string(number) {
                 var result_string = number.toString()
                 if (result_string.length > 6) {
@@ -256,8 +260,8 @@ var ColourKey = OpenLayers.Class(OpenLayers.Control, {
                 }
                 return result_string
             }
-            min_value_string = nice_number_string(min_value)
-            max_value_string = nice_number_string(max_value)
+            var min_value_string = nice_number_string(min_value)
+            var max_value_string = nice_number_string(max_value)
             colour_key.$lower_limit.attr('value', min_value_string)
             colour_key.$upper_limit.attr('value', max_value_string)
         }
@@ -2117,7 +2121,6 @@ ClimateDataMapPlugin = function (config) {
     
     plugin.render_map_layer = function(min_value, max_value) {
         plugin.overlay_layer.destroyFeatures()
-        // Law of Demeter violation:
         var colour_gradient = plugin.colour_key.gradient
         var feature_data = plugin.feature_data
         var place_ids = feature_data.keys
@@ -2132,6 +2135,19 @@ ClimateDataMapPlugin = function (config) {
         var features = []
         var filter = plugin.filter || function () { return true }
         var exponent_pattern = new RegExp('e(-?\\d+)')
+        function hexFF(value) {
+            return (256+value).toString(16).substr(1)
+        }
+        function cleanup_attribute(_, integer_part, fractional_part) {
+            var number_string = integer_part.reverse().replace(
+                new RegExp('(\\d{3})(?!$)', 'g'),
+                '$1,'
+            ).reverse()
+            if (fractional_part) {
+                number_string += fractional_part
+            }
+            return number_string
+        }
         for (
             var i = 0;
             i < place_ids.length;
@@ -2166,9 +2182,6 @@ ClimateDataMapPlugin = function (config) {
                     var colour_value = colour_gradient.colour_for_value(
                         normalised_value
                     )
-                    function hexFF(value) {
-                        return (256+value).toString(16).substr(1)
-                    }
                     var colour_string = (
                         '#'+
                         hexFF(colour_value[0]) + 
@@ -2247,16 +2260,7 @@ ClimateDataMapPlugin = function (config) {
                     else {
                         attribute_string = attribute_string.replace(
                             new RegExp('(\\d+)(\\.\\d+)?', 'g'), 
-                            function (_, integer_part, fractional_part) {
-                                var number_string = integer_part.reverse().replace(
-                                    new RegExp('(\\d{3})(?!$)', 'g'),
-                                    '$1,'
-                                ).reverse()
-                                if (fractional_part) {
-                                    number_string += fractional_part
-                                }
-                                return number_string
-                            }
+                            cleanup_attribute
                         )
                     }
                     attributes.value = attribute_string+' '+display_units
