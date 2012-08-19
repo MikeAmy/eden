@@ -112,15 +112,12 @@ def climate_overlay_data():
             data_path = _map_plugin().get_overlay_data(**arguments)
         # only DSL exception types should be raised here
         except DSL.DSLSyntaxError, syntax_error:
-            if not hasattr(syntax_error, "understood_expression"):
-                raise
-            else:
-                raise HTTP(400, JSON.dumps({
-                    "error": "SyntaxError",
-                    "lineno": syntax_error.lineno,
-                    "offset": syntax_error.offset,
-                    "understood_expression": syntax_error.understood_expression
-                }))
+            raise HTTP(400, JSON.dumps({
+                "error": "SyntaxError",
+                "lineno": syntax_error.lineno,
+                "offset": syntax_error.offset,
+                "understood_expression": syntax_error.understood_expression
+            }))
         except (
             ClimateDataPortal.MeaninglessUnitsException,
             ClimateDataPortal.DimensionError,

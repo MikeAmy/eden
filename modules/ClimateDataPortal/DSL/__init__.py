@@ -358,13 +358,13 @@ def parse(expression_string):
     scanner.scan(expression_string)
 
     if remainder:
-        #print remainder
         position, string = remainder[0]
-        exception = SyntaxError(
+        exception = DSLSyntaxError(
             "Syntax error near: '"+("".join(string))+"'"
         )
-        #exception.offset, exception.lineno = position
-        exception.offset, exception.lineno = position[0], 0
+        exception.offset = position[0]
+        exception.lineno = 0
+        excpetion.understood_expression = expression_string
         raise exception
     else:
         cleaned_expression_string = ("".join(tokens))
@@ -376,16 +376,8 @@ def parse(expression_string):
             )
         except SyntaxError, syntax_error:
             dsl_syntax_error = DSLSyntaxError()
-
-            dsl_syntax_error.args = syntax_error.args
             dsl_syntax_error.lineno = syntax_error.lineno
-            dsl_syntax_error.msg = syntax_error.msg
-            dsl_syntax_error.filename = syntax_error.filename
-            dsl_syntax_error.message = syntax_error.message
-            dsl_syntax_error.text = syntax_error.text
             dsl_syntax_error.offset = syntax_error.offset
-            dsl_syntax_error.print_file_and_line = syntax_error.print_file_and_line
-            
             dsl_syntax_error.understood_expression = cleaned_expression_string
             raise dsl_syntax_error
         else:
