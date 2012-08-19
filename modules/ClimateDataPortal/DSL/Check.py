@@ -189,6 +189,18 @@ def To_check(to_date, date_mapper):
     )
     return to_date.errors
 
+@check.implementation(Date_Offset)
+def date_offset_check(date_offset, date_mapper):
+    date_offset.errors = set()
+    error = date_offset.errors.add
+    years = date_offset.years
+    months = date_offset.months
+    if not isinstance(years, int):
+        error("Offset years should be a whole number")    
+    if not isinstance(months, int):
+        error("Offset months should be a whole number")    
+    return date_offset.errors
+
 @check.implementation(Addition, Subtraction, Multiplication, Division)
 def Binop_check(binop):
     binop.errors = set()
@@ -216,7 +228,7 @@ def Aggregation_check(aggregation):
     else:
         if SampleTable.name_exists(aggregation.dataset_name, error):
             aggregation.sample_table = SampleTable.with_name(aggregation.dataset_name)
-            allowed_specifications = (To, From, Months)
+            allowed_specifications = (To, From, Months, Date_Offset)
             specification_errors = False
             date_mapper = aggregation.sample_table.date_mapper
             for specification in aggregation.specification:
@@ -274,17 +286,12 @@ def Number_check_analysis(number, out):
     if number.errors:
         out("# ^ ", ", ".join(number.errors))
 
-@check_analysis.implementation(From, To)
+@check_analysis.implementation(From, To, Months, Date_Offset)
 def Date_check_analysis(date_spec, out):
     out("%s," % date_spec)
     if hasattr(date_spec, "errors") and date_spec.errors:
         out("# ^ ", ", ".join(date_spec.errors))
 
-@check_analysis.implementation(Months)
-def Months_check_analysis(months, out):
-    out("%s," % months)
-    if hasattr(months, "errors") and months.errors:
-        out("# ^ ", ", ".join(months.errors))
 
 @check_analysis.implementation(*operations)
 def Binop_check_analysis(binop, out):

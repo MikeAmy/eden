@@ -189,6 +189,15 @@ class To(object):
         to_date.month = month
         to_date.day = day
 
+class Date_Offset(object):
+    """Offsets the years in an aggregation
+    This is useful for comparing datasets in different date ranges.
+    """
+    def __init__(date_offset, years=0, months=0):
+        date_offset.years = years
+        date_offset.months = months
+
+
 class AggregationNode(ASTNode):
     """These all take a dataset and aggregate it.
     """
@@ -301,7 +310,7 @@ def parse(expression_string):
     allowed_names = {}
     for name in (
         "Sum Average StandardDeviation Minimum Maximum Count "
-        "Months From To Number".split()
+        "Months From To Number Date_Offset".split()
     ):
         # can't guarantee the __name__, use our name
         allowed_names[name] = globals()[name]

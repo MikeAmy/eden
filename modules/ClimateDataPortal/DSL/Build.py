@@ -25,6 +25,8 @@ def apply_context(aggregation):
     aggregation.from_date = None
     aggregation.to_date = None
     aggregation.month_numbers = None
+    aggregation.year_offset = 0
+    aggregation.month_offset = 0
     for specification in aggregation.specification:
         Build(specification)(aggregation)
 
@@ -59,6 +61,17 @@ def set_from_date(aggregation, from_date):
         raise DSLSyntaxError("From was specified twice.")
     aggregation.from_date = from_date
 AggregationNode.set_from_date = set_from_date
+
+@Build.implementation(Date_Offset)
+def build(date_offset, dsl_aggregation_node):
+    dsl_aggregation_node.set_date_offset(date_offset.years, date_offset.months)
+
+def set_date_offset(aggregation, years, months):
+    if (aggregation.year_offset is not None):
+        raise DSLSyntaxError("Date offset was specified twice.")
+    aggregation.year_offset = years
+    aggregation.month_offset = months
+AggregationNode.set_date_offset = set_date_offset
 
 @Build.implementation(Number)
 def Number_build(positive_number):
