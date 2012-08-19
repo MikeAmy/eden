@@ -2242,15 +2242,19 @@ ClimateDataMapPlugin = function (config) {
                             )
                         )
                     }
-                    var pre_rounding_factor = Math.pow(
-                        10, 
-                        7-Math.floor(Math.log(Math.abs(converted_value)) / Math.LN10)
-                    )
-                    var attribute_string = (
-                        Math.round(
-                            converted_value * pre_rounding_factor
-                        ) / pre_rounding_factor
-                    ).toString()
+                    if (converted_value != 0) {
+                        var pre_rounding_factor = Math.pow(
+                            10, 
+                            7-Math.floor(Math.log(Math.abs(converted_value)) / Math.LN10)
+                        )
+                        var attribute_string = (
+                            Math.round(
+                                converted_value * pre_rounding_factor
+                            ) / pre_rounding_factor
+                        ).toString()
+                    } else {
+                        attribute_string = "0"
+                    }
                     if (exponent_pattern.test(attribute_string)) {
                         attribute_string = attribute_string.replace(
                             exponent_pattern,
