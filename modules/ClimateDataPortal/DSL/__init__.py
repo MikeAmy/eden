@@ -92,8 +92,13 @@ class Number(ASTNode):
     def __init__(number, value, units_name = None):
         number.value = float(value)
         if units_name is None:
+            from ..Units import WhateverUnitsAreNeeded
             number.units = WhateverUnitsAreNeeded()#value >= 0)
         else:
+            # web2py screwing up imports? 
+            # if imported like this above, Units is a class
+            # but when we get here, it's a module
+            from ..Units import Units
             number.units = Units.parsed_from(units_name)#, value >= 0)
     
     def __cmp__(number, other_number):

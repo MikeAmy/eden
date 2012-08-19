@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 
 from ..Method import Method
-from ..Units import Units, Dimensionless
+from .. import Units
+from ..Units import Dimensionless
 
 units = Method("units")
 
