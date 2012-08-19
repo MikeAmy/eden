@@ -57,5 +57,5 @@ def AggregationNode__str__(aggregation):
 AggregationNode.__str__ = AggregationNode__str__
 
 def BinaryOperator__str__(binop):
-    return str(binop.left)+" "+binop.op+" "+str(binop.right)
+    return "("+str(binop.left)+" "+binop.op+" "+str(binop.right)+")"
 BinaryOperator.__str__ = BinaryOperator__str__
