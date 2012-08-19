@@ -737,18 +737,29 @@ function ColourGradient(
     }
 }
 
-var course_colour_steps = new ColourGradient([
-    [240, 10, 135],
-	[255, 62, 62],
-    [240, 130, 40],
-    [230, 220, 50],
-    [160, 230, 55],
-    [10, 210, 140],
-    [10, 200, 200],
-    [30, 60, 255],
-    [130, 0, 220],
-    [160, 0, 200]
-])
+var course_colours = []
+each([
+        [240, 10, 135],
+        [255, 62, 62],
+        [240, 130, 40],
+        [230, 220, 50],
+        [160, 230, 55],
+        [10, 210, 140],
+        [10, 200, 200],
+        [30, 60, 255],
+        [130, 0, 220],
+        [160, 0, 200]
+    ],
+     // minimise browsers blending the gradient colour image
+     function (colour) {
+         for (var i = 0; i < 20; ++i) {
+             coarse_colours.push(colour)
+         }
+     }
+)
+
+var course_colour_steps = new ColourGradient(coarse_colours)
+
 
 var blue_green_red_cosines = []
 with (Math) {
