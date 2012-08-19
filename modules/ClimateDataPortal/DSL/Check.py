@@ -223,33 +223,37 @@ def Aggregation_check(aggregation):
     def error(message):
         aggregation.errors.add(message)
     if not isinstance(aggregation.dataset_name, str):
-        error("First argument should be the name of a data set enclosed in "
-                "parentheses. ")
+        error(
+            "First argument should be the name of a data set enclosed in "
+            "quotes. "
+        )
     else:
         if SampleTable.name_exists(aggregation.dataset_name, error):
             aggregation.sample_table = SampleTable.with_name(aggregation.dataset_name)
             allowed_specifications = (To, From, Months, Date_Offset)
             specification_errors = False
             date_mapper = aggregation.sample_table.date_mapper
+            used_specifications = set()
             for specification in aggregation.specification:
                 if isinstance(specification, allowed_specifications):
-                    specification_errors |= bool(
-                        check(specification)(date_mapper)
-                    )
+                    specification_type = type(specification)
+                    if specification_type in used_specifications:
+                        error(specification_type.__name__+" should only be used once.")
+                    else:
+                        used_specifications.add(specification_type)
+                        check_analysis(specification)(indent)
+
+                        specification_errors |= bool(
+                            check(specification)(date_mapper)
+                        )
                 else:
                     error(
-                        "%(specification)s cannot be used inside "
+                        "%(specification)s should not be used inside "
                         "%(aggregation_name)s(...).\n"
-                        "Required arguments are table name: %(table_names)s.\n"
+                        "The dataset name is required.\n"
                         "Optional arguments are %(possibilities)s." % dict(
                             specification = specification,
                             aggregation_name = aggregation.__class__.__name__,
-                            table_names = ", ".join(
-                                map(
-                                    '"%s %s"'.__mod__,
-                                    climate_sample_tables
-                                )
-                            ),
                             possibilities = ", ".join(
                                 Class.__name__+"(...)" for Class in allowed_specifications
                             )

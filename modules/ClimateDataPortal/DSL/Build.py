@@ -40,14 +40,10 @@ def binop_build(binop):
     Build(binop.left)()
 
 def set_months(aggregation, month_numbers):
-    if aggregation.month_numbers is not None:
-        raise DSLSyntaxError("Months() was specified twice.")
     aggregation.month_numbers = month_numbers
 AggregationNode.set_months = set_months
 
 def set_to_date(aggregation, to_date):
-    if aggregation.to_date is not None:
-        raise DSLSyntaxError("To was specified twice.")
     # Date Mapping
     # aggregation.sample_table.date_mapping.check_date(to_date)
     # ...
@@ -57,8 +53,6 @@ def set_to_date(aggregation, to_date):
 AggregationNode.set_to_date = set_to_date
 
 def set_from_date(aggregation, from_date):
-    if (aggregation.from_date is not None):
-        raise DSLSyntaxError("From was specified twice.")
     aggregation.from_date = from_date
 AggregationNode.set_from_date = set_from_date
 
@@ -67,8 +61,6 @@ def build(date_offset, dsl_aggregation_node):
     dsl_aggregation_node.set_date_offset(date_offset.years, date_offset.months)
 
 def set_date_offset(aggregation, years, months):
-    if (aggregation.year_offset is not None):
-        raise DSLSyntaxError("Date offset was specified twice.")
     aggregation.year_offset = years
     aggregation.month_offset = months
 AggregationNode.set_date_offset = set_date_offset
