@@ -1044,8 +1044,11 @@ Place.prototype = {
             return true
         }
         lowercase_name = match_value.toLowerCase()
-        if (data.station_name.toLowerCase().indexOf(lowercase_name) != -1) {
-            return true
+        var station_name = data.station_name
+        if (station_name) {
+            if (station_name.toLowerCase().indexOf(lowercase_name) != -1) {
+                return true
+            }
         }
         var spaces = this.spaces
         for (var i = 0; i < spaces.length; i++) {
