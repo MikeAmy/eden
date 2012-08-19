@@ -1817,7 +1817,7 @@ ClimateDataMapPlugin = function (config) {
                 plugin.filter.set_filter(filter_expression)
             }
         }
-        catch () {}
+        catch (exception) {}
 
         var function_string = (
             'unfiltered = true\n'+
