@@ -25,8 +25,8 @@ def apply_context(aggregation):
     aggregation.from_date = None
     aggregation.to_date = None
     aggregation.month_numbers = None
-    aggregation.year_offset = 0
-    aggregation.month_offset = 0
+    aggregation.year_offset = None
+    aggregation.month_offset = None
     for specification in aggregation.specification:
         Build(specification)(aggregation)
 

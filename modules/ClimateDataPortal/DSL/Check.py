@@ -196,9 +196,9 @@ def date_offset_check(date_offset, date_mapper):
     years = date_offset.years
     months = date_offset.months
     if not isinstance(years, int):
-        error("Offset years should be a whole number")    
+        error("Offset years should be a whole number")
     if not isinstance(months, int):
-        error("Offset months should be a whole number")    
+        error("Offset months should be a whole number")
     return date_offset.errors
 
 @check.implementation(Addition, Subtraction, Multiplication, Division)
