@@ -77,8 +77,9 @@ Dimensions.group("s", "second",
 rainfall = Dimensions.parsed_from("precipitation mm")
 Dimensions.group("precipitation mm", "precipitation mm")
 
-rainfall = Dimensions.parsed_from("precipitation mm")
-Dimensions.group("precipitation mm", "precipitation mm")
+# in case someone types it this way around:
+mm_precipitation = Dimensions.parsed_from("mm precipitation")
+Dimensions.group("precipitation mm", "mm precipitation")
 
 velocity = Dimensions.parsed_from("m/s")
 Dimensions.group("m/s", "m/s")
