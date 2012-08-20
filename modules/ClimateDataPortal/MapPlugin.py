@@ -747,9 +747,6 @@ def render_plots(
             width
         )
 
-        # HACK for Celsius degrees symbol display in R
-        display_units = display_units.replace("Celsius", "\xc2\xb0Celsius")
-
         R.png(
             filename = file_path,
             width = width,
@@ -873,7 +870,11 @@ function (
             total_margin_height = 150,
             line_interspacing = 1.8,
             xlab = "",
-            ylab = display_units,
+            ylab = display_units.encode("UTF8").replace(
+                # HACK for Celsius degrees symbol display in R
+                "Celsius",
+                "\xc2\xb0Celsius"
+            ),
             plot_type= "lo"[is_yearly_values],               
             axis_points = axis_points,
             axis_labels = axis_labels,
