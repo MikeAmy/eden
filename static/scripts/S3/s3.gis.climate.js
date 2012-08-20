@@ -737,7 +737,7 @@ function ColourGradient(
     }
 }
 
-var course_colours = []
+var coarse_colours = []
 each([
         [240, 10, 135],
         [255, 62, 62],
@@ -750,7 +750,7 @@ each([
         [130, 0, 220],
         [160, 0, 200]
     ],
-     // minimise browsers blending the gradient colour image
+     // minimise browsers blurring the gradient colour image
      function (colour) {
          for (var i = 0; i < 20; ++i) {
              coarse_colours.push(colour)
