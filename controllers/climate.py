@@ -88,7 +88,7 @@ def climate_overlay_data():
     arguments = {}
     errors = []
     for kwarg_name, converter in dict(
-        query_expression = str,
+        query_expression = unicode,
     ).iteritems():
         try:
             value = kwargs.pop(kwarg_name)
@@ -126,7 +126,7 @@ def climate_overlay_data():
         ), exception:
             raise HTTP(400, JSON.dumps({
                 "error": exception.__class__.__name__,
-                "analysis": str(exception)
+                "analysis": unicode(exception)
             }))
         else:
             return response.stream(
@@ -156,7 +156,7 @@ def _climate_chart(content_type):
         arguments = {}
         errors = []
         for name, converter in dict(
-            query_expression = str,
+            query_expression = unicode,
             place_ids = _list_of(int)
         ).iteritems():
             try:
@@ -230,7 +230,7 @@ def stations():
                 "}"
             ))
         )
-    return "[%s]" % ",".join(stations_strings)
+    return u"[%s]" % u",".join(stations_strings)
 
 def places():
     from datetime import datetime, timedelta
@@ -427,7 +427,7 @@ def download_data():
     arguments = {}
     errors = []
     for name, converter in dict(
-        query_expression = str,
+        query_expression = unicode,
         place_ids = _list_of(int)
     ).iteritems():
         try:
@@ -468,7 +468,7 @@ def download_timeseries():
     arguments = {}
     errors = []
     for name, converter in dict(
-        query_expression = str,
+        query_expression = unicode,
         place_ids = _list_of(int)
     ).iteritems():
         try:
