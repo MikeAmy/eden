@@ -337,7 +337,7 @@ def parse(expression_string):
         (r"\s+", whitespace),
         (
             r"-?[0-9]+(?:\.[0-9]+)?\s+"
-            r"(?:(?:delta|Δ)\s+)?"
+            r"(?:(?:delta|Δ|\xce\x94)\s+)?"
             r"(?:"
                 r"(?:%(unit)s+\s*)\/(?:\s*%(unit)s+)|" 
                 r"(?:%(unit)s+\s*)|"
