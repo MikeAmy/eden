@@ -591,7 +591,7 @@ def render_plots(
             query_expression = spec["query_expression"]
             expression = DSL.parse(query_expression)
             understood_expression_string = unicode(expression)
-            spec_labels.append(label)
+            spec_labels.append(label.encode("UTF8"))
             
             units = DSL.units(expression)()
             unit_string = unicode(units)
@@ -848,7 +848,7 @@ function (
                     )
                 
                     spec_labels[i] += (
-                        u"   {"
+                        "   {"
                             "y=%(slope_str)s x year %(add)s%(intercept_str)s, "
                             "r= %(r_str)s, "
                             "p= %(p_str)s, "
