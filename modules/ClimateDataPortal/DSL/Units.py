@@ -96,7 +96,7 @@ def stddev_determine_units(aggregation):
 
 @units.implementation(Count)
 def count_units(count):
-    count.units = Dimensionless
+    count.units = Units(Dimensionless, positive=True)
     return count.units
 
 @units.implementation(Number)
