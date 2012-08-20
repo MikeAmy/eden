@@ -364,7 +364,7 @@ def parse(expression_string):
         )
         exception.offset = position[0]
         exception.lineno = 0
-        excpetion.understood_expression = expression_string
+        exception.understood_expression = expression_string
         raise exception
     else:
         cleaned_expression_string = ("".join(tokens))
