@@ -353,7 +353,8 @@ def parse(expression_string):
         (r"\S+", anything_else),
     )
     scanner = re.Scanner(scanner_spec)
-    scanner.scan(expression_string.encode("UTF8"))
+    encoded_expression_string = expression_string.encode("UTF8")
+    scanner.scan(encoded_expression_string)
 
     if remainder:
         position, string = remainder[0]
