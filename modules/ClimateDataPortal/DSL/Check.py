@@ -3,6 +3,9 @@ import datetime
 from ..Method import Method
 from . import *
 
+# check methods check expressions that have been parsed
+# this makes sure that all parts of the expressions make sense
+# this is before building
 check = Method("check")
 # checks arguments are correct type and in range only.
 
@@ -33,6 +36,7 @@ def month_filter_number_from_arg(month, error):
     else:
         return month_number
 
+# specialist check for month specifications
 check_months = Method("check_months")
 
 from ..DateMapping import Yearly, Monthly, MultipleYearsByMonth, Daily
@@ -191,6 +195,7 @@ def To_check(to_date, date_mapper):
 
 @check.implementation(Date_Offset)
 def date_offset_check(date_offset, date_mapper):
+    """Check Date offsets are given in numbers"""
     date_offset.errors = set()
     error = date_offset.errors.add
     years = date_offset.years
@@ -203,6 +208,7 @@ def date_offset_check(date_offset, date_mapper):
 
 @check.implementation(Addition, Subtraction, Multiplication, Division)
 def Binop_check(binop):
+    """Check both sides of arithmetic expressions"""
     binop.errors = set()
     left = check(binop.left)()
     right = check(binop.right)()
@@ -210,6 +216,7 @@ def Binop_check(binop):
 
 @check.implementation(Pow)
 def PowRoot_check(binop):
+    """Check power expression have positive exponents"""
     binop.errors = set()
     error = binop.errors.add
     exponent = binop.right
@@ -220,16 +227,18 @@ def PowRoot_check(binop):
 @check.implementation(*aggregations)
 def Aggregation_check(aggregation):
     aggregation.errors = set()
-    def error(message):
-        aggregation.errors.add(message)
+    error = aggregation.errors.add
+    # check a dataset is specified
     if not isinstance(aggregation.dataset_name, str):
         error(
             "First argument should be the name of a data set enclosed in "
             "quotes. "
         )
     else:
+        # check the dataset exists - this peforms error handlng if not
         if SampleTable.name_exists(aggregation.dataset_name, error):
             aggregation.sample_table = SampleTable.with_name(aggregation.dataset_name)
+            # check only date specs are given
             allowed_specifications = (To, From, Months, Date_Offset)
             specification_errors = False
             date_mapper = aggregation.sample_table.date_mapper
@@ -237,12 +246,12 @@ def Aggregation_check(aggregation):
             for specification in aggregation.specification:
                 if isinstance(specification, allowed_specifications):
                     specification_type = type(specification)
+                    # check no date spec is used more than once
                     if specification_type in used_specifications:
                         error(specification_type.__name__+" should only be used once.")
                     else:
                         used_specifications.add(specification_type)
-                        check_analysis(specification)(indent)
-
+                        # check the date spec 
                         specification_errors |= bool(
                             check(specification)(date_mapper)
                         )
@@ -259,11 +268,13 @@ def Aggregation_check(aggregation):
                             )
                         )
                     )
-                    
+    # TODO: check that aggregation from date >= to date? More a warning?
+    # problem is those dates are locked inside the specs until Build phase
     return aggregation.errors or specification_errors
 
 from .. import Units, WhateverUnitsAreNeeded
 def Units_check_number(units, value, error):
+    """Check for ambiguous numbers"""
     if units._positive and value < 0:
         error(
             "Can't guess whether negative numbers without 'delta' are deltas. "
