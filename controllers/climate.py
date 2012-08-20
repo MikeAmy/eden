@@ -88,7 +88,7 @@ def climate_overlay_data():
     arguments = {}
     errors = []
     for kwarg_name, converter in dict(
-        query_expression = unicode,
+        query_expression = lambda s: s.decode("UTF8"),
     ).iteritems():
         try:
             value = kwargs.pop(kwarg_name)
@@ -156,7 +156,7 @@ def _climate_chart(content_type):
         arguments = {}
         errors = []
         for name, converter in dict(
-            query_expression = unicode,
+            query_expression = lambda s: s.decode("UTF8"),
             place_ids = _list_of(int)
         ).iteritems():
             try:
@@ -427,7 +427,7 @@ def download_data():
     arguments = {}
     errors = []
     for name, converter in dict(
-        query_expression = unicode,
+        query_expression = lambda s: s.decode("UTF8"),
         place_ids = _list_of(int)
     ).iteritems():
         try:
@@ -468,7 +468,7 @@ def download_timeseries():
     arguments = {}
     errors = []
     for name, converter in dict(
-        query_expression = unicode,
+        query_expression = lambda s: s.decode("UTF8"),
         place_ids = _list_of(int)
     ).iteritems():
         try:
