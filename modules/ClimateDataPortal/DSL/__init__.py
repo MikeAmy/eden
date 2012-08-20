@@ -353,9 +353,7 @@ def parse(expression_string):
         (r"\S+", anything_else),
     )
     scanner = re.Scanner(scanner_spec)
-    #print scanner_spec
-    #print expression_string
-    scanner.scan(expression_string)
+    scanner.scan(expression_string.encode("UTF8"))
 
     if remainder:
         position, string = remainder[0]
@@ -368,7 +366,6 @@ def parse(expression_string):
         raise exception
     else:
         cleaned_expression_string = ("".join(tokens))
-        #print cleaned_expression_string
         try:
             expression = eval(
                 cleaned_expression_string,
