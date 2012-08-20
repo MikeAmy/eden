@@ -752,7 +752,7 @@ each([
     ],
      // minimise browsers blurring the gradient colour image
      function (colour) {
-         for (var i = 0; i < 20; ++i) {
+         for (var i = 0; i < 24; ++i) {
              coarse_colours.push(colour)
          }
      }
