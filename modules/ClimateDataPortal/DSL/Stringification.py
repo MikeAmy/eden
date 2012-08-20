@@ -1,61 +1,61 @@
   
 from . import *
 
-def Months__str__(month_filter):
-    return "Months(%s)" % (
-        ", ".join(
+def Months__unicode__(month_filter):
+    return u"Months(%s)" % (
+        u", ".join(
             Months.sequence[month_number + 1] 
             for month_number in month_filter.month_numbers
         )
     )
-Months.__str__ = Months__str__
+Months.__unicode__ = Months__unicode__
 
 
-def From__str__(from_date):
+def From__unicode__(from_date):
     original_args = [from_date.year]
     if from_date.month is not None:
         original_args.append(from_date.month)
     if from_date.day is not None:
         original_args.append(from_date.day)
-    return "From(%s)" % ", ".join(map(str,original_args))
-From.__str__ = From__str__
+    return u"From(%s)" % ", ".join(map(unicode, original_args))
+From.__unicode__ = From__unicode__
     
 
-def To__str__(to_date):
+def To__unicode__(to_date):
     original_args = [to_date.year]
     if to_date.month is not None:
         original_args.append(to_date.month)
     if to_date.day is not None:
         original_args.append(to_date.day)
-    return "To(%s)" % ", ".join(map(str,original_args))
-To.__str__ = To__str__
+    return u"To(%s)" % ", ".join(map(unicode,original_args))
+To.__unicode__ = To__unicode__
 
-def Date_Offset__str__(date_offset):
+def Date_Offset__unicode__(date_offset):
     original_args = [date_offset.years]
     if date_offset.months is not 0:
         original_args.append(date_offset.months)
-    return "Date_Offset(%s)" % ", ".join(map(str,original_args))
-Date_Offset.__str__ = Date_Offset__str__
+    return u"Date_Offset(%s)" % ", ".join(map(unicode,original_args))
+Date_Offset.__unicode__ = Date_Offset__unicode__
 
-def Number__str__(number):
-    units_name = str(number.units)
+def Number__unicode__(number):
+    units_name = unicode(number.units)
     if units_name:
-        return "%s %s" % (number.value, number.units)
+        return u"%s %s" % (number.value, number.units)
     else:
-        return str(number.value)
-Number.__str__ = Number__str__
+        return unicode(number.value)
+Number.__unicode__ = Number__unicode__
 
-def AggregationNode__str__(aggregation):
-    return "".join((
-        type(aggregation).__name__, "(\"",
-            aggregation.dataset_name, "\", ",
-            ", ".join(
-                map(str, aggregation.specification)
+def AggregationNode__unicode__(aggregation):
+    return u"".join((
+        type(aggregation).__name__, u"(\"",
+            aggregation.dataset_name, u"\", ",
+            u", ".join(
+                map(unicode, aggregation.specification)
             ),
-        ")"
+        u")"
     ))
-AggregationNode.__str__ = AggregationNode__str__
+AggregationNode.__unicode__ = AggregationNode__unicode__
 
-def BinaryOperator__str__(binop):
-    return "("+str(binop.left)+" "+binop.op+" "+str(binop.right)+")"
-BinaryOperator.__str__ = BinaryOperator__str__
+def BinaryOperator__unicode__(binop):
+    return u"("+unicode(binop.left)+u" "+binop.op+u" "+unicode(binop.right)+u")"
+BinaryOperator.__unicode__ = BinaryOperator__unicode__

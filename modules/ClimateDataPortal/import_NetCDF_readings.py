@@ -216,8 +216,8 @@ def import_climate_readings(
                     climate_place.id
                 ):
                     place_ids[(
-                        str(round(place.latitude, 5)),
-                        str(round(place.longitude, 5))
+                        str(round(place.latitude, 5)),# not unicode
+                        str(round(place.longitude, 5))# not unicode
                     )] = place.id
             else:
                 for latitude in lat:
@@ -230,8 +230,8 @@ def import_climate_readings(
                             )
                         )
                         place_ids[(
-                            str(round(latitude, 5)), 
-                            str(round(longitude, 5))
+                            str(round(latitude, 5)), # not unicode
+                            str(round(longitude, 5))# not unicode
                         )] = record
                         #print longitude, latitude, record
 
@@ -264,8 +264,8 @@ def import_climate_readings(
                         value = values_by_latitude[longitude_index]
                         if not is_undefined(value):
                             place_id = place_ids[(
-                                str(round(latitude, 5)),
-                                str(round(longitude, 5))
+                                str(round(latitude, 5)),# not unicode
+                                str(round(longitude, 5))# not unicode
                             )]
                             converted_value = converter(value)
                             add_reading(

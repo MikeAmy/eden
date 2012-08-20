@@ -108,8 +108,8 @@ class MapPlugin(object):
             download_data_URL = climate_URL("download_data"),
             download_timeseries_URL = climate_URL("download_timeseries"),
             
-            data_type_label = str(T("Data Type")),
-            projected_option_type_label = str(
+            data_type_label = str(T("Data Type")),# not unicode
+            projected_option_type_label = str(# not unicode
                 T("Projection Type")
             ),
             aggregation_names = [
@@ -140,15 +140,15 @@ class MapPlugin(object):
         env = map_plugin.env
         DSL = env.DSL
         expression = DSL.parse(query_expression)
-        understood_expression_string = str(expression)        
+        understood_expression_string = unicode(expression)        
         units = DSL.units(expression)()
         if units is None:
             analysis_strings = []
             def analysis_out(*things):
-                analysis_strings.append("".join(map(str, things)))
+                analysis_strings.append(u"".join(map(unicode, things)))
             DSL.analysis(expression)(analysis_out)
             raise MeaninglessUnitsException(
-                "\n".join(analysis_strings)
+                u"\n".join(analysis_strings)
             )                
         
         def generate_map_overlay_data(file_path):
@@ -161,7 +161,7 @@ class MapPlugin(object):
                 values_by_place_data_frame,
                 map_plugin.robjects.vectors.StrVector
             ):
-                raise Exception(str(values_by_place_data_frame))
+                raise Exception(unicode(values_by_place_data_frame))
             elif values_by_place_data_frame.ncol == 0:
                 keys = []
                 values = []
@@ -176,22 +176,22 @@ class MapPlugin(object):
                 write('{')
                 # sent back for acknowledgement:
                 write(
-                    '"understood_expression":"%s",'.__mod__(
+                    u'"understood_expression":"%s",'.__mod__(
                         understood_expression_string.replace('"','\\"')
                     )
                 )
-                write('"units":"%s",' % units)
+                write(u'"units":"%s",' % units)
                 write('"grid_size":%f,' % min(grid_sizes(expression)()))
                 
                 write('"keys":[')
-                write(",".join(map(str, keys)))
+                write(",".join(map(unicode, keys)))
                 write('],')
                 
                 write('"values":[')
                 write(",".
                     join(
                         map(
-                            lambda value: str(round_to_4_sd(value)),
+                            lambda value: str(round_to_4_sd(value)),# not unicode
                             values
                         )
                     )
@@ -221,12 +221,12 @@ class MapPlugin(object):
         env = map_plugin.env
         DSL = env.DSL
         expression = DSL.parse(query_expression)
-        understood_expression_string = str(expression)        
+        understood_expression_string = unicode(expression)        
         units = DSL.units(expression)()
         if units is None:
             analysis_strings = []
             def analysis_out(*things):
-                analysis_strings.append("".join(map(str, things)))
+                analysis_strings.append("".join(map(unicode, things)))
             DSL.analysis(expression)(analysis_out)
             raise MeaninglessUnitsException(
                 "\n".join(analysis_strings)
@@ -238,7 +238,7 @@ class MapPlugin(object):
                 code = DSL.R_Code_for_values(
                     expression,
                     "place_id",
-                    "place_id IN (%s)" % ",".join(map(str, place_ids))
+                    "place_id IN (%s)" % ",".join(map(str, place_ids))# not unicode
                 )
             else:
                 code = DSL.R_Code_for_values(
@@ -251,7 +251,7 @@ class MapPlugin(object):
                 values_by_place_data_frame,
                 map_plugin.robjects.vectors.StrVector
             ):
-                raise Exception(str(values_by_place_data_frame))
+                raise Exception(unicode(values_by_place_data_frame))
             elif values_by_place_data_frame.ncol == 0:
                 keys = []
                 values = []
@@ -263,7 +263,7 @@ class MapPlugin(object):
                 csv_data_file = open(file_path, "w")
                 write = csv_data_file.write
                 
-                write("latitude,longitude,station_id,station_name,elevation,%s\n" % (units))
+                write(u"latitude,longitude,station_id,station_name,elevation,%s\n" % (units))
             
                 if place_ids:
                     place_selection = db.climate_place.id.belongs(place_ids)
@@ -297,9 +297,9 @@ class MapPlugin(object):
                 for place_id, value in zip(keys, values):
                     place = places_by_id[place_id]
                     write(
-                        ",".join(
+                        u",".join(
                             map(
-                                str, 
+                                unicode, 
                                 (
                                     place.climate_place.latitude,
                                     place.climate_place.longitude,
@@ -346,8 +346,8 @@ class MapPlugin(object):
                 command_prefix = ""
             subprocess_args = (
                 url,
-                str(width),
-                str(height),
+                str(width),# not unicode
+                str(height),# not unicode
                 file_path
             )                
 
@@ -379,7 +379,7 @@ class MapPlugin(object):
             years = list(SampleTable.with_name(sample_table_name).get_available_years())
             years.sort()
             file = open(file_path, "w")
-            file.write(str(years))
+            file.write(str(years))# not unicode
             file.close()
         import md5
         import gluon.contrib.simplejson as JSON
@@ -590,18 +590,18 @@ def render_plots(
         for (label, spec), spec_index in zip(specs, range(len(specs))):
             query_expression = spec["query_expression"]
             expression = DSL.parse(query_expression)
-            understood_expression_string = str(expression)
+            understood_expression_string = unicode(expression)
             spec_labels.append(label)
             
             units = DSL.units(expression)()
-            unit_string = str(units)
+            unit_string = unicode(units)
             if units is None:
                 analysis_strings = []
                 def analysis_out(*things):
-                    analysis_strings.append("".join(map(str, things)))
+                    analysis_strings.append(u"".join(map(unicode, things)))
                 DSL.analysis(expression)(analysis_out)
                 raise MeaninglessUnitsException(
-                    "\n".join(analysis_strings)
+                    u"\n".join(analysis_strings)
                 )
             
             date_mapper = DSL.date_mapping(expression)()
@@ -615,7 +615,7 @@ def render_plots(
             code = DSL.R_Code_for_values(
                 expression, 
                 grouping_key,
-                "place_id IN (%s)" % ",".join(map(str, spec["place_ids"]))
+                "place_id IN (%s)" % ",".join(map(str, spec["place_ids"])) # not unicode
             )
             values_by_time_period_data_frame = R(code)()
             data = {}
@@ -623,15 +623,15 @@ def render_plots(
                 values_by_time_period_data_frame,
                 map_plugin.robjects.vectors.StrVector
             ):
-                raise Exception(str(values_by_time_period_data_frame))
+                raise Exception(unicode(values_by_time_period_data_frame))
             elif not hasattr(values_by_time_period_data_frame, "ncol"):
                 # TODO: stop empty place_ids getting in (bug in the JS mapping code)
                 import logging
                 logging.error((
-                        "Don't understand R object %s:"
+                        u"Don't understand R object %s:"
                         "\nresulting from %s"
                     ) % (
-                        str(values_by_time_period_data_frame),
+                        unicode(values_by_time_period_data_frame),
                         code
                     )
                 )                
@@ -839,14 +839,14 @@ function (
                     if isnan(p):
                         p_str = "NaN"
                     else:
-                        p_str = str(round_to_4_sd(p))
+                        p_str = str(round_to_4_sd(p)) # not unicode
                     if isnan(stderr):
                         stderr_str = "NaN"
                     else:
-                        stderr_str = str(round_to_4_sd(p))
+                        stderr_str = str(round_to_4_sd(p)) # not unicode
                         
                     slope_str, intercept_str, r_str = map(
-                        str,
+                        str, # not unicode
                         map(round_to_4_sd, (slope, intercept, r))
                     )
                 
@@ -945,19 +945,19 @@ def get_csv_timeseries_data(
         yearly = []
 
         expression = DSL.parse(query_expression)
-        understood_expression_string = str(expression)
+        understood_expression_string = unicode(expression)
         
         units = DSL.units(expression)()
         if units is None:
             analysis_strings = []
             def analysis_out(*things):
-                analysis_strings.append("".join(map(str, things)))
+                analysis_strings.append("".join(map(unicode, things)))
             DSL.analysis(expression)(analysis_out)
             raise MeaninglessUnitsException(
-                "\n".join(analysis_strings)
+                u"\n".join(analysis_strings)
             )
         else:
-            unit_string = str(units)
+            unit_string = unicode(units)
             try:
                 display_units = {
                     "Kelvin": "Celsius",
@@ -979,27 +979,27 @@ def get_csv_timeseries_data(
         code = DSL.R_Code_for_values(
             expression, 
             grouping_key,
-            "place_id IN (%s)" % ",".join(map(str, place_ids))
+            "place_id IN (%s)" % ",".join(map(str, place_ids)) # not unicode
         )
         values_by_time_period_data_frame = R(code)()
 
         display_units = display_units.replace("Celsius", "\xc2\xb0Celsius")
         file = open(file_path, 'w')
-        file.write('year,month,"%s"\n' % display_units)
+        file.write(u'year,month,"%s"\n' % display_units)
 
         if isinstance(
             values_by_time_period_data_frame,
             map_plugin.robjects.vectors.StrVector
         ):
-            raise Exception(str(values_by_time_period_data_frame))
+            raise Exception(unicode(values_by_time_period_data_frame))
         elif not hasattr(values_by_time_period_data_frame, "ncol"):
             # TODO: stop empty place_ids getting in (bug in the JS mapping code)
             import logging
             logging.error((
-                    "Don't understand R object %s:"
+                    u"Don't understand R object %s:"
                     "\nresulting from %s"
                 ) % (
-                    str(values_by_time_period_data_frame),
+                    unicode(values_by_time_period_data_frame),
                     code
                 )
             )                
@@ -1020,7 +1020,7 @@ def get_csv_timeseries_data(
             time_periods.sort()
             for time_period in time_periods:
                 file.write("%s,%s\n" % (
-                    ",".join(map(str, date_mapper.to_date_tuple(time_period))),
+                    ",".join(map(str, date_mapper.to_date_tuple(time_period))), # not unicode
                     round_to_4_sd(converter(data[time_period])))
                 )
         file.close()

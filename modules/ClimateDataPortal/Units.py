@@ -52,7 +52,10 @@ class Units(object):
         )
 
     def __str__(units):
-        return ["Δ ", ""][units._positive]+str(units._dimensions)
+        return (u"delta ", u"")[units._positive]+str(units._dimensions)# not unicode
+
+    def __unicode__(units):
+        return (u"Δ ", u"")[units._positive]+unicode(units._dimensions)
 
     def __eq__(units, other_units):
         return (
@@ -122,7 +125,8 @@ class Dimensions(object):
     __slots__ = ("_counts",)
     @staticmethod
     def parsed_from(unit_string):
-        "format example: m Kg^2 / s^2"
+        """format example: m Kg^2 / s^2
+        """
         dimension_counts = {}
         for factor, dimension_count_string in zip((1,-1), unit_string.split("/")):
             for match in counted_dimension_pattern.finditer(dimension_count_string):
@@ -149,7 +153,7 @@ class Dimensions(object):
         for dimension, count in dimension_counts.iteritems():
             if not isinstance(count, int):
                 raise DimensionError(
-                    "%s dimension count must be a whole number" % dimension
+                    u"%s dimension count must be a whole number" % dimension
                 )
         dimensions._counts = dimension_counts.copy()
     
@@ -230,7 +234,7 @@ class Dimensions(object):
             new_count = int(count * factor)
             if new_count != float(count) * float(factor):
                 raise DimensionError(
-                    "Non-integral %s dimension encountered." % dimension
+                    u"Non-integral %s dimension encountered." % dimension
                 )
             result[dimension] = new_count
             if result[dimension] == 0:

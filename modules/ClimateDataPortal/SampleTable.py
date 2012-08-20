@@ -155,7 +155,7 @@ class SampleTable(object):
         SampleTable.__objects[
             (parameter_name, sample_table.type.code)
         ] = sample_table
-        SampleTable.__names["%s %s" % (
+        SampleTable.__names[u"%s %s" % (
             sample_table.type.__name__, 
             parameter_name
         )] = sample_table
@@ -168,6 +168,13 @@ class SampleTable(object):
 
     def __str__(sample_table):
         return '"%s"' % repr(sample_table)
+
+    def __unicode__(sample_table):
+        return u'"%s %s"' % (
+            sample_table.type.__name__,
+            sample_table.parameter_name
+        )
+
     
     @staticmethod
     def table_name(id): # name conflict with attribute
@@ -341,7 +348,7 @@ class SampleTable(object):
                 data.append(
                     ",".join((
                         format_time_period(time_period),
-                        str(value)
+                        str(value) # not unicode
                     ))
                 )
         sample_table.date_mapper.SQL_query(

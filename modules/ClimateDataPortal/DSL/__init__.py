@@ -384,10 +384,10 @@ def parse(expression_string):
             if check(expression)():
                 check_analysis_out = []
                 def analysis_out(*things):
-                    check_analysis_out.append("".join(map(str, things)))
+                    check_analysis_out.append(u"".join(map(unicode, things)))
                 check_analysis(expression)(analysis_out)
                 raise DSLTypeError(
-                    "\n".join(check_analysis_out)
+                    u"\n".join(check_analysis_out)
                 )
             else:
                 Build(expression)()

@@ -101,7 +101,7 @@ representing year, month, day, rainfall(mm), minimum and maximum temperature
                 sample_table,
                 place_id,
                 missing_data_marker = missing_data_marker,
-                converter = lambda x: Decimal(str(conversion_function(float(x)))),
+                converter = lambda x: Decimal(str(conversion_function(float(x)))),# not unicode
                 date_to_time_period = sample_table.date_mapper.to_time_period,
                 maximum = None,
                 minimum = None,
@@ -152,7 +152,7 @@ representing year, month, day, rainfall(mm), minimum and maximum temperature
     if stations:
         for station in stations:
             station_id = station.station_id
-            sys.stderr.write(str(station_id)+"\n")
+            sys.stderr.write(str(station_id)+"\n")# not unicode
             data_file_path = os.path.join(
                 folder,
                 (prefix+"%04i"+suffix) % station_id
@@ -213,7 +213,7 @@ def import_data_in_file(
                         field = field_strings.__getitem__
                         date_tuple = tuple(int(field(pos)) for pos in date_tuple_positions)
                         if last_date_tuple == date_tuple:
-                            sys.stderr.write("Duplicate record for %s" % str(date_tuple))
+                            sys.stderr.write("Duplicate record for %s" % str(date_tuple))# not unicode
                         else:
                             last_date_tuple = date_tuple
                             import_data_row(

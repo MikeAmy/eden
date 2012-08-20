@@ -41,7 +41,7 @@ def subtract_units(operation):
     def determine_units(left_units, right_units):
         if not left_units.commensurable_with(right_units):
             operation.units_error = (
-                "Incompatible units: %(left_units)s and %(right_units)s" % locals()
+                u"Incompatible units: %(left_units)s and %(right_units)s" % locals()
             )
             operation.units = None
         else:
@@ -73,7 +73,7 @@ def raise_units_to_power(operation):
         if right_units == Dimensionless:
             operation.units = left_units ** operation.right
         else:
-            operation.units_error = "Exponents must be dimensionless, of the form n or 1/n"
+            operation.units_error = u"Exponents must be dimensionless, of the form n or 1/n"
             operation.units = None
 
     binop_units(operation, determine_units)
@@ -137,7 +137,7 @@ def aggregation_analysis(aggregation, out):
     out(type(aggregation).__name__, "(    # ", aggregation.units or "???")
     def indent(*strings):
         out("    ", *strings)
-    indent(str(aggregation.sample_table), ",")
+    indent(unicode(aggregation.sample_table), ",")
     
     for specification in aggregation.specification:
         indent(specification, ",")

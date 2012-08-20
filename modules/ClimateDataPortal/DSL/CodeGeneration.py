@@ -350,7 +350,7 @@ def add_months_filter(date_mapper, month_numbers, time_period, add_filter):
         "((%(time_period)s + 65532 + %(month_offset)i) %% 12) IN (%(month_list)s)" % dict(
             time_period = time_period,
             month_offset = date_mapper.start_month_0_indexed,
-            month_list = ",".join(map(str, month_numbers))
+            month_list = ",".join(map(str, month_numbers))# not unicode
         )
     )
 

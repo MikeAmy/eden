@@ -64,7 +64,7 @@ def get_cached_or_generated_file(application, cache_file_name, generate):
         if folder_size > MAX_CACHE_FOLDER_SIZE:
             rmdir(older_cache)
 
-        folder_size_file.write(str(folder_size))
+        folder_size_file.write(str(folder_size))# not unicode
         folder_size_file.close()
     else:
         # use the existing cached image

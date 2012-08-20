@@ -192,6 +192,6 @@ class Yearly(object):
             from_start = "time_period >= %i" % date_mapper.to_time_period(start_date),
             until_end = "time_period <= %i " % date_mapper.to_time_period(end_date),
             ordering_specification = "time_period ASC",
-            format_time_period = lambda time_period: str(time_period + date_mapper.start_year)
+            format_time_period = lambda time_period: str(time_period + date_mapper.start_year)# not unicode
         )
 

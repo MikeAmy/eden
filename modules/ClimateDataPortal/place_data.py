@@ -22,7 +22,7 @@ def similar_numbers(attribute, places, out):
     out("[")
     last_value = [0]
     def write_value(value):
-        out(str(value - last_value[0]))
+        out(str(value - last_value[0]))# not unicode
         last_value[0] = value
     between(
         (place[attribute] for place in places),
@@ -35,7 +35,7 @@ def no_compression(attribute, places, out):
     out("[")
     between(
         (place[attribute] for place in places),
-        lambda value: out(str(value)),
+        lambda value: out(unicode(value)),
         lambda value: out(",")
     )
     out("]")

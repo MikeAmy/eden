@@ -138,7 +138,7 @@ def compare_analysis(expression_string, expected_analysis):
     try:
         Climate_DSL.parse(expression_string)
     except TypeError, error:
-        assert str(error) == expected_analysis
+        assert unicode(error) == expected_analysis
     else:
         assert False, "TypeError wasn't raised"
 
@@ -255,7 +255,7 @@ def check_data(
         values_by_time_period_data_frame,
         map_plugin.robjects.vectors.StrVector
     ):
-        raise Exception(str(values_by_time_period_data_frame))
+        raise Exception(unicode(values_by_time_period_data_frame))
     assert values_by_time_period_data_frame.ncol == 1, "No data"
     keys = values_by_time_period_data_frame.rx2("key")
     values = values_by_time_period_data_frame.rx2("value")
@@ -291,7 +291,7 @@ def test_december_data():
         values_by_time_period_data_frame,
         map_plugin.robjects.vectors.StrVector
     ):
-        raise Exception(str(values_by_time_period_data_frame))
+        raise Exception(unicode(values_by_time_period_data_frame))
     assert values_by_time_period_data_frame.ncol == 1, "No data"
     keys = values_by_time_period_data_frame.rx2("key")
     values = values_by_time_period_data_frame.rx2("value")

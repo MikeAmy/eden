@@ -229,7 +229,7 @@ def Aggregation_check(aggregation):
     aggregation.errors = set()
     error = aggregation.errors.add
     # check a dataset is specified
-    if not isinstance(aggregation.dataset_name, str):
+    if not isinstance(aggregation.dataset_name, basestring):
         error(
             "First argument should be the name of a data set enclosed in "
             "quotes. "

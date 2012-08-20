@@ -70,7 +70,7 @@ unused  Station name         <-id    <-elev     <-lat     <-lon
                     climate_station_name,
                     place_id,
                     "name",
-                    str,
+                    unicode,
                     station_name
                 )
                 insert_or_update(
