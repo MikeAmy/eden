@@ -82,13 +82,19 @@ def index():
         map=gis_map
     )
 
+def possibly_UTF8(string):
+    try:
+        return string.decode("UTF8")
+    except UnicodeEncodeError:
+        return string
+
 def climate_overlay_data():
     kwargs = dict(request.vars)
     
     arguments = {}
     errors = []
     for kwarg_name, converter in dict(
-        query_expression = lambda s: s.decode("UTF8"),
+        query_expression = possibly_UTF8,
     ).iteritems():
         try:
             value = kwargs.pop(kwarg_name)
@@ -156,7 +162,7 @@ def _climate_chart(content_type):
         arguments = {}
         errors = []
         for name, converter in dict(
-            query_expression = lambda s: s.decode("UTF8"),
+            query_expression = possibly_UTF8,
             place_ids = _list_of(int)
         ).iteritems():
             try:
@@ -427,7 +433,7 @@ def download_data():
     arguments = {}
     errors = []
     for name, converter in dict(
-        query_expression = lambda s: s.decode("UTF8"),
+        query_expression = possibly_UTF8,
         place_ids = _list_of(int)
     ).iteritems():
         try:
@@ -468,7 +474,7 @@ def download_timeseries():
     arguments = {}
     errors = []
     for name, converter in dict(
-        query_expression = lambda s: s.decode("UTF8"),
+        query_expression = possibly_UTF8,
         place_ids = _list_of(int)
     ).iteritems():
         try:
