@@ -209,7 +209,7 @@ class MapPlugin(object):
         import hashlib
         return get_cached_or_generated_file(
             map_plugin.env.request.application,
-            hashlib.md5(understood_expression_string).hexdigest()+".json",
+            hashlib.md5(understood_expression_string.encode("UTF8")).hexdigest()+".json",
             generate_map_overlay_data
         )
     
@@ -324,7 +324,7 @@ class MapPlugin(object):
             map_plugin.env.request.application,
             hashlib.md5(JSON.dumps(
                  [query_expression,place_ids]
-            )).hexdigest()+".csv",
+            ).encode("UTF8")).hexdigest()+".csv",
             generate_map_csv_data
         )
     
@@ -369,7 +369,7 @@ class MapPlugin(object):
                 JSON.dumps(
                     [query_string, width, height],
                     sort_keys=True,
-                )
+                ).encode("UTF8")
             ).hexdigest()+".png",
             generate_printable_map_image
         )
@@ -385,7 +385,7 @@ class MapPlugin(object):
         import gluon.contrib.simplejson as JSON
         return get_cached_or_generated_file(
             map_plugin.env.request.application,
-            md5.md5(sample_table_name+" years").hexdigest()+".json",
+            md5.md5(unicode(sample_table_name+u" years").encode("UTF8")).hexdigest()+".json",
             generate_years_json
         )
         
@@ -922,7 +922,7 @@ function (
                     [specs, width, height],
                     sort_keys=True,
                     default=serialiseDate,
-                )
+                ).encode("UTF8")
             ).hexdigest(),
             ".png"
         )),
@@ -1034,7 +1034,7 @@ def get_csv_timeseries_data(
             md5.md5(
                 JSON.dumps(
                     ["timeseries",query_expression,place_ids],
-                )
+                ).encode("UTF8")
             ).hexdigest(),
             ".csv"
         )),
