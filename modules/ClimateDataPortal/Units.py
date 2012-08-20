@@ -119,7 +119,7 @@ counted_dimension_pattern = re.compile(
 
 class Dimensions(object):
     """Used for dimensional analysis."""
-    __slots__ = ("_counts", "_positive")
+    __slots__ = ("_counts",)
     @staticmethod
     def parsed_from(unit_string):
         "format example: m Kg^2 / s^2"
@@ -273,7 +273,6 @@ class WhateverDimensionsAreNeeded(object):
         return True
 
 Dimensionless = Dimensions({})
-
 
 same = lambda x: x
 
