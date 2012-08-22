@@ -352,10 +352,10 @@ class SampleTable(object):
                     ))
                 )
         date_mapper = sample_table.date_mapper
-        if isinstance(start_date, date):
-            start_date = date_mapper.date_to_time_period(start_date)
+        if isinstance(date_from, date):
+            date_from = date_mapper.date_to_time_period(date_from)
         if isinstance(end_date, date):
-            end_date = date_mapper.date_to_time_period(end_date)
+            date_to = date_mapper.date_to_time_period(date_to)
 
         date_mapper.SQL_query(
             start_date = date_from,
