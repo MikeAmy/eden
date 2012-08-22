@@ -354,7 +354,7 @@ class SampleTable(object):
         date_mapper = sample_table.date_mapper
         if isinstance(date_from, date):
             date_from = date_mapper.date_to_time_period(date_from)
-        if isinstance(end_date, date):
+        if isinstance(date_to, date):
             date_to = date_mapper.date_to_time_period(date_to)
 
         date_mapper.SQL_query(
