@@ -351,7 +351,13 @@ class SampleTable(object):
                         str(value) # not unicode
                     ))
                 )
-        sample_table.date_mapper.SQL_query(
+        date_mapper = sample_table.date_mapper
+        if isinstance(start_date, date):
+            start_date = date_mapper.date_to_time_period(start_date)
+        if isinstance(end_date, date):
+            end_date = date_mapper.date_to_time_period(end_date)
+
+        date_mapper.SQL_query(
             start_date = date_from,
             end_date = date_to,
             use = request_data
