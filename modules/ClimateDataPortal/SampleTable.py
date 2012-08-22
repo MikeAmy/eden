@@ -334,18 +334,18 @@ class SampleTable(object):
             for record in db.executesql(
                 "SELECT * "
                 "FROM climate_sample_table_%(sample_table_id)i "
-                "WHERE place_id = %(place_id)i "
+                "WHERE place_id = %(selected_place_id)i "
                 "AND %(from_start)s "
                 "AND %(until_end)s "
                 "ORDER BY %(ordering_specification)s;" % dict(
                     sample_table_id = sample_table.id,
-                    place_id = place_id,
+                    selected_place_id = place_id,
                     from_start = from_start,
                     until_end = until_end,
                     ordering_specification = ordering_specification
                 )
             ):
-                place_id, time_period, value = record
+                _, time_period, value = record
                 data.append(
                     ",".join((
                         format_time_period(time_period),
