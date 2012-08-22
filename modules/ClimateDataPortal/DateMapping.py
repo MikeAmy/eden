@@ -21,6 +21,9 @@ class Daily(object):
     def to_time_period(date_mapper, year, month, day):
         return date(year, month, day).toordinal() - date_mapper.start_ordinal
     
+    def date_to_time_period(date_mapper, date):
+        return date_mapper.to_time_period(date.year, date.month, date.day)
+    
     def to_date(date_mapper, time_period):
         return date.fromordinal(
             date_mapper.start_ordinal + time_period
@@ -66,6 +69,9 @@ class Monthly(object):
         month_number += monthly.start_month_0_indexed
         return (month_number / 12) + monthly.start_year, ((month_number % 12) + 1)
 
+    def date_to_time_period(monthly, date):
+        return monthly.to_time_period(date.year, date.month)
+    
     def __repr__(monthly):
         return "Monthly(start_date=%(start_date)s)" % monthly.start_date
 

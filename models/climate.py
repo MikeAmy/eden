@@ -615,10 +615,10 @@ if deployment_settings.has_module("climate"):
                 }[nationality]
                 
                 ClimateDataPortal = local_import("ClimateDataPortal")
-                date_mapping = ClimateDataPortal.SampleTable._SampleTable_date_mapper[date_mapping_name]
-                
-                start_date_number = date_mapping.date_to_time_period(date_from)
-                end_date_number = date_mapping.date_to_time_period(date_to)
+                sample_table = ClimateDataPortal.SampleTable.with_id(parameter_table_id)                
+                date_mapper = sample_table.date_mapper
+                start_date_number = date_mapper.to_time_period(date_from)
+                end_date_number = date_mapper.to_time_period(date_to)
                 
                 place_id = int(form.vars.station_id)
                 
