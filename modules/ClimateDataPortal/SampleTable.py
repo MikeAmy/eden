@@ -353,10 +353,13 @@ class SampleTable(object):
                 )
         date_mapper = sample_table.date_mapper
         if isinstance(date_from, date):
-            date_from = date_mapper.date_to_time_period(date_from)
+            date_from = date_mapper.to_date_tuple(
+                date_mapper.date_to_time_period(date_from)
+            )
         if isinstance(date_to, date):
-            date_to = date_mapper.date_to_time_period(date_to)
-
+            date_to = date_mapper.to_date_tuple(
+                date_mapper.date_to_time_period(date_to)
+            )
         date_mapper.SQL_query(
             start_date = date_from,
             end_date = date_to,
