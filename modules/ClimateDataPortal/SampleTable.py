@@ -339,6 +339,7 @@ class SampleTable(object):
                 "AND %(until_end)s "
                 "ORDER BY %(ordering_specification)s;" % dict(
                     sample_table_id = sample_table.id,
+                    place_id = place_id,
                     from_start = from_start,
                     until_end = until_end,
                     ordering_specification = ordering_specification
