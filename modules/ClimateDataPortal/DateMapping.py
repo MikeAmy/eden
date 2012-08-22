@@ -34,8 +34,8 @@ class Daily(object):
 
     def SQL_query(date_mapper, start_date, end_date, use):
         use(
-            from_start = "time_period >= %i" % date_mapper.to_time_period(start_date),
-            until_end = "time_period <= %i " % date_mapper.to_time_period(end_date),
+            from_start = "time_period >= %i" % date_mapper.to_time_period(*start_date),
+            until_end = "time_period <= %i " % date_mapper.to_time_period(*end_date),
             ordering_specification = "time_period ASC",
             format_time_period = (
                 lambda time_period: 
@@ -77,8 +77,8 @@ class Monthly(object):
 
     def SQL_query(monthly, start_date, end_date, use):
         use(
-            from_start = "time_period >= %i" % monthly.to_time_period(start_date),
-            until_end = "time_period <= %i " % monthly.to_time_period(end_date),
+            from_start = "time_period >= %i" % monthly.to_time_period(*start_date),
+            until_end = "time_period <= %i " % monthly.to_time_period(*end_date),
             ordering_specification = "time_period ASC",
             format_time_period = (
                 lambda time_period: 
@@ -195,8 +195,8 @@ class Yearly(object):
     
     def SQL_query(date_mapper, start_date, end_date, use):
         use(
-            from_start = "time_period >= %i" % date_mapper.to_time_period(start_date),
-            until_end = "time_period <= %i " % date_mapper.to_time_period(end_date),
+            from_start = "time_period >= %i" % date_mapper.to_time_period(*start_date),
+            until_end = "time_period <= %i " % date_mapper.to_time_period(*end_date),
             ordering_specification = "time_period ASC",
             format_time_period = lambda time_period: str(time_period + date_mapper.start_year)# not unicode
         )
