@@ -335,6 +335,7 @@ python ./run.py %(prog)s --field_name rr --import_to database --parameter_name "
     args = parser.parse_args(argv[1:])
     sample_table = ClimateDataPortal.SampleTable.with_name(args.parameter_name)
     
+    
     print "Importing into:"+sample_table.table_name+","
     if args.clear_existing_data:
         sample_table.clear()
