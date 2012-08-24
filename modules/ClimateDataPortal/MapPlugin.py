@@ -266,7 +266,7 @@ class MapPlugin(object):
                 
                 write(u"latitude,longitude,station_id,station_name,elevation,")
                 write(unicode(units))
-                write("\n"
+                write(u"\n")
             
                 if place_ids:
                     place_selection = db.climate_place.id.belongs(place_ids)
