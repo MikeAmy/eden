@@ -180,7 +180,7 @@ class MapPlugin(object):
                         understood_expression_string.replace('"','\\"')
                     )
                 )
-                write(u'"units":"%s",' % units.encode("UTF8"))
+                write(u'"units":"%s",' % unicode(units).encode("UTF8")
                 write('"grid_size":%f,' % min(grid_sizes(expression)()))
                 
                 write('"keys":[')
