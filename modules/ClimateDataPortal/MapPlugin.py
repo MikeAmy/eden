@@ -877,7 +877,7 @@ function (
             ylab = display_units.encode("UTF8").replace(
                 # HACK for Celsius degrees symbol display in R
                 "Celsius",
-                "\xc2\xb0Celsius"
+                u"\xb0Celsius"
             ),
             plot_type= "lo"[is_yearly_values],               
             axis_points = axis_points,
@@ -988,7 +988,7 @@ def get_csv_timeseries_data(
         )
         values_by_time_period_data_frame = R(code)()
 
-        display_units = display_units.replace("Celsius", "\xc2\xb0Celsius")
+        display_units = display_units.replace("Celsius", u"\xb0Celsius")
         file = codecs.open(file_path, 'w', encoding="utf-8")
         file.write(u'year,month,"')
         file.write(unicode(display_units))
