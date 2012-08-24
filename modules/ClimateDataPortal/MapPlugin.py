@@ -173,22 +173,22 @@ class MapPlugin(object):
             try:
                 overlay_data_file = open(file_path, "w")
                 write = overlay_data_file.write
-                write('{')
+                write(u'{')
                 # sent back for acknowledgement:
                 write(
                     u'"understood_expression":"'+understood_expression_string.replace(u'"',u'\\"')+u'",'
                 )
                 write(
-                    u'"units":"'+unicode(units)+'",' 
+                    u'"units":"'+unicode(units)+u'",' 
                 )
-                write('"grid_size":%f,' % min(grid_sizes(expression)()))
+                write(u'"grid_size":%f,' % min(grid_sizes(expression)()))
                 
-                write('"keys":[')
-                write(",".join(map(unicode, keys)))
-                write('],')
+                write(u'"keys":[')
+                write(u",".join(map(unicode, keys)))
+                write(u'],')
                 
-                write('"values":[')
-                write(",".
+                write(u'"values":[')
+                write(u",".
                     join(
                         map(
                             lambda value: str(round_to_4_sd(value)),# not unicode
@@ -196,8 +196,8 @@ class MapPlugin(object):
                         )
                     )
                 )
-                write(']')
-                write('}')
+                write(u']')
+                write(u'}')
             except:
                 if overlay_data_file:
                     overlay_data_file.close()
