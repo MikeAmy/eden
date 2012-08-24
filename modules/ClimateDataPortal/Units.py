@@ -21,7 +21,7 @@ class Units(object):
     or not.
     """
     __slots__ = ("_dimensions", "_positive")
-    delta_strings = ("delta", "Δ")
+    delta_strings = ("delta", "Δ", u"\u0394")
     @staticmethod
     def parsed_from(string, positive=None):
         if positive is None:
@@ -55,7 +55,7 @@ class Units(object):
         return (u"delta ", u"")[units._positive]+str(units._dimensions)# not unicode
 
     def __unicode__(units):
-        return (u"Δ ", u"")[units._positive]+unicode(units._dimensions)
+        return (u"\u0394 ", u"")[units._positive]+unicode(units._dimensions)
 
     def __eq__(units, other_units):
         return (
