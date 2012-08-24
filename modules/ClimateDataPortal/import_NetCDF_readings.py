@@ -151,6 +151,7 @@ def import_climate_readings(
             converter = ClimateDataPortal.units_in_out[units].to_standard
 
             # create grid of places
+            print "Matching places with existing places/grids (takes about 20 secs)..."
             place_ids = {}
             
             lon = to_list(lon_variable)
