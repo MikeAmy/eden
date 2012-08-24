@@ -124,7 +124,7 @@ def import_climate_readings(
             "rounded": monthly.rounded_date_to_month_number,
             "360_day": monthly.floored_twelfth_of_a_360_day_year,
             "twelfths": monthly.floored_twelfth_of_a_360_day_year,
-            "proleptic_gregorian": monthly.date_to_month_number,
+            "proleptic_gregorian": monthly.date_to_time_period,
             "calendar": monthly.date_to_time_period,
         }[month_mapping_string]
         try:
