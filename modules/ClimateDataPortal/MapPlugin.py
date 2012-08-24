@@ -171,16 +171,17 @@ class MapPlugin(object):
             
             overlay_data_file = None
             try:
-                overlay_data_file = open(file_path, "w")
+                import codecs
+                overlay_data_file = codecs.open(file_path, "w", encoding="utf-8")
                 write = overlay_data_file.write
                 write(u'{')
                 # sent back for acknowledgement:
                 write(
                     u'"understood_expression":"'+understood_expression_string.replace(u'"',u'\\"')+u'",'
                 )
-                write(
-                    u'"units":"'+unicode(units)+u'",' 
-                )
+                write(u'"units":"')
+                write(unicode(units))
+                write(u'",')
                 write(u'"grid_size":%f,' % min(grid_sizes(expression)()))
                 
                 write(u'"keys":[')
