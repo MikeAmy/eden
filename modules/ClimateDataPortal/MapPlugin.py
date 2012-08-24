@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-
+import codecs
 from gluon.dal import Expression
 
 from Cache import *
@@ -171,7 +171,6 @@ class MapPlugin(object):
             
             overlay_data_file = None
             try:
-                import codecs
                 overlay_data_file = codecs.open(file_path, "w", encoding="utf-8")
                 write = overlay_data_file.write
                 write(u'{')
@@ -261,10 +260,13 @@ class MapPlugin(object):
                 values = values_by_place_data_frame.rx2("value")
             db = map_plugin.env.db
             try:
-                csv_data_file = open(file_path, "w")
+                csv_data_file = codecs.open(file_path, "w", encoding="utf-8")
+
                 write = csv_data_file.write
                 
-                write(u"latitude,longitude,station_id,station_name,elevation,%s\n" % (units))
+                write(u"latitude,longitude,station_id,station_name,elevation,")
+                write(unicode(units))
+                write("\n"
             
                 if place_ids:
                     place_selection = db.climate_place.id.belongs(place_ids)
@@ -312,7 +314,7 @@ class MapPlugin(object):
                             )
                         )
                     )
-                    write("\n")
+                    write(u"\n")
             except:
                 csv_data_file.close()
                 os.unlink(file_path)
