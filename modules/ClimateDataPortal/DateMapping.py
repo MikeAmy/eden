@@ -42,7 +42,11 @@ class Daily(object):
                     date_mapper.to_date(time_period).strftime("%Y-%m-%d")
             )
         )
+
     
+from math import floor
+from calendar import isleap
+
 class Monthly(object):
     def __init__(monthly, start_year, start_month_0_indexed):
         monthly.start_year = start_year
@@ -88,10 +92,7 @@ class Monthly(object):
             )
         )
  
-'''
-class Monthly360DayYear(object):
-    
-    def floored_twelfth_of_a_360_day_year(date):
+    def floored_twelfth_of_a_360_day_year(monthly, date):
         """This function converts a date to a month number by flooring
         to the nearest 12th of a 360 day year. Used by PRECIS projection.
         """
@@ -99,36 +100,30 @@ class Monthly360DayYear(object):
         year = timetuple.tm_year
         day_of_year = timetuple.tm_yday
         month0 = floor((day_of_year / 360) * 12)
-        return ((year-start_year) * 12) + (month0) - start_month_0_indexed
+        return ((year-start_year) * 12) + (month0 - monthly.start_month_0_indexed)
 
+    def rounded_date_to_month_number(monthly, date):
+        """This function converts a date to a month number by rounding
+        to the nearest 12th of a year.
+        
+        See also date_to_month_number(year, month)
+        """
+        timetuple = date.timetuple()
+        year = timetuple.tm_year
+        day_of_year = timetuple.tm_yday
+        month0 = floor(((day_of_year / (isleap(year) and 366.0 or 365.0)) * 12) + 0.5)
+        return ((year-start_year) * 12) + (month0 - monthly.start_month_0_indexed)
 
+    def floored_twelfth_of_a_year(monthly, date):
+        """This function converts a date to a month number by flooring
+        to the nearest 12th of a year.
+        """
+        timetuple = date.timetuple()
+        year = timetuple.tm_year
+        day_of_year = timetuple.tm_yday
+        month0 = floor((day_of_year / (isleap(year) and 366.0 or 365.0)) * 12)
+        return ((year-start_year) * 12) + (month0 - monthly.start_month_0_indexed)
 
-from math import floor
-
-from calendar import isleap
-
-def rounded_date_to_month_number(date):
-    """This function converts a date to a month number by rounding
-    to the nearest 12th of a year.
-    
-    See also date_to_month_number(year, month)
-    """
-    timetuple = date.timetuple()
-    year = timetuple.tm_year
-    day_of_year = timetuple.tm_yday
-    month0 = floor(((day_of_year / (isleap(year) and 366.0 or 365.0)) * 12) + 0.5)
-    return ((year-start_year) * 12) + (month0) - start_month_0_indexed
-
-def floored_twelfth_of_a_year(date):
-    """This function converts a date to a month number by flooring
-    to the nearest 12th of a year.
-    """
-    timetuple = date.timetuple()
-    year = timetuple.tm_year
-    day_of_year = timetuple.tm_yday
-    month0 = floor((day_of_year / (isleap(year) and 366.0 or 365.0)) * 12)
-    return ((year-start_year) * 12) + (month0) - start_month_0_indexed
-'''
 
 class MultipleYearsByMonth(object):
     """Month refers to a discontiguous slice through the twenty year

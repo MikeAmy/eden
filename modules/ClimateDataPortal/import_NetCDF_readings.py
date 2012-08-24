@@ -1,33 +1,10 @@
 
 """
-Gridded data is already aggregated by month
+Imports Data in NetCDF format
 
-therefore we don't have daily gridded data, but this is 
-importing to the same basic table type as if it were daily.
+The abundance of different formats have caused considerable complexity in the importer.
 
-So:
-Don't make a daily table
-Record what monthly aggregations are available
-We only use monthly aggregations on the map and chart so
-
-Some statistics won't be available depending on the aggregation of the gridded data.
-
-Rainfall:
-SUM -> AVERAGE -> COUNT
-
-We want SUM
-
-Temp:
-We want MAX, MIN, 
-
-Or:
-  record what time_period means in the table.
-  aggregate month tables into year tables
-  leave daily tables empty so that we just don't get any values to add
-  but the table is ready there in case the values ever turn up.
-  
-NetCDF data includes units information so need to use this to convert the data.
-
+It has many parameters to cope with them.
 """
 
 def get_or_create(dict, key, creator):
@@ -59,37 +36,6 @@ def nearly(expected_float, actual_float):
     difference_ratio = actual_float / expected_float
     return 0.999 < abs(difference_ratio) < 1.001
 
-#class InsertRowsIfNoConflict(object):
-#    def __init__(self, database_table_name, db):
-#        raise NotImplemented
-#        self.database_table = database_table
-#    
-#    def add_reading(
-#        self,
-#        time_period,
-#        place_id,
-#        value
-#    ):
-#        database_table = self.database_table
-#        records = db(
-#            (database_table.time_period == time_period) &
-#            (database_table.place_id == place_id)
-#        ).select(database_table.value, database_table.id)
-#        count = len(records)
-#        assert count <= 1
-#        if count == 0:
-#            database_table.insert(
-#                time_period = time_period,
-#                place_id = place_id,
-#                value = value
-#            )
-#        else:
-#            existing = records.first()
-#            assert nearly(existing.value, value), (existing.value, value, place_id)
-#    
-#    def done(self):
-#        pass
-    
 import datetime
 import logging
 
@@ -172,37 +118,38 @@ def import_climate_readings(
         except KeyError:
             lon_variable = variables["longitude"]
             
+        monthly = ClimateDataPortal.SampleTable._SampleTable__date_mapper["monthly"]
         month_mapping = {
-            "rounded": ClimateDataPortal.rounded_date_to_month_number,
-            "360_day": ClimateDataPortal.floored_twelfth_of_a_360_day_year,
-            "twelfths": ClimateDataPortal.floored_twelfth_of_a_360_day_year,
-            "proleptic_gregorian": ClimateDataPortal.date_to_month_number,
-            "calendar": ClimateDataPortal.date_to_month_number,
+            "rounded": monthly.rounded_date_to_month_number,
+            "360_day": monthly.floored_twelfth_of_a_360_day_year,
+            "twelfths": monthly.floored_twelfth_of_a_360_day_year,
+            "proleptic_gregorian": monthly.date_to_month_number,
+            "calendar": monthly.date_to_time_period,
         }[month_mapping_string]
         try:
-            tt = variables[field_name]
+            variable_to_import = variables[field_name]
         except KeyError:
             raise Exception(
-                "Can't find %s in %s" % (
+                "Can't find %s, maybe you meant one of: %s" % (
                     field_name,
                     variables.keys()
                 )
             )
         else:
             try:
-                tt_units = tt.units
+                variable_units = variable_to_import.units
             except AttributeError:
                 assert units is not None, "No units specified and no units in NetCDF file"
             else:
                 if units is not None:
-                    if not tt_units == units:
+                    if not variable_units == units:
                         logging.warn((
                             "Units do not match: "
-                            "%(units)s vs %(tt_units)s" % locals()
+                            "%(units)s vs %(variable_units)s" % locals()
                         ))
                 else:
-                    units = tt_units
-            converter = ClimateDataPortal.units_in_out[units]["in"]
+                    units = variable_units
+            converter = ClimateDataPortal.units_in_out[units].to_standard
 
             # create grid of places
             place_ids = {}
@@ -255,8 +202,8 @@ def import_climate_readings(
                     time_period = start_date_time + (time_step * int(time_step_count))
                     month_number = month_mapping(time_period)
                     #print month_number, time_period
-                values_by_time = tt[time_index]
-                if len(tt[time_index]) == 1:
+                values_by_time = variable_to_import[time_index]
+                if len(variable_to_import[time_index]) == 1:
                     values_by_time = values_by_time[0]
                 for latitude_index, latitude in iter_pairs(lat):
                     values_by_latitude = values_by_time[latitude_index]
@@ -278,7 +225,7 @@ def import_climate_readings(
 
 import sys
 
-from Scientific.IO import NetCDF
+from scipy.io import netcdf
 
 def main(argv):
     import argparse
@@ -294,7 +241,7 @@ def main(argv):
 
 
     styles = {
-        "quickly": InsertChunksWithoutCheckingForExistingReadings,
+        "database": InsertChunksWithoutCheckingForExistingReadings,
     #    "safely": InsertRowsIfNoConflict
         "csv": PrintAsCSV
     }
@@ -303,10 +250,10 @@ def main(argv):
         description = "Imports climate data from NetCDF file.",
         prog = argv[0],
         usage = """
-%(prog)s --NetCDF_file path/to/file.nc --parameter_name <parameter> --style <import style> --field_name <field name> 
+%(prog)s --NetCDF_file path/to/file.nc --parameter_name <parameter> --import_to <database|csv> --field_name <field name> 
 
 e.g. 
-python ./run.py %(prog)s --field_name rr --style quickly --parameter_name "Gridded Rainfall mm" --NetCDF_file gridded_rainfall_mm.nc 
+python ./run.py %(prog)s --field_name rr --import_to database --parameter_name "Gridded Rainfall mm" --NetCDF_file gridded_rainfall_mm.nc 
 
         """
     )
@@ -328,13 +275,13 @@ python ./run.py %(prog)s --field_name rr --style quickly --parameter_name "Gridd
         help="Truncate database tables first."
     )
     parser.add_argument(
-        "--style",
+        "--import_to",
         required = True,
         choices = styles.keys(),
-        default = "safely",
+        default = "database",
         help="""
-            quickly: just insert readings into the database
-            safely: check that data is not overwritten
+            database: just insert readings into the database
+            csv: print a CSV file to standard output
         """
     )
     parser.add_argument(
@@ -392,9 +339,9 @@ python ./run.py %(prog)s --field_name rr --style quickly --parameter_name "Gridd
     db.commit()
     
     import_climate_readings(
-        netcdf_file = NetCDF.NetCDFFile(args.NetCDF_file),
+        netcdf_file = netcdf.netcdf_file(args.netcdf_file),
         field_name = args.field_name,
-        add_reading = styles[args.style](sample_table),
+        add_reading = styles[args.import_to](sample_table),
         units = args.units,
         db = db,
         time_step_string = args.time_steps,
