@@ -69,7 +69,7 @@ def import_climate_readings(
         pdb.set_trace()
         def to_list(variable):
             result = []
-            for i in range(len(variable)):
+            for i in range(variable.shape[0]):
                 result.append(variable[i])
             return result
         
