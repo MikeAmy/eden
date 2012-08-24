@@ -991,8 +991,8 @@ def get_csv_timeseries_data(
         display_units = display_units.replace("Celsius", "\xc2\xb0Celsius")
         file = codecs.open(file_path, 'w', encoding="utf-8")
         file.write(u'year,month,"')
-        file_write(unicode(display_units))
-        file_write(u'"\n')
+        file.write(unicode(display_units))
+        file.write(u'"\n')
 
         if isinstance(
             values_by_time_period_data_frame,
