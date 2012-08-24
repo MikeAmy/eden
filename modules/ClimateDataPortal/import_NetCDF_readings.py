@@ -333,13 +333,14 @@ python ./run.py %(prog)s --field_name rr --import_to database --parameter_name "
 
     args = parser.parse_args(argv[1:])
     sample_table = ClimateDataPortal.SampleTable.with_name(args.parameter_name)
-    print sample_table.table_name
+    
+    print "Importing into:"+sample_table.table_name+","
     if args.clear_existing_data:
         sample_table.clear()
     db.commit()
-    
+
     import_climate_readings(
-        netcdf_file = netcdf.netcdf_file(args.netcdf_file),
+        netcdf_file = netcdf.netcdf_file(args.NetCDF_file),
         field_name = args.field_name,
         add_reading = styles[args.import_to](sample_table),
         units = args.units,
