@@ -877,7 +877,7 @@ function (
             ylab = display_units.encode("UTF8").replace(
                 # HACK for Celsius degrees symbol display in R
                 "Celsius",
-                u"\xc2\xb0Celsius"
+                "\xc2\xb0Celsius"
             ),
             plot_type= "lo"[is_yearly_values],               
             axis_points = axis_points,
