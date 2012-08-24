@@ -180,7 +180,7 @@ class MapPlugin(object):
                         understood_expression_string.replace('"','\\"')
                     )
                 )
-                write(u'"units":"%s",' % units)
+                write(u'"units":"%s",' % units.encode("UTF8"))
                 write('"grid_size":%f,' % min(grid_sizes(expression)()))
                 
                 write('"keys":[')
@@ -389,6 +389,7 @@ class MapPlugin(object):
             generate_years_json
         )
         
+
 from Method import Method
 from DateMapping import Monthly, Yearly, MultipleYearsByMonth
 time_period_to_float_year = Method("time_period_to_float_year")
@@ -861,7 +862,7 @@ function (
                 
         plot_chart(
             n = len(time_serieses),
-            names = spec_labels,
+            names = spec_labels, # BUG: if unicode query, only first char shows (!!)
             width = width,
             height = height,
             # R uses Normalised Display coordinates.
