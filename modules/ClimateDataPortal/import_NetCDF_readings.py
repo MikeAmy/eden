@@ -65,8 +65,6 @@ def import_climate_readings(
         print ("field_name could be one of %s" % variables.keys())
     else:
         month_mapping_string
-        import pdb
-        pdb.set_trace()
         def to_list(variable):
             result = []
             for i in range(variable.shape[0]):
@@ -140,7 +138,7 @@ def import_climate_readings(
             try:
                 variable_units = variable_to_import.units
             except AttributeError:
-                assert units is not None, "No units specified and no units in NetCDF file"
+                assert units is not None, 'No units specified and no units in NetCDF file - please specify units e.g. ... --units "mm precipitation"'
             else:
                 if units is not None:
                     if not variable_units == units:
