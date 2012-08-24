@@ -340,7 +340,7 @@ python ./run.py %(prog)s --field_name rr --import_to database --parameter_name "
     db.commit()
 
     import_climate_readings(
-        netcdf_file = netcdf.netcdf_file(args.NetCDF_file),
+        netcdf_file = netcdf.netcdf_file(args.NetCDF_file, 'r'),
         field_name = args.field_name,
         add_reading = styles[args.import_to](sample_table),
         units = args.units,
