@@ -176,14 +176,10 @@ class MapPlugin(object):
                 write('{')
                 # sent back for acknowledgement:
                 write(
-                    u'"understood_expression":"%s",'.__mod__(
-                        understood_expression_string.replace('"','\\"')
-                    )
+                    u'"understood_expression":"'+understood_expression_string.replace(u'"',u'\\"')+u'",'
                 )
                 write(
-                    u'"units":"%s",' % unicode(
-                        units
-                    )
+                    u'"units":"'+unicode(units)+'",' 
                 )
                 write('"grid_size":%f,' % min(grid_sizes(expression)()))
                 
