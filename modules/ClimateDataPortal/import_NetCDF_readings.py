@@ -65,7 +65,8 @@ def import_climate_readings(
         print ("field_name could be one of %s" % variables.keys())
     else:
         month_mapping_string
-    
+        import pdb
+        pdb.set_trace()
         def to_list(variable):
             result = []
             for i in range(len(variable)):
