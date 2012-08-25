@@ -936,6 +936,9 @@ function (
 
 MapPlugin.render_plots = render_plots
 
+class Disallowed(Exception):
+    pass
+
 def get_csv_timeseries_data(
     map_plugin,
     query_expression,
@@ -943,8 +946,15 @@ def get_csv_timeseries_data(
 ):
     env = map_plugin.env
     DSL = env.DSL
+    # Hack: should be analysing the actual aggregations
+    # this fails if any non-observed dataset happens to have "Observed"
+    # in the name.
     if "Observed" in query_expression:
-        return "Downloading Observed Data is disallowed"
+        raise Disallowed(
+            "Sorry, Downloading Observed Data is disallowed because the "
+            "data is meant for purchase - please use the Purchase Data "
+            "facility from the top menu bar."
+        )
     def generate_csv_data(file_path):        
         R = map_plugin.get_R()
         c = R("c")

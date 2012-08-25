@@ -453,19 +453,23 @@ def download_data():
     if errors:
         raise HTTP(400, "<br />".join(errors))
     else:
-        data_path = _map_plugin().get_csv_location_data(**arguments)
-        response.headers["Content-Type"] = "application/force-download"
-        response.headers["Content-Disposition"] = (
-            "attachment; filename=" + (
-                _nice_filename(
-                    arguments["query_expression"]
-                )+".csv"
+        try:
+            data_path = _map_plugin().get_csv_location_data(**arguments)
+        except ClimateDataPortal.Disallowed, disallowed:
+            return str(disallowed)
+        else:
+            response.headers["Content-Type"] = "application/force-download"
+            response.headers["Content-Disposition"] = (
+                "attachment; filename=" + (
+                    _nice_filename(
+                        arguments["query_expression"]
+                    )+".csv"
+                )
             )
-        )
-        return response.stream(
-            open(data_path, "rb"),
-            chunk_size=4096
-        )
+            return response.stream(
+                open(data_path, "rb"),
+                chunk_size=4096
+            )
 
 def download_timeseries():
     kwargs = dict(request.vars)
@@ -535,3 +539,71 @@ def model_descriptions():
             "user_documentation/Technical_Approach_and_Methodology_for_Data_Preparation.pdf"
         )
     )
+
+def _int_between(low, high):
+    def int_checker(int):
+        assert low <= int <= high, "must be between %i and %i" % ()
+        
+
+def upload_datum():
+    """
+    This API inserts data into the database.
+    Parameters to supply are:
+
+    sample_table_name = same as seen on the portal,
+    year = e.g. 2012,
+    month = 1-12,
+    day = 1-31 (only for daily datasets)
+    place_id = integer, 
+    value = floating point value
+    units = must match the data set's units. Temperatures are in Kelvin.
+    """
+    assert request.env.request_method == "POST",
+        "This must be a POST request to insert data\n"+ upload_datum.__doc__
+    
+    kwargs = dict(request.vars)
+    arguments = {}
+    errors = []
+    if "day" in kwargs:
+        arguments["day"] = int(kwargs["day"])
+    for name, converter in dict(
+        sample_table_name = possibly_UTF8,
+        year = int,
+        month = int,
+        place_id = int,
+        value = float,
+        units = str
+    ).iteritems():
+        try:
+            value = kwargs.pop(name)
+        except KeyError:
+            errors.append("%s missing" % name)
+        else:
+            try:
+                arguments[name] = converter(value)
+            except TypeError:
+                errors.append("%s is wrong type" % name)
+            except AssertionError, assertion_error:
+                errors.append("%s: %s" % (name, assertion_error))
+    if kwargs:
+        errors.append("Unexpected arguments: %s" % spec.keys())
+    
+    if errors:
+        raise HTTP(400,
+            "<br />".join(errors)+
+            "<br />".join(upload_datum.__doc__.split("\n"))
+        )
+    else:
+        try:
+            value = arguments.pop("value")
+            place_id = arguments.pop("place_id")
+            sample_table_name = arguments.pop("sample_table_name")
+            sample_table = SampleTable.with_name(sample_table_name)
+            date_mapper = sample_table.date_mapper
+            time_period = date_mapper.to_time_period(**arguments)
+            sample_table.insert_values(
+                map(str, (time_period, place_id, value))
+            )
+            return "OK"
+        except exception:
+            return unicode(exception)
