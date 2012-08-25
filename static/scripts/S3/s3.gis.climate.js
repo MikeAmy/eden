@@ -2853,6 +2853,19 @@ ClimateDataMapPlugin = function (config) {
 
     plugin.addToMapWindow = function (items) {
         // create the panels
+        var chart_and_download_buttons = []
+        
+        // Chart and Download button panel
+        var chart_and_download_panel = new Ext.Panel({
+            id: 'chart_and_download_panel',
+            title: 'Charts and Downloads',
+            collapsible: true,
+            collapseMode: 'mini',
+            collapsed: false,
+            items: chart_and_download_buttons
+        })
+        
+        // Select Data Panel
         var climate_data_panel = SpecPanel(
             'climate_data_panel',
             'Select data: (A)',
@@ -2870,8 +2883,8 @@ ClimateDataMapPlugin = function (config) {
             handler: plugin.update_map_layer_from_form
         });
         climate_data_panel.addButton(update_map_layer_button)
-        items.push(climate_data_panel)
         
+        // Comparison Panel
         var comparison_panel = SpecPanel(
             'comparison_panel',
             'Compare with data (B)',
@@ -2890,9 +2903,8 @@ ClimateDataMapPlugin = function (config) {
             handler: plugin.update_map_layer_from_comparison
         });
         comparison_panel.addButton(update_map_layer_comparison_button)
-        items.push(comparison_panel)
         
-        
+        // Quick region filter panel
         var quick_filter_data_store = plugin.quick_filter_data_store = new Ext.data.SimpleStore({
             fields: ['name', 'option']
         })
@@ -2935,7 +2947,6 @@ ClimateDataMapPlugin = function (config) {
                 }
             }
         )
-        items.push(quick_filter_panel)
         
         function get_selected_place_ids() {
             var place_ids = []
@@ -3030,9 +3041,7 @@ ClimateDataMapPlugin = function (config) {
             }
         })
         plugin.show_chart_button = show_chart_button
-         
-        items.push(show_chart_button)
- 
+          
         var download_data_button = new Ext.Button({
             text: 'Download CSV map data for selected places',
             disabled: true,
@@ -3046,8 +3055,7 @@ ClimateDataMapPlugin = function (config) {
             }
         })
         plugin.download_data_button = download_data_button
-        items.push(download_data_button)
-
+        
         var download_time_series_button = new Ext.Button({
             text: 'Download CSV time series for selected places',
             disabled: true,
@@ -3061,7 +3069,6 @@ ClimateDataMapPlugin = function (config) {
             }
         })
         plugin.download_time_series_button = download_time_series_button
-        items.push(download_time_series_button)
 
         var print_button = new Ext.Button({
             text: 'Download printable map image',
@@ -3076,7 +3083,6 @@ ClimateDataMapPlugin = function (config) {
         })
         plugin.print_button = print_button
         print_button.disable()
-        items.push(print_button)
         
         items.push({
             autoEl: {
@@ -3085,6 +3091,15 @@ ClimateDataMapPlugin = function (config) {
                 }                
             }
         )
+        items.push(climate_data_panel)
+        items.push(comparison_panel)
+        items.push(quick_filter_panel)
+        chart_and_download_buttons.push(show_chart_button)        
+        chart_and_download_buttons.push(download_data_button)
+        chart_and_download_buttons.push(download_time_series_button)
+        chart_and_download_buttons.push(print_button)
+        items.push(chart_and_download_panel)
+                
         plugin.set_status = function (html_message) {
             $('#error_div').html(html_message)
         }
