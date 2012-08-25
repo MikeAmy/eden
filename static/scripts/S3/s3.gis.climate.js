@@ -2624,12 +2624,29 @@ ClimateDataMapPlugin = function (config) {
         variable_combo_box.on(
             'select',
             function (a, value) {
-                update_years(value.json[0])
+                var dataset_name = value.json[0]
+                update_years(dataset_name)
+                // HACK: better to look at the units if possible
+                statistic_combo_box.hide_sum = dataset_name.toLowerCase().indexOf("temp") == -1
+            }
+        )
+        statistic_combo_box.on(
+            'expand',
+            function () {
+                $(statistic_combo_box.list.dom).find(
+                    '.x-combo-list-item'
+                ).each(
+                    function (i, option_div) {
+                        $option_div = $(option_div)
+                        $option_div.css('display', 'block')
+                        if (statistic_combo_box.hide_sum && $option_div.text() == "Sum") {
+                            $option_div.css('display', 'none')
+                        }
+                    }
+                )
             }
         )
         update_years(plugin.parameter_names[0])
-        // grey out (but don't disable) any years in the from and to year
-        // combo boxes if no data is available for those years
         each(
             [from_year_combo_box, to_year_combo_box],
             function (combo_box) {
