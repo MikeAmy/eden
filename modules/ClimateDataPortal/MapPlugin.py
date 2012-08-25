@@ -33,6 +33,10 @@ def between(items, main, between, *a, **kw):
             between(item, *a, **kw)
 
 
+class Disallowed(Exception):
+    pass
+
+
 class MapPlugin(object):
     def __init__(
         map_plugin,
@@ -133,6 +137,20 @@ class MapPlugin(object):
             )
         )
 
+    def check_not_observed(map_plugin, query_expression):
+        """This is called to check the user isn't downloading 
+        data which should be purchased.
+        """
+        if "Observed" in query_expression:
+            # Hack: should be analysing the actual aggregations
+            # this fails if any non-observed dataset happens
+            # to have "Observed" in the name.
+            raise Disallowed(
+                "Sorry, Downloading Observed Data is disallowed because the "
+                "data is meant for purchase - please use the Purchase Data "
+                "facility from the top menu bar."
+            )
+
     def get_overlay_data(
         map_plugin,
         query_expression,
@@ -218,6 +236,7 @@ class MapPlugin(object):
         query_expression,
         place_ids
     ):
+        map_plugin.check_not_observed(query_expression)
         env = map_plugin.env
         DSL = env.DSL
         expression = DSL.parse(query_expression)
@@ -936,9 +955,6 @@ function (
 
 MapPlugin.render_plots = render_plots
 
-class Disallowed(Exception):
-    pass
-
 def get_csv_timeseries_data(
     map_plugin,
     query_expression,
@@ -946,15 +962,7 @@ def get_csv_timeseries_data(
 ):
     env = map_plugin.env
     DSL = env.DSL
-    # Hack: should be analysing the actual aggregations
-    # this fails if any non-observed dataset happens to have "Observed"
-    # in the name.
-    if "Observed" in query_expression:
-        raise Disallowed(
-            "Sorry, Downloading Observed Data is disallowed because the "
-            "data is meant for purchase - please use the Purchase Data "
-            "facility from the top menu bar."
-        )
+    map_plugin.check_not_observed(query_expression)
     def generate_csv_data(file_path):        
         R = map_plugin.get_R()
         c = R("c")

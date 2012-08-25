@@ -21,7 +21,7 @@ from Units import (
     DimensionError,
     MeaninglessUnitsException
 )
-from MapPlugin import MapPlugin
+from MapPlugin import MapPlugin, Disallowed
 
 
 

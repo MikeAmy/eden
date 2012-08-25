@@ -498,19 +498,23 @@ def download_timeseries():
     if errors:
         raise HTTP(400, "<br />".join(errors))
     else:
-        data_path = _map_plugin().get_csv_timeseries_data(**arguments)
-        response.headers["Content-Type"] = "application/force-download"
-        response.headers["Content-Disposition"] = (
-            "attachment; filename=" + (
-                _nice_filename(
-                    arguments["query_expression"]
-                )+".csv"
+        try:
+            data_path = _map_plugin().get_csv_timeseries_data(**arguments)
+        except ClimateDataPortal.Disallowed, disallowed:
+            return str(disallowed)
+        else:
+            response.headers["Content-Type"] = "application/force-download"
+            response.headers["Content-Disposition"] = (
+                "attachment; filename=" + (
+                    _nice_filename(
+                        arguments["query_expression"]
+                    )+".csv"
+                )
             )
-        )
-        return response.stream(
-            open(data_path, "rb"),
-            chunk_size=4096
-        )
+            return response.stream(
+                open(data_path, "rb"),
+                chunk_size=4096
+            )
 
 
 def get_years():
