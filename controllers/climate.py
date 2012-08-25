@@ -558,8 +558,9 @@ def upload_datum():
     value = floating point value
     units = must match the data set's units. Temperatures are in Kelvin.
     """
-    assert request.env.request_method == "POST",
+    assert request.env.request_method == "POST", (
         "This must be a POST request to insert data\n"+ upload_datum.__doc__
+    )
     
     kwargs = dict(request.vars)
     arguments = {}
