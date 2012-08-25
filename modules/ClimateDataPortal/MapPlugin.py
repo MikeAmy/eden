@@ -943,7 +943,8 @@ def get_csv_timeseries_data(
 ):
     env = map_plugin.env
     DSL = env.DSL
-    
+    if "Observed" in query_expression:
+        return "Downloading Observed Data is disallowed"
     def generate_csv_data(file_path):        
         R = map_plugin.get_R()
         c = R("c")
