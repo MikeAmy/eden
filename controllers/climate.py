@@ -456,7 +456,7 @@ def download_data():
         try:
             data_path = _map_plugin().get_csv_location_data(**arguments)
         except ClimateDataPortal.Disallowed, disallowed:
-            return str(disallowed)
+            raise HTTP(402, str(disallowed))
         else:
             response.headers["Content-Type"] = "application/force-download"
             response.headers["Content-Disposition"] = (
@@ -501,7 +501,7 @@ def download_timeseries():
         try:
             data_path = _map_plugin().get_csv_timeseries_data(**arguments)
         except ClimateDataPortal.Disallowed, disallowed:
-            return str(disallowed)
+            raise HTTP(402, str(disallowed))
         else:
             response.headers["Content-Type"] = "application/force-download"
             response.headers["Content-Disposition"] = (
