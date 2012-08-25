@@ -2392,6 +2392,9 @@ ClimateDataMapPlugin = function (config) {
         plugin.set_status('Updating...')
         plugin.query_box.update(query_expression)
         plugin.show_chart_button.disable()
+        plugin.download_data_button.disable()
+        plugin.download_time_series_button.disable()
+        
 //        console.log(plugin.overlay_data_URL)
         $.ajax({
             url: plugin.overlay_data_URL,
@@ -2718,6 +2721,7 @@ ClimateDataMapPlugin = function (config) {
             }
         })
         var month_filter = month_letters.concat(month_checkboxes)
+        
         var annual_aggregation_check_box_id = panel_id+'_annual_aggregation_checkbox'
         var annual_aggregation_check_box = new Ext.form.Checkbox({
             id: annual_aggregation_check_box_id,
@@ -2876,7 +2880,6 @@ ClimateDataMapPlugin = function (config) {
         // This button does the comparison overlay
         plugin.update_map_layer_from_comparison = function () {
             plugin.update_map_layer(
-                
                 form_query_expression(comparison_panel.getForm()) + ' - ' +
                 form_query_expression(climate_data_panel.getForm())
             )
@@ -2971,6 +2974,8 @@ ClimateDataMapPlugin = function (config) {
                     // sometimes places look selected but aren't
                     // deselect all, disable and give up
                     plugin.show_chart_button.disable()
+                    plugin.download_data_button.disable()
+                    plugin.download_time_series_button.disable()
                     plugin.selectCtrl.unselectAll()
                 }
                 else {
@@ -3152,6 +3157,16 @@ ClimateDataMapPlugin = function (config) {
                     )
                     plugin.overlay_layer.drawFeature(feature)
                     plugin.show_chart_button.enable()
+                    if (plugin.last_query_expression.indexOf("Observed") == -1) {
+                        plugin.download_data_button.enable()
+                        plugin.download_time_series_button.enable()
+                    } else {
+                        plugin.set_status(
+                            "Observed data cannot be downloaded because it is intended "+
+                            "for data purchase - you can purchase the raw data "+
+                            "from the 'Purchase Data' menu item on the top menu bar"
+                        )
+                    }
                 },
                 onUnselect: function (feature) {
                     apply_attributes(
@@ -3165,6 +3180,8 @@ ClimateDataMapPlugin = function (config) {
                     plugin.overlay_layer.drawFeature(feature)
                     if (plugin.overlay_layer.selectedFeatures.length == 0) {
                         plugin.show_chart_button.disable()
+                        plugin.download_data_button.disable()
+                        plugin.download_time_series_button.disable()
                     }
                 }
             }
