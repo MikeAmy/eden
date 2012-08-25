@@ -3035,7 +3035,7 @@ ClimateDataMapPlugin = function (config) {
  
         var download_data_button = new Ext.Button({
             text: 'Download CSV map data for selected places',
-            disabled: false,
+            disabled: true,
             handler: function() {
                 var place_ids = get_selected_place_ids()
                 var spec = JSON.stringify({
@@ -3050,7 +3050,7 @@ ClimateDataMapPlugin = function (config) {
 
         var download_time_series_button = new Ext.Button({
             text: 'Download CSV time series for selected places',
-            disabled: false,
+            disabled: true,
             handler: function() {
                 var place_ids = get_selected_place_ids()
                 var spec = JSON.stringify({
