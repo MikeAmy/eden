@@ -2854,17 +2854,7 @@ ClimateDataMapPlugin = function (config) {
     plugin.addToMapWindow = function (items) {
         // create the panels
         var chart_and_download_buttons = []
-        
-        // Chart and Download button panel
-        var chart_and_download_panel = new Ext.Panel({
-            id: 'chart_and_download_panel',
-            title: 'Charts and Downloads',
-            collapsible: true,
-            collapseMode: 'mini',
-            collapsed: false,
-            items: chart_and_download_buttons
-        })
-        
+                
         // Select Data Panel
         var climate_data_panel = SpecPanel(
             'climate_data_panel',
@@ -3098,6 +3088,15 @@ ClimateDataMapPlugin = function (config) {
         chart_and_download_buttons.push(download_data_button)
         chart_and_download_buttons.push(download_time_series_button)
         chart_and_download_buttons.push(print_button)
+        // Chart and Download button panel
+        var chart_and_download_panel = new Ext.Panel({
+            id: 'chart_and_download_panel',
+            title: 'Charts and Downloads',
+            collapsible: true,
+            collapseMode: 'mini',
+            collapsed: false,
+            items: chart_and_download_buttons
+        })
         items.push(chart_and_download_panel)
                 
         plugin.set_status = function (html_message) {
