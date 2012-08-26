@@ -1744,12 +1744,6 @@ function load_world_map(plugin) {
             'be represented by circles at their capital cities'
         )
     }
-    each(
-        plugin.month_selector_ids,
-        function (id) {
-            Ext.getCmp(id).hide()
-        }
-    )
 }
 
 ClimateDataMapPlugin = function (config) {
@@ -1810,7 +1804,6 @@ ClimateDataMapPlugin = function (config) {
         places_function(plugin.places)
         plugin.places_events.push(places_function)
     }
-    plugin.month_selector_ids = []
     plugin.create_filter_function = function (filter_expression) {
         var replacements = {
             '(\\W)and(\\W)': '$1&&$2',
@@ -2679,7 +2672,6 @@ ClimateDataMapPlugin = function (config) {
             'from_month',
             {width:50, height:25}
         )
-        plugin.month_selector_ids.push(from_month_combo_box.id)
 
         var to_month_combo_box = make_combo_box(
             months,
@@ -2695,7 +2687,6 @@ ClimateDataMapPlugin = function (config) {
             target: to_month_combo_box.id,
             html: 'If month is not specified, the end of the year will be used.'
         })
-        plugin.month_selector_ids.push(to_month_combo_box.id)
         
         var month_letters = []
         var month_checkboxes = []
@@ -2739,19 +2730,19 @@ ClimateDataMapPlugin = function (config) {
         })
         var month_filter = month_letters.concat(month_checkboxes)
         
-        var annual_aggregation_check_box_id = panel_id+'_annual_aggregation_checkbox'
+        var annual_aggregation_check_box_id = 'id_annual_aggregation_checkbox'
         var annual_aggregation_check_box = new Ext.form.Checkbox({
             id: annual_aggregation_check_box_id,
             name: 'annual_aggregation',
             checked: true,
             fieldLabel: 'Annual aggregation'
         })
-        plugin.month_selector_ids.push(annual_aggregation_check_box_id)
         add_tooltip({
-            target: panel_id+'_annual_aggregation_checkbox',
+            target: annual_aggregation_check_box_id,
             html: 'Aggregate monthly values into yearly values. Only affects charts.'
         })
         var month_checkboxes_id = panel_id+'_month_checkboxes'
+        
         annual_aggregation_check_box.on('check', function(a, value) {
             var month_checkboxes = $('#'+month_checkboxes_id)
             if (value) {
@@ -2761,8 +2752,7 @@ ClimateDataMapPlugin = function (config) {
                 month_checkboxes.hide(300)
             }
         })
-        plugin.month_selector_ids.push(month_checkboxes_id)
-
+        
         var form_panel = new Ext.FormPanel({
             id: panel_id,
             title: panel_title,
