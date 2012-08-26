@@ -2759,21 +2759,6 @@ ClimateDataMapPlugin = function (config) {
                             //data_type_combo_box,
                             variable_combo_box,
                             statistic_combo_box,
-                            // month filter checkboxes
-                            {
-                                id: month_checkboxes_id,
-                                border: false,
-                                layout: {
-                                    type: 'table',
-                                    columns: (month_filter.length / 2)
-                                },
-                                defaults: {
-                                    width: '15px',
-                                    height: '1.3em',
-                                    style: 'margin: 0.1em;'
-                                },
-                                items: month_filter
-                            },
                             new Ext.form.CompositeField(
                                 {
                                     fieldLabel: 'From',
@@ -2791,7 +2776,22 @@ ClimateDataMapPlugin = function (config) {
                                         to_month_combo_box
                                     ]
                                 }
-                            )
+                            ),
+                            // month filter checkboxes
+                            {
+                                id: month_checkboxes_id,
+                                border: false,
+                                layout: {
+                                    type: 'table',
+                                    columns: (month_filter.length / 2)
+                                },
+                                defaults: {
+                                    width: '15px',
+                                    height: '1.3em',
+                                    style: 'margin: 0.1em;'
+                                },
+                                items: month_filter
+                            }
                         ]
                     })
                 ]
@@ -2839,7 +2839,7 @@ ClimateDataMapPlugin = function (config) {
                         (form_values.to_month?', '+form_values.to_month:''),
                     ')',
                     (
-                        form_values.annual_aggregation ?
+                        plugin.annual_aggregation_checkbox.getValue() ?
                         (', Months('+month_names.join(', ')+')'):''
                     ),
                 ')'
@@ -2852,7 +2852,7 @@ ClimateDataMapPlugin = function (config) {
         var chart_and_download_buttons = []
                 
         var annual_aggregation_check_box_id = 'id_annual_aggregation_checkbox'
-        var annual_aggregation_check_box = new Ext.form.Checkbox({
+        var annual_aggregation_check_box = plugin.annual_aggregation_check_box = new Ext.form.Checkbox({
             id: annual_aggregation_check_box_id,
             name: 'annual_aggregation',
             checked: true,
@@ -3111,7 +3111,7 @@ ClimateDataMapPlugin = function (config) {
             collapsible: true,
             collapseMode: 'mini',
             collapsed: false,
-            labelWidth: 65,
+            labelWidth: 105,
             items: [{
                 region: 'center',
                 items: chart_and_download_buttons
