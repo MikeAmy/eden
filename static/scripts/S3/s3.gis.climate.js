@@ -3114,7 +3114,15 @@ ClimateDataMapPlugin = function (config) {
             labelWidth: 105,
             items: [{
                 region: 'center',
-                items: chart_and_download_buttons
+                items: [{
+                    id: 'buttons_table',
+#                    border: false,
+                    layout: {
+                        type: 'table',
+                        columns: 4
+                    },
+                    items: chart_and_download_buttons
+                }]
             }]
         })
         items.push(chart_and_download_panel)
