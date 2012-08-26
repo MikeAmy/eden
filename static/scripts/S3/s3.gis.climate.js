@@ -1836,7 +1836,10 @@ ClimateDataMapPlugin = function (config) {
         catch (exception) {}
 
         var function_string = (
-            'unfiltered = true\n'+
+            // unfiltered is set to true so that when the function
+            // is evaluated, if it is unfiltered, then everything is
+            // shown
+            'unfiltered = true\n'+ 
             'with (Math) {'+
                 'with (place) {' +
                     'with (place.data) { '+
@@ -2044,7 +2047,14 @@ ClimateDataMapPlugin = function (config) {
                             plugin.render_map_layer
                         )
                     },
-                    example: new Place(places_data[place_id]),
+                    // this is used for testing the filter functions
+                    example: new Place({
+                        elevation: 777,
+                        latitude: 22.22,
+                        longitude: 99.99,
+                        station_id: 0,
+                        station_name: "Test place "
+                    }),
                     initial_filter: initial_filter,
                     plugin: plugin
                 })
