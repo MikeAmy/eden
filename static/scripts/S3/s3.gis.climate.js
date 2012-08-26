@@ -2066,6 +2066,9 @@ ClimateDataMapPlugin = function (config) {
                     plugin.filter_box.set_filter_no_update('Nepal')
                     plugin.filter = plugin.create_filter_function("Nepal")
                 }
+                plugin.colour_key.with_limits(
+                    plugin.render_map_layer
+                )
                 plugin.logo = new Logo()
                 plugin.logo.activate()
                 map.addControl(plugin.logo)
