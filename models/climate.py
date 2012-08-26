@@ -548,7 +548,7 @@ if deployment_settings.has_module("climate"):
                     T(
                         "Check this box when you have read, "
                         "understand and agree to the "
-                        "<a href='terms' target='_blank'>"
+                        "<a href='http://dhm.gov.np/termsandconditions.php' target='_blank'>"
                             "terms and conditions"
                         "</a>."
                     )
