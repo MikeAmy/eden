@@ -2567,7 +2567,7 @@ ClimateDataMapPlugin = function (config) {
             '</tpl>'
         )
         
-        var statistic_combo_box = make_combo_box(
+        statistic_combo_box = make_combo_box(
             plugin.aggregation_names,
             'Statistic',
             'statistic',
@@ -2627,7 +2627,7 @@ ClimateDataMapPlugin = function (config) {
                 var dataset_name = value.json[0]
                 update_years(dataset_name)
                 // HACK: better to look at the units if possible
-                statistic_combo_box.hide_sum = dataset_name.toLowerCase().indexOf("temp") == -1
+                statistic_combo_box.hide_sum = (dataset_name.toLowerCase().indexOf("temp") == -1)
             }
         )
         statistic_combo_box.on(
