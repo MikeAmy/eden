@@ -3091,14 +3091,6 @@ ClimateDataMapPlugin = function (config) {
                 }                
             }
         )
-        chart_and_download_buttons.push(
-            new Ext.form.FieldSet({
-                style: 'margin: 0px; border: none;',
-                items: [
-                    annual_aggregation_check_box
-                ]
-            })
-        )
         chart_and_download_buttons.push(show_chart_button)
         chart_and_download_buttons.push(download_data_button)
         chart_and_download_buttons.push(download_time_series_button)
@@ -3114,15 +3106,22 @@ ClimateDataMapPlugin = function (config) {
             labelWidth: 105,
             items: [{
                 region: 'center',
-                items: [{
-                    id: 'buttons_table',
-#                    border: false,
-                    layout: {
-                        type: 'table',
-                        columns: 4
-                    },
-                    items: chart_and_download_buttons
-                }]
+                items: [
+                    new Ext.form.FieldSet({
+                    style: 'margin: 0px; border: none;',
+                    items: [
+                        annual_aggregation_check_box,
+                        {
+                            id: 'buttons_table',
+        #                    border: false,
+                            layout: {
+                                type: 'table',
+                                columns: 4
+                            },
+                            items: chart_and_download_buttons
+                        }
+                    ]
+                })]
             }]
         })
         items.push(chart_and_download_panel)
