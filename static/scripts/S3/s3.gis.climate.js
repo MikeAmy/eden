@@ -1820,9 +1820,10 @@ ClimateDataMapPlugin = function (config) {
             }
         }
         /* Special cases */
-        if (filter_expression == "Nepal" ||
-            filter_expression == "'Nepal'" ||
-            filter_expression == '"Nepal"'
+        var lowercase_filter_expression = filter_expression.toLowerCase()
+        if (lowercase_filter_expression == "nepal" ||
+            lowercase_filter_expression == "'nepal'" ||
+            lowercase_filter_expression == '"nepal"'
         ) {
             filter_expression = "within_Nepal()"
         }
