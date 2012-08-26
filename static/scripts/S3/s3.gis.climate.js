@@ -2063,6 +2063,7 @@ ClimateDataMapPlugin = function (config) {
                 if (initial_filter == 'unfiltered') {
                     // don't update as no data loaded
                     plugin.filter_box.set_filter_no_update('Nepal')
+                    plugin.filter = plugin.create_filter_function("Nepal")
                 }
                 plugin.logo = new Logo()
                 plugin.logo.activate()
