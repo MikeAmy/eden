@@ -2567,7 +2567,7 @@ ClimateDataMapPlugin = function (config) {
             '</tpl>'
         )
         
-        statistic_combo_box = make_combo_box(
+        var statistic_combo_box = make_combo_box(
             plugin.aggregation_names,
             'Statistic',
             'statistic',
