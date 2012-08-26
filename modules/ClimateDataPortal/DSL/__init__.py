@@ -184,13 +184,13 @@ class Months(object):
         month_filter.months = months
 
 class From(object):
-    def __init__(from_date, year, month = None, day = None):
+    def __init__(from_date, year=None, month = None, day = None):
         from_date.year = year
         from_date.month = month
         from_date.day = day
         
 class To(object):
-    def __init__(to_date, year, month = None, day = None):
+    def __init__(to_date, year=None, month = None, day = None):
         to_date.year = year
         to_date.month = month
         to_date.day = day
@@ -207,7 +207,7 @@ class Date_Offset(object):
 class AggregationNode(ASTNode):
     """These all take a dataset and aggregate it.
     """
-    def __init__(aggregation, dataset_name, *specification):
+    def __init__(aggregation, dataset_name=None, *specification):
         aggregation.dataset_name = dataset_name
         aggregation.specification = specification
 
