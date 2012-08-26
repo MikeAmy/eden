@@ -147,8 +147,26 @@ var ColourKey = OpenLayers.Class(OpenLayers.Control, {
                     colour_key.with_limits(colour_key.use_limits)
                 }
             }
-            colour_key.$lower_limit.change(colour_key.use_callback)
-            colour_key.$upper_limit.change(colour_key.use_callback)
+            colour_key.$lower_limit.change(function () {
+                var limit_value = colour_key.$lower_limit.attr('value')
+                // don't allow nonsense values
+                if (isNaN(limit_value)) {
+                    colour_key.$lower_limit.attr('value', colour_key.previous_lower_limit || 0)
+                } else {
+                    colour_key.previous_lower_limit = limit_value
+                    colour_key.use_callback()
+                }
+            })
+            colour_key.$upper_limit.change(function () {
+                var limit_value = colour_key.$upper_limit.attr('value')
+                // don't allow nonsense values
+                if (isNaN(limit_value)) {
+                    colour_key.$upper_limit.attr('value', colour_key.previous_upper_limit || 100)
+                } else {
+                    colour_key.previous_upper_limit = limit_value
+                    colour_key.use_callback()
+                }
+            })
             return true;
         } else {
             return false;
@@ -169,10 +187,16 @@ var ColourKey = OpenLayers.Class(OpenLayers.Control, {
     with_limits: function (use_limits) {
         // immediately use the limits
         var colour_key = this
-        use_limits(
-            parseFloat(colour_key.$lower_limit.attr('value')),
-            parseFloat(colour_key.$upper_limit.attr('value'))
-        )
+        var lower_limit_value = parseFloat(colour_key.$lower_limit.attr('value'))
+        var upper_limit_value = parseFloat(colour_key.$upper_limit.attr('value'))
+        if (
+            !(isNaN(lower_limit_value) || isNaN(upper_limit_value)) 
+        ) {
+            use_limits(
+                lower_limit_value,
+                upper_limit_value
+            )
+        }
     },
     
     on_change: function (use_limits) {
@@ -2066,9 +2090,6 @@ ClimateDataMapPlugin = function (config) {
                     plugin.filter_box.set_filter_no_update('Nepal')
                     plugin.filter = plugin.create_filter_function("Nepal")
                 }
-                plugin.colour_key.with_limits(
-                    plugin.render_map_layer
-                )
                 plugin.logo = new Logo()
                 plugin.logo.activate()
                 map.addControl(plugin.logo)
