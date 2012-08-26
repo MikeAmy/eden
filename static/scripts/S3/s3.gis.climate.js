@@ -3113,11 +3113,14 @@ ClimateDataMapPlugin = function (config) {
                         annual_aggregation_check_box,
                         {
                             id: 'buttons_table',
-        //                    border: false,
+                            border: false,
                             layout: {
                                 type: 'table',
                                 columns: 4
                             },
+                            defaults: {
+                                style: 'margin-left: 1em;'
+                            },                            
                             items: chart_and_download_buttons
                         }
                     ]
