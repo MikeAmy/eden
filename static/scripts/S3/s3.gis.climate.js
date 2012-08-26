@@ -2493,7 +2493,8 @@ ClimateDataMapPlugin = function (config) {
     ]
 
     function SpecPanel(
-        panel_id, panel_title, collapsed
+        panel_id, panel_title, collapsed,
+        annual_aggregation_check_box
     ) {
         function make_combo_box(
             data,
@@ -2729,18 +2730,7 @@ ClimateDataMapPlugin = function (config) {
             }
         })
         var month_filter = month_letters.concat(month_checkboxes)
-        
-        var annual_aggregation_check_box_id = 'id_annual_aggregation_checkbox'
-        var annual_aggregation_check_box = new Ext.form.Checkbox({
-            id: annual_aggregation_check_box_id,
-            name: 'annual_aggregation',
-            checked: true,
-            fieldLabel: 'Annual aggregation'
-        })
-        add_tooltip({
-            target: annual_aggregation_check_box_id,
-            html: 'Aggregate monthly values into yearly values. Only affects charts.'
-        })
+                
         var month_checkboxes_id = panel_id+'_month_checkboxes'
         
         annual_aggregation_check_box.on('check', function(a, value) {
@@ -2769,7 +2759,6 @@ ClimateDataMapPlugin = function (config) {
                             //data_type_combo_box,
                             variable_combo_box,
                             statistic_combo_box,
-                            annual_aggregation_check_box,
                             // month filter checkboxes
                             {
                                 id: month_checkboxes_id,
@@ -2862,11 +2851,24 @@ ClimateDataMapPlugin = function (config) {
         // create the panels
         var chart_and_download_buttons = []
                 
+        var annual_aggregation_check_box_id = 'id_annual_aggregation_checkbox'
+        var annual_aggregation_check_box = new Ext.form.Checkbox({
+            id: annual_aggregation_check_box_id,
+            name: 'annual_aggregation',
+            checked: true,
+            fieldLabel: 'Annual values'
+        })
+        add_tooltip({
+            target: annual_aggregation_check_box_id,
+            html: 'Aggregate monthly values into yearly values. Only affects charts.'
+        })
+
         // Select Data Panel
         var climate_data_panel = SpecPanel(
             'climate_data_panel',
             'Select data: (A)',
-            false
+            false,
+            annual_aggregation_check_box
         )
         // This button does the simplest "show me data" overlay
         plugin.update_map_layer_from_form = function () {
@@ -2885,7 +2887,8 @@ ClimateDataMapPlugin = function (config) {
         var comparison_panel = SpecPanel(
             'comparison_panel',
             'Compare with data (B)',
-            true
+            true,
+            annual_aggregation_check_box
         )
         // This button does the comparison overlay
         plugin.update_map_layer_from_comparison = function () {
@@ -3091,7 +3094,8 @@ ClimateDataMapPlugin = function (config) {
         items.push(climate_data_panel)
         items.push(comparison_panel)
         items.push(quick_filter_panel)
-        chart_and_download_buttons.push(show_chart_button)        
+        chart_and_download_buttons.push(show_chart_button)
+        chart_and_download_buttons.push(annual_aggregation_check_box)        
         chart_and_download_buttons.push(download_data_button)
         chart_and_download_buttons.push(download_time_series_button)
         chart_and_download_buttons.push(print_button)
