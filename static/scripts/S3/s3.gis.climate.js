@@ -2959,7 +2959,7 @@ ClimateDataMapPlugin = function (config) {
             return place_ids
         }
         var show_chart_button = new Ext.Button({
-            text: 'Show chart for selected places',
+            text: 'Show chart',
             disabled: true,
             handler: function() {
                 // create URL
@@ -3043,7 +3043,7 @@ ClimateDataMapPlugin = function (config) {
         plugin.show_chart_button = show_chart_button
           
         var download_data_button = new Ext.Button({
-            text: 'Download CSV map data for selected places',
+            text: 'CSV: map data',
             disabled: true,
             handler: function() {
                 var place_ids = get_selected_place_ids()
@@ -3057,7 +3057,7 @@ ClimateDataMapPlugin = function (config) {
         plugin.download_data_button = download_data_button
         
         var download_time_series_button = new Ext.Button({
-            text: 'Download CSV time series for selected places',
+            text: 'CSV: time series',
             disabled: true,
             handler: function() {
                 var place_ids = get_selected_place_ids()
@@ -3071,7 +3071,7 @@ ClimateDataMapPlugin = function (config) {
         plugin.download_time_series_button = download_time_series_button
 
         var print_button = new Ext.Button({
-            text: 'Download printable map image',
+            text: 'Printable Map',
             disabled: false,
             handler: function() {
                 // make the map use the full window
@@ -3107,7 +3107,7 @@ ClimateDataMapPlugin = function (config) {
         // Chart and Download button panel
         var chart_and_download_panel = new Ext.FormPanel({
             id: 'chart_and_download_panel',
-            title: 'Charts and Downloads',
+            title: 'Charts and Downloads (for selected places)',
             collapsible: true,
             collapseMode: 'mini',
             collapsed: false,
