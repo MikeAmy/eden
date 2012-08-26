@@ -2839,7 +2839,7 @@ ClimateDataMapPlugin = function (config) {
                         (form_values.to_month?', '+form_values.to_month:''),
                     ')',
                     (
-                        plugin.annual_aggregation_checkbox.getValue() ?
+                        plugin.annual_aggregation_check_box.getValue() ?
                         (', Months('+month_names.join(', ')+')'):''
                     ),
                 ')'
@@ -2851,7 +2851,7 @@ ClimateDataMapPlugin = function (config) {
         // create the panels
         var chart_and_download_buttons = []
                 
-        var annual_aggregation_check_box_id = 'id_annual_aggregation_checkbox'
+        var annual_aggregation_check_box_id = 'id_annual_aggregation_check_box'
         var annual_aggregation_check_box = plugin.annual_aggregation_check_box = new Ext.form.Checkbox({
             id: annual_aggregation_check_box_id,
             name: 'annual_aggregation',
