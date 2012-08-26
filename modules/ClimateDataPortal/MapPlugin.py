@@ -192,7 +192,7 @@ class MapPlugin(object):
             possible_grid_sizes = grid_sizes(expression)()
             if not possible_grid_sizes:
                 raise DSL.GridSizing.MismatchedGridSize(
-                    "# Grid sizes do not match:\n" + expression
+                    u"# Grid sizes do not match:\n" + understood_expression_string
                 )
             
             try:
