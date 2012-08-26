@@ -3091,25 +3091,37 @@ ClimateDataMapPlugin = function (config) {
                 }                
             }
         )
-        items.push(climate_data_panel)
-        items.push(comparison_panel)
-        items.push(quick_filter_panel)
+        chart_and_download_buttons.push(
+            new Ext.form.FieldSet({
+                style: 'margin: 0px; border: none;',
+                items: [
+                    annual_aggregation_check_box
+                ]
+            })
+        )
         chart_and_download_buttons.push(show_chart_button)
-        chart_and_download_buttons.push(annual_aggregation_check_box)        
         chart_and_download_buttons.push(download_data_button)
         chart_and_download_buttons.push(download_time_series_button)
         chart_and_download_buttons.push(print_button)
+        
         // Chart and Download button panel
-        var chart_and_download_panel = new Ext.Panel({
+        var chart_and_download_panel = new Ext.FormPanel({
             id: 'chart_and_download_panel',
             title: 'Charts and Downloads',
             collapsible: true,
             collapseMode: 'mini',
             collapsed: false,
-            items: chart_and_download_buttons
+            labelWidth: 65,
+            items: [{
+                region: 'center',
+                items: chart_and_download_buttons
+            }]
         })
         items.push(chart_and_download_panel)
-                
+        items.push(climate_data_panel)
+        items.push(comparison_panel)
+        items.push(quick_filter_panel)
+        
         plugin.set_status = function (html_message) {
             $('#error_div').html(html_message)
         }
