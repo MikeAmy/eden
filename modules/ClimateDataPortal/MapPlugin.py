@@ -188,6 +188,13 @@ class MapPlugin(object):
                 values = values_by_place_data_frame.rx2("value")
             
             overlay_data_file = None
+            
+            possible_grid_sizes = grid_sizes(expression)()
+            if not possible_grid_sizes:
+                raise DSL.GridSizing.MismatchedGridSize(
+                    "# Grid sizes do not match:\n" + expression
+                )
+            
             try:
                 overlay_data_file = codecs.open(file_path, "w", encoding="utf-8")
                 write = overlay_data_file.write
@@ -199,7 +206,7 @@ class MapPlugin(object):
                 write(u'"units":"')
                 write(unicode(units))
                 write(u'",')
-                write(u'"grid_size":%f,' % min(grid_sizes(expression)()))
+                write(u'"grid_size":%f,' % min(possible_grid_sizes))
                 
                 write(u'"keys":[')
                 write(u",".join(map(unicode, keys)))
