@@ -10,7 +10,8 @@ sys.path.append("./")
 
 # For JS
 import getopt
-import jsmin, mergejs
+import jsmin
+import mergejs
 
 # For CSS
 import re
@@ -222,7 +223,7 @@ def dojs(dogis = False, warnings = True):
         pass
     shutil.move(outputFilename, "../S3")
 
-    if dogis:
+    if True:
         sourceDirectoryGIS = "../S3"
         sourceDirectoryOpenLayers = "../gis/openlayers/lib"
         sourceDirectoryOpenLayersExten = "../gis"
