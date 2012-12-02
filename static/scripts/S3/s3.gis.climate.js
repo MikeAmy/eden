@@ -2571,7 +2571,7 @@ ClimateDataMapPlugin = function (config) {
                 // Rainfall enables AnnualAverage
                 statistic_combo_box.hide_annual_average = (
                     (lowercase_dataset_name.indexOf("rainfall") == -1) &
-                    (lowercase_dataset_name.indexOf("precipitation") == -1
+                    (lowercase_dataset_name.indexOf("precipitation") == -1)
                 )
             }
         )
