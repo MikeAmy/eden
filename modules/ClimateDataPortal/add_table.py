@@ -22,12 +22,23 @@ import sys
 
 try:
     sample_type_name = sys.argv[1]
+    if sample_type_name == "Interpolated":
+        sample_type_name = "Gridded"
+    allowed_sample_type_names = ("Observed", "Gridded", "Projected")
+    if sample_type_name not in allowed_sample_type_names:
+        print "sample_type_name (argument 1) must be one of:"+ allowed_sample_type_names
     parameter_name = sys.argv[2]
     units_name = sys.argv[3]
     field_type = sys.argv[4]
+    allowed_field_types = ("real", "integer", "double precision")
+    if field_type not in allowed_field_types:
+        print "field_type (argument 4) must be one of:"+ allowed_sample_type_names
     date_mapping_name = sys.argv[5]
+    allowed_date_mappings = ("daily", "monthly")
+    if date_mapping_name not in allowed_date_mappings:
+        print "date_mapping_name (argument 5) must be one of:"+ allowed_date_mappings
     grid_size = sys.argv[6]
-    assert sys.argv[7:] == [], "%s ??" % sys.argv
+    assert sys.argv[7:] == [], "%s <- don't understand this extra argument" % sys.argv
 except:
     show_usage()
     #raise
@@ -38,13 +49,13 @@ else:
         
     try:       
         ClimateDataPortal.SampleTable(
-            name = parameter_name,
-            sample_type = getattr(ClimateDataPortal, sample_type_name),
-            units_name = units_name,
-            field_type = field_type,
-            date_mapping_name = date_mapping_name,
-            grid_size = float(grid_size),
             db = db
+            name = parameter_name,
+            date_mapping_name = date_mapping_name,
+            field_type = field_type,
+            units_name = units_name,
+            sample_type = getattr(ClimateDataPortal, sample_type_name),
+            grid_size = float(grid_size),
         ).create(write_message)
     except:
         show_usage()
