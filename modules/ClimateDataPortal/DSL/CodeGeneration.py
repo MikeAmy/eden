@@ -7,7 +7,8 @@ from . import *
 BinaryOperator.R_only = False
 
 Sum.SQL_function = "SUM"
-Average.SQL_function = "AVG"
+MonthlyAverage.SQL_function = "AVG"
+AnnualAverage.SQL_function = "AVG"
 StandardDeviation.SQL_function = "STDDEV"
 Minimum.SQL_function = "MIN"
 Maximum.SQL_function = "MAX"
@@ -38,60 +39,60 @@ def Aggregation_can_be_SQL(aggregation):
 generate_code = Method("generate_code")
 
 @generate_code.implementation(*operations)
-def Binop_generate_code(binop, parent_node_id, key, pre, out, post, extra_filter):
+def Binop_generate_code(binop, parent_node_id, key, pre, out, post, extra_filter, monthly):
     #if can_be_SQL(binop)():
     #    out('dbGetQuery(con, "')
     #    SQL(aggregation)(key, out)
     #    out('")')
     #else:
-    R(binop)(parent_node_id, key, pre, out, post, extra_filter)
+    R(binop)(parent_node_id, key, pre, out, post, extra_filter, monthly)
 
 SQL = Method("SQL")
 R = Method("R") # Todo: rename to distinguish between this and R interpreter
 
 @SQL.implementation(Number)
-def number_out(number, key, out, extra_filter):
+def number_out(number, key, out, extra_filter, monthly):
     out(repr(number.value))
 
 @R.implementation(Number)
 @generate_code.implementation(Number)
-def number_out(number, parent_node_id, key, pre, out, post, extra_filter):
+def number_out(number, parent_node_id, key, pre, out, post, extra_filter, monthly):
     out(repr(number.value))
 
 
 @SQL.implementation(int)
-def int_out(number, key, out):
+def int_out(number, key, out, extra_filter, monthly):
     out(repr(number))
 
 @R.implementation(int)
 @generate_code.implementation(int)
-def int_out(number, parent_node_id, key, pre, out, post, extra_filter):
+def int_out(number, parent_node_id, key, pre, out, post, extra_filter, monthly):
     out(repr(number))
 
 @SQL.implementation(Addition, Subtraction, Multiplication, Division)
-def BinaryOperator_SQL(binop, key, out, extra_filter):
+def BinaryOperator_SQL(binop, key, out, extra_filter, monthly):
     out(
         "SELECT left.key as key,",
         " left.value", binop.sql_op, "right.value as value ",
         "FROM ("
     )
-    SQL(binop.left)(key, out, extra_filter)
+    SQL(binop.left)(key, out, extra_filter, monthly)
     out(") AS left ",
         "JOIN ("
     )
-    SQL(binop.right)(key, out, extra_filter)
+    SQL(binop.right)(key, out, extra_filter, monthly)
     out(") AS right ",
         "ON left.key = right.key"
     )
 
 @SQL.implementation(Pow)
-def BinaryOperator_SQL(binop, key, out, extra_filter):
+def BinaryOperator_SQL(binop, key, out, extra_filter, monthly):
     out(
         "SELECT left.key as key,",
         "(left.value^ ", str(binop.right), ") as value ",
         "FROM ("
     )
-    SQL(binop.left)(key, out, extra_filter)
+    SQL(binop.left)(key, out, extra_filter, monthly)
     out(") AS left")
 
 def init_R_interpreter(R, database_settings):
@@ -297,26 +298,26 @@ In an R shell:
     )
     
 @R.implementation(*operations)
-def BinaryOperator_R(binop, parent_node_id, key, pre, out, post, extra_filter):
+def BinaryOperator_R(binop, parent_node_id, key, pre, out, post, extra_filter, monthly):
     out(type(binop).__name__, "(")
-    generate_code(binop.left)(parent_node_id+"_left", key, pre, out, post, extra_filter)
+    generate_code(binop.left)(parent_node_id+"_left", key, pre, out, post, extra_filter, monthly)
     out(", ")
-    generate_code(binop.right)(parent_node_id+"_right", key, pre, out, post, extra_filter)
+    generate_code(binop.right)(parent_node_id+"_right", key, pre, out, post, extra_filter, monthly)
     out(")")
 
 @generate_code.implementation(
     *aggregations
 )
-def DSLAggregationNode_generate_code(aggregation, node_id, key, pre, out, post, extra_filter):
-    R(aggregation)(node_id, key, pre, out, post, extra_filter)
+def DSLAggregationNode_generate_code(aggregation, node_id, key, pre, out, post, extra_filter, monthly):
+    R(aggregation)(node_id, key, pre, out, post, extra_filter, monthly)
 
 @R.implementation(*aggregations)
-def DSLAggregationNode_R(aggregation, parent_node_id, key, pre, out, post, extra_filter):
+def DSLAggregationNode_R(aggregation, parent_node_id, key, pre, out, post, extra_filter, monthly):
     # Has to use SQL
     node_id =  parent_node_id+"_"+type(aggregation).__name__
     
     pre(node_id, " <- parallel(single_connection_query('")
-    SQL(aggregation)(key, pre, extra_filter)
+    SQL(aggregation)(key, pre, extra_filter, monthly)
     pre("'\n))\n")
     pre("query_jobs[[length(query_jobs)+1]] <- ", node_id, "\n")
     
@@ -354,8 +355,8 @@ def add_months_filter(date_mapper, month_numbers, time_period, add_filter):
         )
     )
 
-@SQL.implementation(*aggregations)
-def DSLAggregationNode_SQL(aggregation, key, out, extra_filter):
+@SQL.implementation(MonthlyAverage, Maximum, Minimum, StandardDeviation, Sum, Count)
+def DSLAggregationNode_SQL(aggregation, key, out, extra_filter, monthly):
     """From this we are going to get back a result set with key and value.
     """
     sample_table = aggregation.sample_table
@@ -415,7 +416,82 @@ def DSLAggregationNode_SQL(aggregation, key, out, extra_filter):
         )        
     out(" GROUP BY ", key)
 
-def R_Code_for_values(expression, attribute, extra_filter = None):
+
+@SQL.implementation(AnnualAverage)
+def DSLAggregationNode_SQL(aggregation, key, out, extra_filter, monthly):
+    """Special case for AnnualAverage.
+    Copied from MonthlyAverage. Needs refactoring.
+    
+    monthly can be True or False.
+    monthly is used as follows:
+        True: monthly chart or monthly CSV.
+        False: map, annual chart or annual CSV.
+    """
+    sample_table = aggregation.sample_table
+    date_mapper = sample_table.date_mapper
+    # Date Mapping
+    time_period, month_numbers = time_period_and_month_numbers(
+        date_mapper
+    )(
+        aggregation.month_numbers
+    )
+
+    out("SELECT (", key)    
+    if key != "place_id":
+        if aggregation.year_offset or aggregation.month_offset:
+            out(
+                "+ %i" % (
+                    (aggregation.year_offset * 12) + 
+                    aggregation.month_offset
+                )
+            )
+
+    out(") as key, ")
+    out(aggregation.SQL_function)
+    if not monthly:
+        if month_numbers is None:
+            out("(12 * value) as value")            
+        else:
+            out("(%i * value) as value" % len(month_numbers))
+    else:
+        out("(value) as value ")
+    out('FROM \\"', sample_table.table_name, '\\"')
+    filter_strings = []
+    if extra_filter:
+        filter_strings.append(extra_filter)
+    add_filter = filter_strings.append
+    
+    from_date = aggregation.from_date
+    if from_date is not None:
+        add_filter(
+            "%(time_period)s >= %(from_time_period)i" % dict(
+                time_period = time_period,
+                from_time_period = date_mapper.to_time_period(*from_date)
+            )
+        )
+    to_date = aggregation.to_date
+    if to_date is not None:
+        add_filter(
+            "%(time_period)s <= %(to_date_number)i" % dict(
+                time_period = time_period,
+                to_date_number = date_mapper.to_time_period(*to_date)
+            )
+        )
+    # Date Mapping
+    if month_numbers is not None and month_numbers != list(range(0,12)):
+        if month_numbers == []:
+            add_filter("FALSE")
+        else:
+            add_months_filter(date_mapper, month_numbers, time_period, add_filter)
+    if filter_strings:
+        out(
+            " WHERE ", 
+            " AND ".join(filter_strings)
+        )        
+    out(" GROUP BY ", key)
+
+
+def R_Code_for_values(expression, attribute, extra_filter, monthly):
     pre_output = [
         "function () {\n",
         "query_jobs <- list()\n"
@@ -439,7 +515,7 @@ def R_Code_for_values(expression, attribute, extra_filter = None):
     def post(*strings):
         extend_post_output(strings)
 
-    R(expression)("result", attribute, pre, out, post, extra_filter)
+    R(expression)("result", attribute, pre, out, post, extra_filter, monthly)
     
     post_output.append("return (result)\n")
     post_output.append("}")

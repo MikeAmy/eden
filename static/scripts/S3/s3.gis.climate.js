@@ -2567,6 +2567,7 @@ ClimateDataMapPlugin = function (config) {
                 update_years(dataset_name)
                 // HACK: better to look at the units if possible
                 statistic_combo_box.hide_sum = (dataset_name.toLowerCase().indexOf("temp") != -1)
+                statistic_combo_box.hide_annual_average = (dataset_name.toLowerCase().indexOf("rainfall") != -1)
             }
         )
         statistic_combo_box.on(
@@ -2579,6 +2580,9 @@ ClimateDataMapPlugin = function (config) {
                         $option_div = $(option_div)
                         $option_div.css('display', 'block')
                         if (statistic_combo_box.hide_sum && $option_div.text() == "Sum") {
+                            $option_div.css('display', 'none')
+                        }
+                        if (statistic_combo_box.hide_annual_average && $option_div.text() == "AnnualAverage") {
                             $option_div.css('display', 'none')
                         }
                     }

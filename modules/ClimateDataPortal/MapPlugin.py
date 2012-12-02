@@ -171,7 +171,12 @@ class MapPlugin(object):
         
         def generate_map_overlay_data(file_path):
             R = map_plugin.get_R()
-            code = DSL.R_Code_for_values(expression, "place_id")
+            code = DSL.R_Code_for_values(
+                expression,
+                attribute="place_id",
+                extra_filter=None,
+                monthly=False
+            )
             values_by_place_data_frame = R(code)()
             # R willfully removes empty data frame columns 
             # which is ridiculous behaviour
@@ -263,13 +268,16 @@ class MapPlugin(object):
             if place_ids:
                 code = DSL.R_Code_for_values(
                     expression,
-                    "place_id",
-                    "place_id IN (%s)" % ",".join(map(str, place_ids))# not unicode
+                    attribute="place_id",
+                    extra_filter="place_id IN (%s)" % ",".join(map(str, place_ids)),# not unicode
+                    monthly=False
                 )
             else:
                 code = DSL.R_Code_for_values(
                     expression,
-                    "place_id"
+                    attribute="place_id",
+                    extra_filter=None,
+                    monthly=False
                )
             values_by_place_data_frame = R(code)()
             # R unhelpfully removes empty data frame columns 
@@ -644,8 +652,9 @@ def render_plots(
             )
             code = DSL.R_Code_for_values(
                 expression, 
-                grouping_key,
-                "place_id IN (%s)" % ",".join(map(str, spec["place_ids"])) # not unicode
+                attribute=grouping_key,
+                extra_filter="place_id IN (%s)" % ",".join(map(str, spec["place_ids"])), # not unicode
+                monthly=(not is_yearly_values)
             )
             values_by_time_period_data_frame = R(code)()
             data = {}
@@ -1076,8 +1085,9 @@ def get_csv_timeseries_data(
         )
         code = DSL.R_Code_for_values(
             expression, 
-            grouping_key,
-            "place_id IN (%s)" % ",".join(map(str, place_ids)) # not unicode
+            attribute=grouping_key,
+            extra_filter="place_id IN (%s)" % ",".join(map(str, place_ids)), # not unicode
+            monthly=(not is_yearly_values)
         )
         values_by_time_period_data_frame = R(code)()
 

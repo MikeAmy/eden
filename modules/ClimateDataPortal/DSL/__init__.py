@@ -214,7 +214,23 @@ class AggregationNode(ASTNode):
 class Sum(AggregationNode):
     pass
 
-class Average(AggregationNode):
+class MonthlyAverage(AggregationNode):
+    pass
+
+class AnnualAverage(AggregationNode):
+    """This is only for Rainfall, but that is controlled by the UI.
+    
+    Values are yearly. 
+    On maps and annual charts/CSVs, the average value is multiplied by the number of selected months.
+    On monthly charts/CSVs, the value is as the monthly Average.
+    
+    This must work for different parts of an expression, as some expressions are combinations of aggregations.
+    
+    This means that:
+        1. The multiplication must be done at the expression SQL level.
+        2. The SQL generation code must know whether to multiply or not, 
+            i.e. know whether a map or a chart is being generated.
+    """
     pass
 
 class StandardDeviation(AggregationNode):
@@ -229,7 +245,7 @@ class Maximum(AggregationNode):
 class Count(AggregationNode):
     pass
 
-aggregations = (Average, Maximum, Minimum, StandardDeviation, Sum, Count)
+aggregations = (MonthlyAverage, AnnualAverage, Maximum, Minimum, StandardDeviation, Sum, Count)
 
 from .. import SampleTable, units_in_out
 
@@ -315,7 +331,7 @@ def parse(expression_string):
     
     allowed_names = {}
     for name in (
-        "Sum Average StandardDeviation Minimum Maximum Count "
+        "Sum MonthlyAverage AnnualAverage StandardDeviation Minimum Maximum Count "
         "Months From To Number Date_Offset".split()
     ):
         # can't guarantee the __name__, use our name

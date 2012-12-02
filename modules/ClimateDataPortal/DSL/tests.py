@@ -247,8 +247,9 @@ def check_data(
     Climate_DSL.init_R_interpreter(R, deployment_settings.database)
     code = Climate_DSL.R_Code_for_values(
         expression, 
-        "time_period",
-        "place_id IN (1)"
+        attribute="time_period",
+        extra_filter="place_id IN (1)",
+        monthly=True
     )
     values_by_time_period_data_frame = R(code)()()
     if isinstance(
@@ -284,7 +285,8 @@ def test_december_data():
     code = Climate_DSL.R_Code_for_values(
         expression, 
         "time_period",
-        "place_id IN (1)"
+        "place_id IN (1)",
+        monthly=True
     )
     values_by_time_period_data_frame = R(code)()()
     if isinstance(

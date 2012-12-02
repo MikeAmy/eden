@@ -11,7 +11,7 @@ from . import (
     Addition, Subtraction, Multiplication, Division, Pow,
     operations, aggregations,
     BinaryOperator,
-    Average, Sum, Minimum, Maximum, Count, 
+    MonthlyAverage, AnnualAverage, Sum, Minimum, Maximum, Count, 
     StandardDeviation, Count, Number
 )
 
@@ -79,7 +79,7 @@ def raise_units_to_power(operation):
     binop_units(operation, determine_units)
     return operation.units
 
-@units.implementation(Average, Sum, Minimum, Maximum)
+@units.implementation(AnnualAverage, MonthlyAverage, Sum, Minimum, Maximum)
 def aggregation_units(aggregation):
     aggregation.units = Units.parsed_from(
         aggregation.sample_table.units_name
