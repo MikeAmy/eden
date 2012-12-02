@@ -1654,6 +1654,9 @@ load_layer_and_locate_places_in_spaces = function (
                     )
                     plugin.quick_filter_data_store.sort('name', 'ASC')
                     //vector_layer.redraw()
+                    plugin.colour_key.with_limits(
+                        plugin.render_map_layer
+                    )
                 },
                 1
             )
@@ -2380,9 +2383,6 @@ ClimateDataMapPlugin = function (config) {
                     // not right place for this:
                     plugin.filter_box.resizer.resize(true)
                     plugin.set_status('')
-                    plugin.colour_key.with_limits(
-                        plugin.render_map_layer
-                    )
                 }
             },
             error: function (jqXHR, textStatus, errorThrown) {
