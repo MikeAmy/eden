@@ -1674,101 +1674,6 @@ var Logo = OpenLayers.Class(OpenLayers.Control, {
     }
 })
 
-function load_world_map(plugin) {
-    if (!Ext.isIE || Ext.isIE9 || display_mode == 'print') { 
-        $.ajax({
-            url: plugin.world_map_URL,
-            format: 'json',
-            success: function (delta_polygon_feature_collection) {
-                var format = new OpenLayers.Format.GeoJSON({
-                    ignoreExtraDims: true
-                })
-                
-                function decompressiblize_GeometryCollection(geometry_collection) {
-                    each(
-                        geometry_collection["geometries"],
-                        function (geometry) {
-                            decompressiblize[geometry["type"]](geometry)
-                        }
-                    )
-                }
-                    
-                function decompressiblize_Polygon(polygon) {
-                    var new_linear_rings = []
-                    each(
-                        polygon["coordinates"],
-                        function(linear_ring) {
-                            var longitude_deltas = linear_ring[0]
-                            var latitude_deltas = linear_ring[1]
-                            var new_linear_ring = []
-                            var previous_longitude = 0, previous_latitude = 0
-                            for (
-                                var i = 0, 
-                                    len = longitude_deltas.length; 
-                                i < len;
-                                i++
-                            ) {
-                                var longitude_delta = longitude_deltas[i]
-                                var latitude_delta = latitude_deltas[i]
-                                new_linear_ring.push(
-                                    [
-                                        (previous_longitude + longitude_delta)*1000,
-                                        (previous_latitude + latitude_delta)*1000
-                                    ]
-                                )
-                                previous_longitude = previous_longitude + longitude_delta
-                                previous_latitude = previous_latitude + latitude_delta
-                            }
-                            new_linear_rings.push(new_linear_ring)
-                        }
-                    )
-                    polygon["coordinates"] = new_linear_rings
-                }
-
-                var decompressiblize = {
-                    GeometryCollection: decompressiblize_GeometryCollection,
-                    Polygon: decompressiblize_Polygon,
-                    Point: function () {}
-                }
-                
-                window.delta_polygon_feature_collection = delta_polygon_feature_collection
-                each(
-                    delta_polygon_feature_collection.features,
-                    function (delta_polygon_feature) {
-                        var geometry = delta_polygon_feature.geometry
-                        decompressiblize[geometry["type"]](geometry)
-                        // feature is no longer in delta format
-                        var feature_json = delta_polygon_feature
-                        delete delta_polygon_feature
-                        var feature = format.parseFeature(feature_json)
-                        if (!!feature.data.ISO3) {
-                            plugin.countries[feature.data.ISO3] = feature
-                        }
-                    }
-                )
-                plugin.when_places_loaded(
-                    function () {
-                        plugin.colour_key.with_limits(
-                            plugin.render_map_layer
-                        )
-                    }
-                )
-            },
-            failure: function () {
-                plugin.set_status(
-                    'Could not load world map!'
-                )
-            }
-        })
-    }
-    else {
-        plugin.set_status(
-            'Sorry, Internet Explorer < 9 is not performant '+
-            'enough to show detailed vector maps. Countries will '+
-            'be represented by circles at their capital cities'
-        )
-    }
-}
 
 ClimateDataMapPlugin = function (config) {
     var plugin = this // let's be explicit!
@@ -2135,7 +2040,6 @@ ClimateDataMapPlugin = function (config) {
 
         setTimeout(
             function () {
-                //load_world_map()
                 load_layer_and_locate_places_in_spaces(
                     "Nepal development regions",
                     "/eden/static/data/Development_Region.geojson",
