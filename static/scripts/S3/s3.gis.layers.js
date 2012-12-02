@@ -25,7 +25,9 @@ function addLayers() {
     try {
         // Only load Google layers if GoogleAPI downloaded ok
         // - allow rest of map to work offline
-        google & addGoogleLayers();
+        if (google) {
+            addGoogleLayers();
+        }
     } catch(err) {};
     // Bing
     if (S3.gis.Bing) {
