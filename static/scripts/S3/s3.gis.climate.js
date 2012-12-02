@@ -672,19 +672,19 @@ function ColourGradient(
             return bitmap_string
         }
         else {
-            function encode(number, bytes) {
+            function encode(number, byte_count) {
                 var oldbase = 1
                 var string = ''
-                for (var x = 0; x < bytes; x++) {
-                    var byte = 0
+                for (var x = 0; x < byte_count; x++) {
+                    var encoded_byte = 0
                     if (number != 0) {
                         var base = oldbase * 256
-                        byte = number % base
-                        number = number - byte
-                        byte = byte / oldbase
+                        encoded_byte = number % base
+                        number = number - encoded_byte
+                        encoded_byte = encoded_byte / oldbase
                         oldbase = base
                     }
-                    string += String.fromCharCode(byte)
+                    string += String.fromCharCode(encoded_byte)
                 }
                 return string
             }
@@ -839,7 +839,7 @@ function linear_gradient(start_colour, end_colour, steps) {
         colours.push([
             floor((start_red + value * range_red) * 255),
             floor((start_green + value * range_green) * 255),
-            floor((start_blue + value * range_blue) * 255),
+            floor((start_blue + value * range_blue) * 255)
         ])
     }
     return colours
@@ -1107,7 +1107,7 @@ Place.prototype = {
                 var place = marker.place
                 var info = [
                     // popup is styled with div.olPopup
-                    '<div class="place_info_popup">',
+                    '<div class="place_info_popup">'
                 ]
                 function add_attribute(attribute) {
                     var value = place.data[attribute]
@@ -1713,7 +1713,7 @@ function load_world_map(plugin) {
                                 new_linear_ring.push(
                                     [
                                         (previous_longitude + longitude_delta)*1000,
-                                        (previous_latitude + latitude_delta)*1000,
+                                        (previous_latitude + latitude_delta)*1000
                                     ]
                                 )
                                 previous_longitude = previous_longitude + longitude_delta
