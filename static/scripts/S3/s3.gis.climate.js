@@ -2566,8 +2566,13 @@ ClimateDataMapPlugin = function (config) {
                 var dataset_name = value.json[0]
                 update_years(dataset_name)
                 // HACK: better to look at the units if possible
-                statistic_combo_box.hide_sum = (dataset_name.toLowerCase().indexOf("temp") != -1)
-                statistic_combo_box.hide_annual_average = (dataset_name.toLowerCase().indexOf("rainfall") != -1)
+                var lowercase_dataset_name = dataset_name.toLowerCase()
+                statistic_combo_box.hide_sum = (lowercase_dataset_name.indexOf("temp") != -1)
+                // Rainfall enables AnnualAverage
+                statistic_combo_box.hide_annual_average = (
+                    (lowercase_dataset_name.indexOf("rainfall") == -1) &
+                    (lowercase_dataset_name.indexOf("precipitation") == -1
+                )
             }
         )
         statistic_combo_box.on(
