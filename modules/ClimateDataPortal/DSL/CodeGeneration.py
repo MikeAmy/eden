@@ -450,9 +450,9 @@ def DSLAggregationNode_SQL(aggregation, key, out, extra_filter, monthly):
     out(aggregation.SQL_function)
     if not monthly:
         if month_numbers is None:
-            out("(12 * value) as value")            
+            out("(12 * value) as value ")
         else:
-            out("(%i * value) as value" % len(month_numbers))
+            out("(%i * value) as value " % len(month_numbers))
     else:
         out("(value) as value ")
     out('FROM \\"', sample_table.table_name, '\\"')
