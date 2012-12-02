@@ -927,6 +927,73 @@ function (
                         col = colour_number+1
                     )
         R("dev.off()")
+                
+        import Image, ImageEnhance
+
+        RGBA = "RGBA"
+        def reduce_opacity(image, opacity):
+            """Returns an image with reduced opacity."""
+            assert opacity >= 0 and opacity <= 1
+            if image.mode != RGBA:
+                image = image.convert(RGBA)
+            else:
+                image = image.copy()
+            alpha = image.split()[3]
+            alpha = ImageEnhance.Brightness(alpha).enhance(opacity)
+            image.putalpha(alpha)
+            return image
+            
+        def scale_preserving_aspect_ratio(image, ratio):
+            return image.resize(
+                map(int, map(ratio.__mul__, image.size))
+            )
+
+        def watermark(image, mark, position, opacity=1):
+            """Adds a watermark to an image."""
+            if opacity < 1:
+                mark = reduce_opacity(mark, opacity)
+            if image.mode != RGBA:
+                image = image.convert(RGBA)
+            # create a transparent layer the size of the 
+            # image and draw the watermark in that layer.
+            layer = Image.new(RGBA, image.size, (0,0,0,0))
+            if position == 'tile':
+                for y in range(0, image.size[1], mark.size[1]):
+                    for x in range(0, image.size[0], mark.size[0]):
+                        layer.paste(mark, (x, y))
+            elif position == 'scale':
+                # scale, but preserve the aspect ratio
+                ratio = min(
+                    float(image.size[0]) / mark.size[0],
+                    float(image.size[1]) / mark.size[1]
+                )
+                w = int(mark.size[0] * ratio)
+                h = int(mark.size[1] * ratio)
+                mark = mark.resize((w, h))
+                layer.paste(
+                    mark,
+                    (
+                        (image.size[0] - w) / 2,
+                        (image.size[1] - h) / 2
+                    )
+                )
+            else:
+                layer.paste(mark, position)
+            # composite the watermark with the layer
+            return Image.composite(layer, image, layer)
+
+        image = Image.open(file_path)
+        watermark_image_path = os.path.join(
+            os.path.realpath("."),
+            "applications",
+            map_plugin.env.request.application, 
+            "static", "img", 
+            "Nepal-Government-Logo.png"
+        )
+        watermark_image = Image.open(watermark_image_path)
+        #watermark_image = scale_preserving_aspect_ratio(watermark_image, 0.5)
+        watermark(image, watermark_image, 'scale', 0.05).save(file_path)
+ 
 
     import md5
     import gluon.contrib.simplejson as JSON
