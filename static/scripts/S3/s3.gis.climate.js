@@ -187,8 +187,10 @@ var ColourKey = OpenLayers.Class(OpenLayers.Control, {
     with_limits: function (use_limits) {
         // immediately use the limits
         var colour_key = this
-        var lower_limit_value = parseFloat(colour_key.$lower_limit.attr('value'))
-        var upper_limit_value = parseFloat(colour_key.$upper_limit.attr('value'))
+        var lower_limit_value_string = colour_key.$lower_limit.attr('value')
+        var upper_limit_value_string = colour_key.$upper_limit.attr('value')
+        var lower_limit_value = parseFloat(lower_limit_value_string)
+        var upper_limit_value = parseFloat(upper_limit_value_string)
         if (
             !(isNaN(lower_limit_value) || isNaN(upper_limit_value)) 
         ) {
@@ -1995,9 +1997,6 @@ ClimateDataMapPlugin = function (config) {
                     plugin.filter_box.set_filter_no_update('Nepal')
                     plugin.filter = plugin.create_filter_function("Nepal")
                 }
-                plugin.colour_key.with_limits(
-                    plugin.render_map_layer
-                )
                 plugin.logo = new Logo()
                 plugin.logo.activate()
                 map.addControl(plugin.logo)
@@ -2381,6 +2380,9 @@ ClimateDataMapPlugin = function (config) {
                     // not right place for this:
                     plugin.filter_box.resizer.resize(true)
                     plugin.set_status('')
+                    plugin.colour_key.with_limits(
+                        plugin.render_map_layer
+                    )
                 }
             },
             error: function (jqXHR, textStatus, errorThrown) {
