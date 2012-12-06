@@ -2784,9 +2784,13 @@ ClimateDataMapPlugin = function (config) {
                 }
             }
         )
+        var statistic = form_values.statistic
+        if (statistic == "Mean (Annual)") {
+            statistic = "Mean"
+        }
         return (
             [
-                form_values.statistic,
+                statistic,
                 '(',
                     '"', form_values.parameter.replace(new RegExp('\\+','g'),' '), '", ',
                     'From(',
