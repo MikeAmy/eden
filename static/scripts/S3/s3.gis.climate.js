@@ -2446,7 +2446,7 @@ ClimateDataMapPlugin = function (config) {
             fieldLabel,
             hiddenName,
             combo_box_size,
-            get_option_and_label = null
+            get_option_and_label
         ) {
             var options = []
             get_option_and_label = get_option_and_label || function (options) { return [option, option] }
