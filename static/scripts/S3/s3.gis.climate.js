@@ -2449,7 +2449,7 @@ ClimateDataMapPlugin = function (config) {
             get_option_and_label
         ) {
             var options = []
-            get_option_and_label = get_option_and_label || function (options) { return [option, option] }
+            get_option_and_label = get_option_and_label || function (option) { return [option, option] }
             each(
                 data,
                 function (option) {
