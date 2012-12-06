@@ -2592,7 +2592,7 @@ ClimateDataMapPlugin = function (config) {
                         if (statistic_combo_box.hide_sum && $option_div.text() == "Sum") {
                             $option_div.css('display', 'none')
                         }
-                        if (statistic_combo_box.hide_annual_average && $option_div.text() == "AnnualAverage") {
+                        if (statistic_combo_box.hide_annual_average && $option_div.text() == "Mean (Annual)") {
                             $option_div.css('display', 'none')
                         }
                     }
