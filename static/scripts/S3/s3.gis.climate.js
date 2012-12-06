@@ -2785,7 +2785,7 @@ ClimateDataMapPlugin = function (config) {
             }
         )
         var statistic = form_values.statistic
-        if (statistic == "Mean (Annual)") {
+        if (statistic == "Mean+(Annual)") {
             statistic = "Mean"
         }
         return (
