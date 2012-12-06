@@ -2572,7 +2572,12 @@ ClimateDataMapPlugin = function (config) {
                 update_years(dataset_name)
                 // HACK: better to look at the units if possible
                 var lowercase_dataset_name = dataset_name.toLowerCase()
-                statistic_combo_box.hide_sum = (lowercase_dataset_name.indexOf("temp") != -1)
+                if (lowercase_dataset_name.indexOf("temp") != -1) {
+                    statistic_combo_box.hide_sum = true
+                    if (statistic_combo_box.getValue() == "Mean+(Annual)") {
+                        statistic_combo_box.selectByValue("Average")
+                    }
+                }
                 // Rainfall enables AnnualAverage
                 statistic_combo_box.hide_annual_average = (
                     (lowercase_dataset_name.indexOf("rainfall") == -1) &
