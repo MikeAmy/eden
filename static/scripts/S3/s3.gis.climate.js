@@ -1713,7 +1713,7 @@ ClimateDataMapPlugin = function (config) {
     }
     else {
         var initial_query_expression = (
-            plugin.aggregation_names[0][0]+'('+
+            plugin.aggregation_names[0][1]+'('+
                 '"'+ //form_values.data_type+' '+
                 plugin.parameter_names[0].replace(
                     new RegExp('\\+','g'),
