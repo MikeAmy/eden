@@ -2574,7 +2574,7 @@ ClimateDataMapPlugin = function (config) {
                 var lowercase_dataset_name = dataset_name.toLowerCase()
                 if (lowercase_dataset_name.indexOf("temp") != -1) {
                     statistic_combo_box.hide_sum = true
-                    if (statistic_combo_box.getValue() == "Mean+(Annual)") {
+                    if (statistic_combo_box.getValue() == "Mean") {
                         statistic_combo_box.selectByValue("Average")
                     }
                 }
