@@ -7,8 +7,8 @@ from . import *
 BinaryOperator.R_only = False
 
 Sum.SQL_function = "SUM"
-MonthlyAverage.SQL_function = "AVG"
-AnnualAverage.SQL_function = "AVG"
+Average.SQL_function = "AVG"
+Mean.SQL_function = "AVG"
 StandardDeviation.SQL_function = "STDDEV"
 Minimum.SQL_function = "MIN"
 Maximum.SQL_function = "MAX"
@@ -355,7 +355,7 @@ def add_months_filter(date_mapper, month_numbers, time_period, add_filter):
         )
     )
 
-@SQL.implementation(MonthlyAverage, Maximum, Minimum, StandardDeviation, Sum, Count)
+@SQL.implementation(Average, Maximum, Minimum, StandardDeviation, Sum, Count)
 def DSLAggregationNode_SQL(aggregation, key, out, extra_filter, monthly):
     """From this we are going to get back a result set with key and value.
     """
@@ -417,10 +417,10 @@ def DSLAggregationNode_SQL(aggregation, key, out, extra_filter, monthly):
     out(" GROUP BY ", key)
 
 
-@SQL.implementation(AnnualAverage)
+@SQL.implementation(Mean)
 def DSLAggregationNode_SQL(aggregation, key, out, extra_filter, monthly):
-    """Special case for AnnualAverage.
-    Copied from MonthlyAverage. Needs refactoring.
+    """Special case for Mean.
+    Copied from Average. Needs refactoring.
     
     monthly can be True or False.
     monthly is used as follows:

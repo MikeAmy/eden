@@ -183,17 +183,20 @@ class Months(object):
     def __init__(month_filter, *months):
         month_filter.months = months
 
+
 class From(object):
     def __init__(from_date, year=None, month = None, day = None):
         from_date.year = year
         from_date.month = month
         from_date.day = day
-        
+
+
 class To(object):
     def __init__(to_date, year=None, month = None, day = None):
         to_date.year = year
         to_date.month = month
         to_date.day = day
+
 
 class Date_Offset(object):
     """Offsets the years in an aggregation
@@ -211,13 +214,16 @@ class AggregationNode(ASTNode):
         aggregation.dataset_name = dataset_name
         aggregation.specification = specification
 
+
 class Sum(AggregationNode):
-    pass
+    display_name = "Sum"
 
-class MonthlyAverage(AggregationNode):
-    pass
 
-class AnnualAverage(AggregationNode):
+class Average(AggregationNode):
+    display_name = "Average"
+
+
+class Mean(AggregationNode):
     """This is only for Rainfall, but that is controlled by the UI.
     
     Values are yearly. 
@@ -231,21 +237,23 @@ class AnnualAverage(AggregationNode):
         2. The SQL generation code must know whether to multiply or not, 
             i.e. know whether a map or a chart is being generated.
     """
-    pass
+    display_name = "Mean (Annual)"
+
 
 class StandardDeviation(AggregationNode):
-    pass
+    display_name = "Standard Deviation"
 
 class Minimum(AggregationNode):
-    pass
+    display_name = "Minimum"
     
 class Maximum(AggregationNode):
-    pass
+    display_name = "Maximum"
     
 class Count(AggregationNode):
-    pass
+    display_name = "Count"
 
-aggregations = (MonthlyAverage, AnnualAverage, Maximum, Minimum, StandardDeviation, Sum, Count)
+
+aggregations = (Mean, Maximum, Minimum, StandardDeviation, Sum, Count, Average)
 
 from .. import SampleTable, units_in_out
 
@@ -268,8 +276,6 @@ def parse(expression_string):
     
     def linefeed():
         move(1)
-        #current_position[1] += 1
-        #current_position[0] = 0
     
     def out(token):
         tokens.append(token)
@@ -315,7 +321,6 @@ def parse(expression_string):
     def comment(scanner, token):
         out("")
         move(len(token))
-        #linefeed()
 
     def parenthesis(scanner, token):
         out(token)
@@ -331,7 +336,7 @@ def parse(expression_string):
     
     allowed_names = {}
     for name in (
-        "Sum MonthlyAverage AnnualAverage StandardDeviation Minimum Maximum Count "
+        "Mean Minimum Maximum Sum StandardDeviation Count Average "
         "Months From To Number Date_Offset".split()
     ):
         # can't guarantee the __name__, use our name

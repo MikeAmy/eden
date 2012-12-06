@@ -117,7 +117,7 @@ class MapPlugin(object):
                 T("Projection Type")
             ),
             aggregation_names = [
-                Aggregation.__name__ for Aggregation in aggregations
+                [Aggregation.__name__, Aggregation.display_name] for Aggregation in aggregations
             ],
         )
         SampleTable.add_to_client_config_dict(config_dict)

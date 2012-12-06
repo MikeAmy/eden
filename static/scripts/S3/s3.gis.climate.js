@@ -1713,7 +1713,7 @@ ClimateDataMapPlugin = function (config) {
     }
     else {
         var initial_query_expression = (
-            plugin.aggregation_names[0]+'('+
+            plugin.aggregation_names[0][0]+'('+
                 '"'+ //form_values.data_type+' '+
                 plugin.parameter_names[0].replace(
                     new RegExp('\\+','g'),
@@ -2445,13 +2445,15 @@ ClimateDataMapPlugin = function (config) {
             data,
             fieldLabel,
             hiddenName,
-            combo_box_size
+            combo_box_size,
+            get_option_and_label = null
         ) {
             var options = []
+            get_option_and_label = get_option_and_label || function (options) { return [option, option] }
             each(
                 data,
                 function (option) {
-                    options.push([option, option])
+                    options.push(get_option_and_label(option))
                 }
             )
             var combo_box = new Ext.form.ComboBox({
@@ -2513,6 +2515,9 @@ ClimateDataMapPlugin = function (config) {
             {
                 width: 115,
                 heigth: 25
+            },
+            function (option_and_label) {
+                return option_and_label
             }
         )
         
